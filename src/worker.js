@@ -2869,11 +2869,11 @@ async function revertDemoSales(db, env) {
 }
 
 async function reconcileMaterialInventoryAnomalies(db, calculatedLines, batchId, updatedAt) {
-  const policyRows = await db.prepare(`SELECT material_name, unit, safety_qty, owner FROM material_inventory_policies`).all();
-  const policyByMaterial = new Map(policyRows.results.map((policy) => [`${normalizedKey(policy.material_name)}|${policy.unit}`, policy]));
+  const policyRows = await db.prepare(`SELECT store_code, material_name, unit, safety_qty, owner FROM material_inventory_policies`).all();
+  const policyByMaterial = new Map(policyRows.results.map((policy) => [`${policy.store_code}|${normalizedKey(policy.material_name)}|${policy.unit}`, policy]));
   const candidates = [];
   for (const line of calculatedLines) {
-    const policy = policyByMaterial.get(`${normalizedKey(line.material)}|${line.unit}`);
+    const policy = policyByMaterial.get(`${line.storeCode}|${normalizedKey(line.material)}|${line.unit}`);
     const safetyQty = policy?.safety_qty ?? null;
     let candidate = null;
     if (line.opening < 0) {

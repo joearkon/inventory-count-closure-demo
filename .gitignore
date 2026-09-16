@@ -3,7 +3,7 @@
 node_modules/
 tmp-*.json
 *.log
+backups/
 .env
 .env.*
 !.env.example
-
