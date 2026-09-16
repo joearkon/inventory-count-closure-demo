@@ -1,0 +1,85 @@
+# Inventory Count Closure Demo
+
+面向连锁门店的库存闭环 MVP。系统以销售、BOM、收货、报损、调拨和盘点流水为证据，通过可追溯的硬规则完成库存研判，并将需要人工跟进的问题转为工单。
+
+线上演示：<https://inventory-count-closure-demo.gdjustwuxia.workers.dev>
+
+## 当前能力
+
+- 物料主档：20 项物料，保留基础单位、采购单位和换算系数。
+- 盘点范围：12 项每日盘点、8 项按需盘点；总部可自由选择物料下发不定期盘点或工单盘点。
+- 单据：收货、报损、调拨、盘点均保留业务单号、状态和关联流水。
+- 加盟商流程：报损和调拨不增加总部前置审批；总部负责查看、追溯和异常跟进。
+- 库存研判：MVP 仅使用 D2 负库存、D1 理论与实盘差异、S1 安全库存、T2 销入比四类规则，不调用 LLM 自动定责。
+- 门店助手：支持中文、English、Bahasa Indonesia 输入、连续多轮草稿、单位换算和写入前确认。
+- 知识库：保留原始库存异常 Knowhow，并提供 MVP 规则提炼版。
+
+## 数据架构
+
+- Cloudflare Worker：API 与静态页面。
+- R2：当前 Demo 工作流状态、盘点、库存动作、工单、知识库和可回滚历史快照。
+- D1：结构化账本与迁移保留；远程 13 个迁移已全部应用。
+- 飞书：销售和主数据的只读来源；计算结果不回写原始销售表。
+
+库存基本公式：
+
+```text
+理论期末 = 有效期初 + 收货 + 调拨入 - 调拨出 - 报损 - Σ(销售 SKU × BOM 用量)
+```
+
+## 本地运行
+
+需要 Node.js 和 Wrangler：
+
+```powershell
+npx wrangler d1 migrations apply inventory-count-closure-demo-db --local
+npx wrangler dev --local --compatibility-date 2026-06-18
+```
+
+Worker 配置位于 `wrangler.jsonc`。生产部署使用项目配置中的较新兼容日期；本地覆盖日期仅用于兼容当前随 Codex 提供的 Workers 运行时。
+
+## 自动回归
+
+先启动本地 Worker，再执行：
+
+```powershell
+$env:BASE_URL='http://127.0.0.1:8787'
+$env:MUTATION_TESTS='1'
+node tests/regression.mjs
+```
+
+当前 21 项用例覆盖：
+
+- R2 / D1 健康检查与全量迁移；
+- 门店、商品、物料、安全库存和单位换算；
+- 每日 / 按需盘点配置与自由下发；
+- 盘点照片归档、人工确认与盘点单状态；
+- 收货 / 报损单号、流水与撤销；
+- 跟进工单、凭证和关闭；
+- Knowhow 的 R2 保存与读取；
+- 中、英、印尼语意图、多轮上下文、边界和多单位换算；
+- HTML 语音语言绑定和不支持语音时的文字输入兜底。
+
+详细报告见 [docs/QA回归报告_2026-09-16.md](docs/QA回归报告_2026-09-16.md)，演示步骤见 [docs/演示顺序手册_2026-09-16.md](docs/演示顺序手册_2026-09-16.md)。
+
+## 当前主数据边界
+
+- 门店：6 家。
+- 商品：18 个 SKU。
+- 物料：20 项。
+- 安全库存：仅 STORE001 的牛奶、糖浆、杯子和茶叶 4 项。
+- 已确认 BOM：SKU003、SKU011、SKU013。
+- 待品牌补齐 BOM：其余 15 个 SKU；仓库不会编造配方、出成率、损耗率或保质期。
+- 旧库存流水保留原始单位和数量，不因主档更新静默重算历史。
+
+## 语音验收说明
+
+页面使用 Web Speech API，并提供 `zh-CN`、`en-US`、`id-ID`。Codex 内置浏览器不提供 `SpeechRecognition`，因此真实录音须在最新版 Chrome 或 Edge 的 HTTPS 页面验收。若目标设备对 `id-ID` 支持不稳定，推荐使用 `MediaRecorder + 服务端 ASR`，转写结果仍进入同一确认表单，不能直接写库存。
+
+## 版本与回滚
+
+- 初始冻结标签：`baseline-2026-09-16`
+- 当前分支：`main`
+- 每次迁移前保留 D1 SQL 备份；R2 current state 与历史快照分离。
+
+项目状态、未决项和外部依赖见 [TODO.md](TODO.md)。
