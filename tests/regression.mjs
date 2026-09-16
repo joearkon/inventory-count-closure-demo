@@ -11,6 +11,13 @@ async function json(path, options = {}) {
   return body;
 }
 
+async function expectStatus(path, status, options = {}) {
+  const response = await fetch(`${base}${path}`, options);
+  const body = await response.json().catch(() => ({}));
+  if (response.status !== status) throw new Error(`${path}: expected ${status}, got ${response.status} ${body.error || ''}`);
+  return body;
+}
+
 async function check(name, task) {
   try { const detail = await task(); results.push({ name, ok: true, detail }); }
   catch (error) { results.push({ name, ok: false, detail: error.message }); }
@@ -135,6 +142,35 @@ if (mutationTests) {
     const read = await json('/api/diagnosis-knowhow');
     if (!(read.knowhow || []).some((item) => item.id === saved.knowhow.id && item.title === 'QA 库存异常知识')) throw new Error('saved Knowhow not found');
     return { id:saved.knowhow.id, title:saved.knowhow.title };
+  });
+
+  await check('invalid inventory event is rejected without a write', async () => {
+    const before = await json('/api/state');
+    const eventCount = (before.materialEvents || []).length;
+    const rejected = await expectStatus('/api/material-events', 400, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ store_code:'STORE001', material_name:'牛奶', unit:'L', qty:-1, type:'scrap' }) });
+    const after = await json('/api/state');
+    if ((after.materialEvents || []).length !== eventCount) throw new Error('invalid event changed inventory state');
+    return { error:rejected.error, unchanged_events:eventCount };
+  });
+
+  await check('restock request requires confirmation and does not alter inventory', async () => {
+    await expectStatus('/api/store-restock-requests', 409, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ store_code:'STORE001', material_name:'牛奶', unit:'L', qty:10 }) });
+    const before = await json('/api/state');
+    const eventCount = (before.materialEvents || []).length;
+    const created = await json('/api/store-restock-requests', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ confirmed:true, store_code:'STORE001', material_name:'牛奶', unit:'L', qty:10, urgency:'urgent', reason:'QA 补货验证' }) });
+    const after = await json('/api/state');
+    if (created.request?.status !== 'pending_hq_review' || (after.materialEvents || []).length !== eventCount) throw new Error(`request=${JSON.stringify(created.request)} events=${(after.materialEvents || []).length}`);
+    return { request_no:created.request.request_no, status:created.request.status, inventory_unchanged:true };
+  });
+
+  await check('notification settings persist and preview fails safely without webhook', async () => {
+    const current = await json('/api/notifications/config');
+    const settings = { ...current.settings, realtime:{ ...current.settings.realtime, enabled:false }, daily_report:{ ...current.settings.daily_report, enabled:false, send_time:'20:30' } };
+    const updated = await json('/api/notifications/config', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify(settings) });
+    if (updated.settings?.daily_report?.send_time !== '20:30' || updated.settings?.realtime?.enabled !== false) throw new Error(JSON.stringify(updated.settings));
+    const preview = await expectStatus('/api/notifications/preview', 409, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ kind:'daily' }) });
+    if (preview.delivered !== false || !preview.reason) throw new Error(JSON.stringify(preview));
+    return { send_time:updated.settings.daily_report.send_time, delivered:preview.delivered, reason:preview.reason };
   });
 }
 
