@@ -152,8 +152,26 @@
     catch (error) { waiting.remove(); addMessage(`暂时无法连接助手：${error.message}。`); } finally { setBusy(false); }
   }
   async function welcome() { if (welcomed) return; welcomed = true; await loadLedger(); try { const response = await fetch('/api/store-agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: '__welcome__', store_code: storeCode, session_id: sessionId, lang: language?.value || 'zh-CN' }) }); const data = await response.json().catch(() => ({})); if (!response.ok) throw Error(data.error || '读取待办失败'); addMessage(data.reply || '你好！我是你的门店运营助手。'); renderTodayTasks(data.today_tasks); } catch (_) { addMessage('你好！我是你的门店运营助手。可以帮你处理调拨、报损、收货、盘点或查询库存。'); } }
-  function configureVoice() { const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!Recognition) return false; recognition = new Recognition(); recognition.interimResults = true; recognition.continuous = false; let finalText = ''; recognition.onresult = (event) => { let text = ''; for (let index = event.resultIndex; index < event.results.length; index += 1) text += event.results[index][0].transcript; input.value = text; resizeInput(); if (event.results[event.results.length - 1].isFinal) finalText = text; }; recognition.onerror = () => stopVoice(false); recognition.onend = () => { const shouldSend = speaking && finalText.trim(); speaking = false; mic.classList.remove('recording'); voiceNote.classList.remove('show'); if (shouldSend) ask(finalText); }; return true; }
-  function startVoice() { if (speaking || busy) return; if (!recognition && !configureVoice()) { addMessage('当前浏览器不支持语音输入，请直接输入文字。'); return; } recognition.lang = language?.value || 'zh-CN'; voiceNote.textContent = `正在聆听（${language?.selectedOptions?.[0]?.textContent || recognition.lang}）…松开即可识别`; speaking = true; mic.classList.add('recording'); voiceNote.classList.add('show'); try { recognition.start(); } catch (_) { stopVoice(false); } }
+  function voiceErrorText(code = 'unavailable') {
+    const locale = language?.value || 'zh-CN';
+    const permission = code === 'not-allowed' || code === 'service-not-allowed';
+    const noSpeech = code === 'no-speech';
+    if (locale === 'id-ID') {
+      if (permission) return 'Akses mikrofon belum diizinkan. Izinkan mikrofon di browser atau ketik pesan.';
+      if (noSpeech) return 'Suara belum terdeteksi. Coba lagi atau ketik pesan.';
+      return 'Pengenalan suara tidak tersedia. Silakan ketik pesan.';
+    }
+    if (locale === 'en-US') {
+      if (permission) return 'Microphone access is not allowed. Allow it in the browser or type your message.';
+      if (noSpeech) return 'No speech was detected. Try again or type your message.';
+      return 'Speech recognition is unavailable. Please type your message.';
+    }
+    if (permission) return '麦克风尚未授权，请在浏览器中允许麦克风，或直接输入文字。';
+    if (noSpeech) return '没有识别到语音，请重试或直接输入文字。';
+    return '当前语音识别不可用，请直接输入文字。';
+  }
+  function configureVoice() { const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!Recognition) return false; recognition = new Recognition(); recognition.interimResults = true; recognition.continuous = false; let finalText = ''; recognition.onresult = (event) => { let text = ''; for (let index = event.resultIndex; index < event.results.length; index += 1) text += event.results[index][0].transcript; input.value = text; resizeInput(); if (event.results[event.results.length - 1].isFinal) finalText = text; }; recognition.onerror = (event) => { const code = String(event?.error || 'unavailable').toLowerCase(); stopVoice(false); if (code !== 'aborted') addMessage(voiceErrorText(code)); }; recognition.onend = () => { const shouldSend = speaking && finalText.trim(); speaking = false; mic.classList.remove('recording'); voiceNote.classList.remove('show'); if (shouldSend) ask(finalText); }; return true; }
+  function startVoice() { if (speaking || busy) return; if (!recognition && !configureVoice()) { addMessage(voiceErrorText('unsupported')); return; } recognition.lang = language?.value || 'zh-CN'; voiceNote.textContent = `正在聆听（${language?.selectedOptions?.[0]?.textContent || recognition.lang}）…松开即可识别`; speaking = true; mic.classList.add('recording'); voiceNote.classList.add('show'); try { recognition.start(); } catch (_) { stopVoice(false); addMessage(voiceErrorText('unavailable')); } }
   function stopVoice(sendAfter) { if (!speaking) return; if (!sendAfter) speaking = false; try { recognition?.stop(); } catch (_) {} mic.classList.remove('recording'); voiceNote.classList.remove('show'); }
 
   send.addEventListener('click', () => ask(input.value)); input.addEventListener('input', resizeInput); input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); ask(input.value); } });

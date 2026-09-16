@@ -76,8 +76,9 @@ await check('store HTML exposes three speech languages and safe fallback', async
   const [page, script] = await Promise.all([fetch(`${base}/store/?store=STORE001`).then((r) => r.text()), fetch(`${base}/store-agent.js`).then((r) => r.text())]);
   for (const token of ['agent-language', 'zh-CN', 'en-US', 'id-ID']) if (!page.includes(token)) throw new Error(`missing ${token} in store page`);
   if (!/SpeechRecognition|webkitSpeechRecognition/.test(script) || !/recognition\.lang/.test(script)) throw new Error('speech recognition language binding missing');
-  if (!/不支持|not support|tidak mendukung/i.test(`${page}\n${script}`)) throw new Error('speech fallback message missing');
-  return { languages:['zh-CN','en-US','id-ID'], speech_binding:true, text_fallback:true };
+  if (!/不可用|unavailable|tidak tersedia/i.test(`${page}\n${script}`)) throw new Error('speech fallback message missing');
+  if (!/not-allowed/.test(script) || !/no-speech/.test(script) || !/Akses mikrofon belum diizinkan/.test(script)) throw new Error('localized speech error handling missing');
+  return { languages:['zh-CN','en-US','id-ID'], speech_binding:true, text_fallback:true, localized_errors:true };
 });
 
 if (mutationTests) {
