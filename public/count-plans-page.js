@@ -1,1 +1,68 @@
-(() => { const by=(id)=>document.getElementById(id),esc=(v)=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c])),fmt=(v)=>Number(v||0).toLocaleString('zh-CN',{maximumFractionDigits:3}); const label=(p)=>p.status==='pending_hq_review'?'待总部复核':p.submitted_material_count?'待补齐物料':'待门店盘点'; function render(s){const p=(s.countPlans||[]).slice().sort((a,b)=>`${b.business_date}${b.store_code}`.localeCompare(`${a.business_date}${a.store_code}`));by('rows').innerHTML=p.length?p.map(x=>{const lines=(x.lines||[]).map(l=>`<div class="line"><b>${esc(l.material_name)}</b><small>理论 ${fmt(l.theoretical_qty)} ${esc(l.unit)}${l.safety_qty==null?'':` · 安全 ${fmt(l.safety_qty)} ${esc(l.unit)}`}</small></div>`).join('');return `<tr><td><b>${esc(x.plan_no||x.id)}</b></td><td>${esc(x.store_code)}</td><td>${esc(x.business_date)}</td><td>${x.material_count} 项<details><summary style="color:#3370ff;cursor:pointer;margin-top:5px">查看全部物料快照</summary><div class="lines">${lines}</div></details></td><td><span class="tag ${x.status==='pending_hq_review'?'review':''}">${label(x)}</span>${x.submission_note?`<br><small style="color:#8f959e">${esc(x.submission_note)}</small>`:''}</td><td>${new Date(x.created_at).toLocaleString('zh-CN',{hour12:false})}</td></tr>`}).join(''):'<tr><td colspan="6" class="empty">尚未生成计划。请先完成飞书同步后生成。</td></tr>';} async function load(){const r=await fetch('/api/state',{cache:'no-store'}),s=await r.json();if(!r.ok)throw Error(s.error||'读取失败');render(s)}by('generate').onclick=async()=>{const b=by('generate');b.disabled=true;b.textContent='生成中…';try{const r=await fetch('/api/count-plans/generate',{method:'POST'}),s=await r.json();if(!r.ok)throw Error(s.error||'生成失败');render(s);b.textContent=s.generated_count?`已生成 ${s.generated_count} 张`:'今日计划已存在'}catch(e){alert(e.message);b.textContent='生成今日盘点计划'}finally{b.disabled=false}};load().catch(e=>by('rows').innerHTML=`<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`);})();
+(() => {
+  const by = (id) => document.getElementById(id);
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[char]));
+  const fmt = (value) => Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 3 });
+  let state = null;
+  const statusLabel = (plan) => plan.status === 'pending_hq_review' ? '待总部复核' : plan.status === 'closed' ? '已完成' : plan.submitted_material_count ? '待补齐物料' : '待门店盘点';
+  const policy = (item) => item.count_policy || (item.daily_count_enabled === false ? 'optional' : 'daily');
+
+  async function api(path, options = {}) {
+    const response = await fetch(path, { headers: { 'content-type': 'application/json', ...(options.headers || {}) }, ...options });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || '操作失败');
+    return result;
+  }
+  function show(message, type = '') { by('count-message').textContent = message; by('count-message').className = `message ${type}`; }
+  function renderPlans(plans = state?.countPlans || []) {
+    const rows = plans.slice().sort((left, right) => `${right.business_date}${right.created_at}`.localeCompare(`${left.business_date}${left.created_at}`));
+    by('rows').innerHTML = rows.length ? rows.map((plan) => {
+      const lines = (plan.lines || []).map((line) => `<div class="line"><b>${esc(line.material_name)}</b><small>理论 ${fmt(line.theoretical_qty)} ${esc(line.unit)}</small></div>`).join('');
+      const type = ({ daily_full: '每日计划', manual_material_set: '不定期盘点', work_order_material_set: '工单盘点', targeted_material: '定向盘点', targeted_material_set: '定向盘点' }[plan.plan_type] || '盘点计划');
+      return `<tr><td><b>${esc(plan.plan_no || plan.id)}</b><br><small>${esc(type)}</small></td><td>${esc(plan.store_code)}</td><td>${esc(plan.business_date)}</td><td>${plan.material_count} 项<details><summary>查看物料</summary><div class="lines">${lines}</div></details></td><td><span class="tag ${plan.status === 'pending_hq_review' ? 'review' : ''}">${statusLabel(plan)}</span>${plan.instruction ? `<br><small>${esc(plan.instruction)}</small>` : ''}</td><td>${new Date(plan.created_at).toLocaleString('zh-CN', { hour12: false })}</td></tr>`;
+    }).join('') : '<tr><td colspan="6" class="empty">尚未生成盘点计划。</td></tr>';
+  }
+  function renderMaterials() {
+    const materials = state?.materialCatalog || [];
+    by('material-policy-rows').innerHTML = materials.map((item) => `<tr><td><b>${esc(item.material_name)}</b><br><small>${esc(item.brand || '')}</small></td><td>${esc(item.base_unit)}<br><small>采购：${esc(item.procurement_unit)} × ${fmt(item.conversion_factor || 1)}</small></td><td><select data-policy="${esc(item.material_name)}"><option value="daily" ${policy(item) === 'daily' ? 'selected' : ''}>每日盘点</option><option value="optional" ${policy(item) === 'optional' ? 'selected' : ''}>按需盘点</option></select></td><td>${esc(item.remark || '—')}</td></tr>`).join('');
+    by('manual-materials').innerHTML = materials.filter((item) => item.status !== 'inactive').map((item) => `<label class="material-check"><input type="checkbox" value="${esc(item.material_name)}"><span><b>${esc(item.material_name)}</b><small>${policy(item) === 'daily' ? '每日盘点' : '按需盘点'} · ${esc(item.base_unit)}</small></span></label>`).join('');
+    document.querySelectorAll('[data-policy]').forEach((select) => select.onchange = async () => {
+      select.disabled = true;
+      try {
+        const result = await api('/api/material-catalog/count-policy', { method: 'POST', body: JSON.stringify({ material_name: select.dataset.policy, count_policy: select.value }) });
+        state.materialCatalog = result.material_catalog;
+        renderMaterials(); show(`${select.dataset.policy} 已设为${select.value === 'daily' ? '每日盘点' : '按需盘点'}。`, 'ok');
+      } catch (error) { show(error.message, 'error'); select.disabled = false; }
+    });
+  }
+  function renderSelectors() {
+    const stores = (state?.storeMasters || []).filter((item) => item.status !== '停用');
+    by('manual-store').innerHTML = stores.map((item) => `<option value="${esc(item.store_code)}">${esc(item.store_code)} · ${esc(item.store_name)}</option>`).join('');
+    const defaultDate = state?.feishuImport?.latest_business_date || new Date().toISOString().slice(0, 10);
+    by('manual-date').value = defaultDate;
+  }
+  async function load() {
+    state = await api('/api/state', { cache: 'no-store' });
+    renderPlans(); renderMaterials(); renderSelectors();
+  }
+  by('generate').onclick = async () => {
+    const button = by('generate'); button.disabled = true; button.textContent = '生成中…';
+    try { const result = await api('/api/count-plans/generate', { method: 'POST' }); state = result; renderPlans(result.countPlans); show(result.generated_count ? `已生成 ${result.generated_count} 张每日盘点单。` : '今日每日盘点单已存在或已刷新。', 'ok'); }
+    catch (error) { show(error.message, 'error'); }
+    finally { button.disabled = false; button.textContent = '生成今日每日计划'; }
+  };
+  by('manual-source').onchange = () => by('work-order-wrap').hidden = by('manual-source').value !== 'work_order';
+  by('manual-form').onsubmit = async (event) => {
+    event.preventDefault();
+    const names = [...document.querySelectorAll('#manual-materials input:checked')].map((input) => input.value);
+    if (!names.length) return show('请至少选择一个盘点物料。', 'error');
+    const button = by('manual-submit'); button.disabled = true;
+    try {
+      const result = await api('/api/count-plans/manual', { method: 'POST', body: JSON.stringify({ store_code: by('manual-store').value, business_date: by('manual-date').value, material_names: names, source_type: by('manual-source').value, source_work_order_id: by('manual-work-order').value, instruction: by('manual-instruction').value }) });
+      state.countPlans = result.countPlans; renderPlans();
+      document.querySelectorAll('#manual-materials input:checked').forEach((input) => input.checked = false);
+      show(`已下发 ${result.plan.plan_no}，共 ${result.plan.material_count} 项物料。`, 'ok');
+    } catch (error) { show(error.message, 'error'); }
+    finally { button.disabled = false; }
+  };
+  load().catch((error) => { show(error.message, 'error'); by('rows').innerHTML = `<tr><td colspan="6" class="empty">${esc(error.message)}</td></tr>`; });
+})();

@@ -1,4 +1,38 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>每日盘点计划 · 小笼包门店运营</title><style>
-*{box-sizing:border-box}body{margin:0;background:#f5f6f8;color:#1f2329;font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}.wrap{max-width:1180px;margin:auto;padding:26px 22px 48px}.crumb{font-size:13px;color:#8f959e}.crumb a{color:#3370ff;text-decoration:none}.head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin:8px 0 18px}.head h1{margin:0;font-size:24px}.head p{margin:5px 0 0;color:#646a73}.btn{border:1px solid #3370ff;background:#3370ff;color:#fff;border-radius:6px;padding:8px 12px;cursor:pointer;font:13px inherit}.btn:disabled{opacity:.6;cursor:wait}.panel{background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05)}.note{padding:12px 16px;background:#f5f8ff;color:#4e5969;font-size:13px;border-bottom:1px solid #e6efff}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:780px}th,td{padding:12px 16px;text-align:left;border-bottom:1px solid #f0f1f3}th{background:#fafbfc;color:#8f959e;font-size:12px;font-weight:500}.tag{display:inline-block;padding:3px 7px;border-radius:4px;background:#fff4df;color:#b87300;font-size:12px}.tag.review{background:#e8f4ff;color:#1d6fdc}.empty{padding:36px;text-align:center;color:#8f959e}.lines{display:grid;grid-template-columns:repeat(3,minmax(140px,1fr));gap:7px;margin-top:8px}.line{padding:7px;background:#fafbfc;border-radius:5px;font-size:12px}.line small{display:block;color:#8f959e}@media(max-width:760px){.wrap{padding:16px}.head{display:block}.head .btn{margin-top:10px}.lines{grid-template-columns:repeat(2,minmax(120px,1fr))}}
-</style><script src="/loading.js"></script><script src="/app-shell.js"></script></head><body><main class="wrap"><div class="crumb"><a href="/">运营中心</a> / 日常运营 / 每日盘点计划</div><header class="head"><div><h1>每日门店盘点计划</h1><p>每家门店每天一张全物料盘点单，生成时冻结理论库存快照。</p></div><button class="btn" id="generate">生成今日盘点计划</button></header><section class="panel"><div class="note">自动规则：飞书同步识别到新的营业日后，系统会为每个有物料台账的门店自动生成计划；同门店、同日期只生成一次。</div><div class="table-wrap"><table><thead><tr><th>盘点单号</th><th>门店</th><th>盘点日期</th><th>默认盘点范围</th><th>状态</th><th>生成时间</th></tr></thead><tbody id="rows"></tbody></table></div></section></main><script src="/count-plans-page.js"></script></body></html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>盘点计划 · 小笼包门店运营</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f6f8;color:#1f2329;font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}.wrap{max-width:1240px;margin:auto;padding:26px 22px 48px}.crumb{font-size:13px;color:#8f959e}.crumb a{color:#3370ff;text-decoration:none}.head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin:8px 0 18px}.head h1{margin:0;font-size:24px}.head p,.sub{margin:5px 0 0;color:#646a73}.btn{border:1px solid #3370ff;background:#3370ff;color:#fff;border-radius:6px;padding:8px 13px;cursor:pointer;font:13px inherit}.btn:disabled{opacity:.6;cursor:wait}.panel{background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:18px}.panel-title{padding:16px;border-bottom:1px solid #f0f1f3}.panel-title h2{font-size:17px;margin:0}.note{padding:12px 16px;background:#f5f8ff;color:#4e5969;font-size:13px;border-bottom:1px solid #e6efff}.message{min-height:22px;margin:0 0 12px;color:#646a73}.message.ok{color:#25783c}.message.error{color:#d72a2a}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:860px}th,td{padding:11px 16px;text-align:left;border-bottom:1px solid #f0f1f3;vertical-align:top}th{background:#fafbfc;color:#8f959e;font-size:12px;font-weight:500}select,input,textarea{width:100%;border:1px solid #dcdfe5;border-radius:6px;padding:8px 10px;background:#fff;font:inherit;color:inherit}.tag{display:inline-block;padding:3px 7px;border-radius:4px;background:#fff4df;color:#b87300;font-size:12px}.tag.review{background:#e8f4ff;color:#1d6fdc}.empty{padding:36px;text-align:center;color:#8f959e}.lines{display:grid;grid-template-columns:repeat(3,minmax(140px,1fr));gap:7px;margin-top:8px}.line{padding:7px;background:#fafbfc;border-radius:5px;font-size:12px}.line small,.material-check small{display:block;color:#8f959e}.manual-form{padding:16px}.form-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}.form-grid label{display:grid;gap:5px;color:#4e5969;font-size:13px}.material-grid{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:8px;margin:14px 0}.material-check{display:flex;gap:8px;align-items:flex-start;padding:9px;border:1px solid #e5e6eb;border-radius:7px}.material-check input{width:auto;margin-top:3px}.form-actions{display:flex;justify-content:flex-end;margin-top:12px}.policy-note{color:#646a73;font-size:12px}details summary{cursor:pointer;color:#3370ff}.section-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
+@media(max-width:760px){.wrap{padding:16px}.head{display:block}.head .btn{margin-top:10px}.lines,.form-grid,.material-grid{grid-template-columns:1fr}.section-actions{align-items:flex-start;flex-direction:column}}
+</style><script src="/loading.js"></script><script src="/app-shell.js"></script>
+</head><body><main class="wrap">
+<div class="crumb"><a href="/">运营中心</a> / 日常运营 / 盘点计划</div>
+<header class="head"><div><h1>盘点计划与物料范围</h1><p>每日必盘物料自动进入计划；按需物料可用于不定期盘点或工单下发。</p></div><button class="btn" id="generate">生成今日每日计划</button></header>
+<div class="message" id="count-message" aria-live="polite"></div>
+<section class="panel">
+  <div class="panel-title section-actions"><div><h2>物料盘点设置</h2><p class="sub">“每日盘点”自动进入每日计划；“按需盘点”仅在不定期盘点或工单中选择。</p></div><span class="policy-note">设置只影响未来计划，不改历史盘点单。</span></div>
+  <div class="table-wrap"><table><thead><tr><th>物料</th><th>库存与采购单位</th><th>盘点策略</th><th>主档备注</th></tr></thead><tbody id="material-policy-rows"></tbody></table></div>
+</section>
+<section class="panel">
+  <div class="panel-title"><h2>下发不定期盘点</h2><p class="sub">总部可自由选择物料，也可关联跟进工单下发给门店。</p></div>
+  <form class="manual-form" id="manual-form">
+    <div class="form-grid">
+      <label>门店<select id="manual-store" required></select></label>
+      <label>营业日<input id="manual-date" type="date" required></label>
+      <label>来源<select id="manual-source"><option value="manual">总部临时盘点</option><option value="work_order">跟进工单</option></select></label>
+    </div>
+    <div class="form-grid" style="margin-top:12px">
+      <label id="work-order-wrap" hidden>工单编号<input id="manual-work-order" placeholder="例如 WO-20260916-001"></label>
+      <label style="grid-column:span 2">门店说明<input id="manual-instruction" placeholder="例如：闭店前复核黑糖珍珠与牛奶"></label>
+    </div>
+    <div class="material-grid" id="manual-materials"></div>
+    <div class="form-actions"><button class="btn" id="manual-submit" type="submit">下发盘点任务</button></div>
+  </form>
+</section>
+<section class="panel">
+  <div class="note">每日计划按“每日盘点”策略生成；同门店、同日期、同类型只生成一次。不定期计划保留所选物料快照。</div>
+  <div class="table-wrap"><table><thead><tr><th>盘点单号</th><th>门店</th><th>盘点日期</th><th>盘点范围</th><th>状态</th><th>生成时间</th></tr></thead><tbody id="rows"></tbody></table></div>
+</section>
+</main><script src="/count-plans-page.js"></script></body></html>

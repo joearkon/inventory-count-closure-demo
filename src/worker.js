@@ -183,7 +183,7 @@ function cloneDemoState(value) { return JSON.parse(JSON.stringify(value)); }
 function cloneNotificationSettings(value) { return JSON.parse(JSON.stringify(value)); }
 function r2DefaultStoreMasters() { return R2_STORE_MASTERS.map((item) => ({ ...item })); }
 function r2DefaultProductCatalog() { return R2_PRODUCT_MASTERS.map((item) => ({ ...item, aliases: Array.isArray(item.aliases) ? [...item.aliases] : [] })); }
-function r2DefaultMaterialCatalog() { return R2_MATERIAL_MASTERS.map((item) => ({ ...item, status: 'active', source: '总部物料主档' })); }
+function r2DefaultMaterialCatalog() { return R2_MATERIAL_MASTERS.map((item) => ({ ...item, count_policy: item.daily_count_enabled === false ? 'optional' : 'daily', status: 'active', source: '总部物料主档' })); }
 function r2DefaultSafetyStockPolicies() { return R2_SAFETY_STOCK_POLICIES.map((item) => ({ ...item, status: 'active', owner: '供应链 / 营运', source: '总部安全库存配置' })); }
 
 function normalizeR2DemoState(value) {
@@ -1613,13 +1613,15 @@ function r2LocalMaterialMaster(materialCatalog = R2_MATERIAL_MASTERS) {
     material_name: item.material_name, unit: item.base_unit, base_unit: item.base_unit,
     procurement_unit: item.procurement_unit, conversion_factor: Number(item.conversion_factor || 1),
     remark: item.remark || '', brand: item.brand || '', daily_count_enabled: item.daily_count_enabled !== false,
+    count_policy: item.count_policy || (item.daily_count_enabled === false ? 'optional' : 'daily'),
     source: item.source || 'system_inventory_master'
   })).sort((left, right) => left.material_name.localeCompare(right.material_name, 'zh-CN'));
 }
 
 function r2DailyCountEnabled(value, materialName) {
   const master = (value.materialCatalog || []).find((item) => normalizedKey(item.material_name) === normalizedKey(materialName));
-  return !R2_DAILY_COUNT_EXCLUDED_MATERIALS.some((name) => normalizedKey(name) === normalizedKey(materialName)) && master?.daily_count_enabled !== false;
+  if (master) return (master.count_policy || (master.daily_count_enabled === false ? 'optional' : 'daily')) === 'daily';
+  return !R2_DAILY_COUNT_EXCLUDED_MATERIALS.some((name) => normalizedKey(name) === normalizedKey(materialName));
 }
 
 function r2ToBaseUnitFactor(fromUnit, master) {
@@ -1922,6 +1924,7 @@ async function r2StoreBootstrap(env, storeCode = STORE_CODE) {
     storeTransferRequests,
     transfers: { store_requests: storeTransferRequests },
     ledger,
+    materialCatalog: (value.materialCatalog || r2DefaultMaterialCatalog()).filter((item) => item.status !== 'inactive'),
     feishuImport: {
       latest_business_date: businessDate,
       latest_sales_qty: view?.sales_qty || 0,
@@ -1986,6 +1989,69 @@ async function r2SyncMaterialCatalog(env) {
   r2Audit(value, '总部运营', '更新物料主档', `已更新 ${value.materialCatalog.length} 项物料的基础单位、采购单位、换算系数、备注与品牌；同步换算 ${alignedPolicies.converted} 条安全库存策略至基础单位。历史库存流水和已锁定销售快照保持原单位、原数量。`);
   const stateValue = await r2SaveDemoState(env, value, 'material-catalog-sync');
   return json({ material_catalog: stateValue.materialCatalog, storage: stateValue.storage });
+}
+
+async function r2UpdateMaterialCountPolicies(env, body = {}) {
+  const value = await r2DemoState(env);
+  value.materialCatalog = value.materialCatalog?.length ? value.materialCatalog : r2DefaultMaterialCatalog();
+  const updates = Array.isArray(body.updates) ? body.updates : [body];
+  const changed = [];
+  for (const update of updates) {
+    const materialName = String(update?.material_name || '').trim().slice(0, 80);
+    const policy = update?.count_policy === 'daily' ? 'daily' : update?.count_policy === 'optional' ? 'optional' : null;
+    const material = value.materialCatalog.find((item) => normalizedKey(item.material_name) === normalizedKey(materialName));
+    if (!material || !policy) continue;
+    material.count_policy = policy;
+    material.daily_count_enabled = policy === 'daily';
+    material.updated_at = now();
+    changed.push({ material_name: material.material_name, count_policy: policy });
+  }
+  if (!changed.length) return bad('请选择有效物料并设置为每日盘点或按需盘点。');
+  r2Audit(value, '总部运营', '更新物料盘点属性', changed.map((item) => `${item.material_name}=${item.count_policy === 'daily' ? '每日盘点' : '按需盘点'}`).join('；'), 'material-count-policy');
+  const stateValue = await r2SaveDemoState(env, value, 'material-count-policy-update');
+  return json({ updated: changed, material_catalog: stateValue.materialCatalog, storage: stateValue.storage });
+}
+
+async function r2CreateManualCountPlan(env, body = {}) {
+  const value = await r2DemoState(env);
+  const storeCode = String(body.store_code || STORE_CODE).trim().slice(0, 64);
+  const store = (value.storeMasters || r2DefaultStoreMasters()).find((item) => item.store_code === storeCode && item.status !== '停用');
+  if (!store) return bad('请选择有效门店。');
+  const names = [...new Set((Array.isArray(body.material_names) ? body.material_names : []).map((item) => String(item || '').trim()).filter(Boolean))].slice(0, 80);
+  if (!names.length) return bad('请至少选择一个盘点物料。');
+  const businessDate = String(body.business_date || value.feishuImport?.latest_business_date || chinaBusinessDate()).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) return bad('盘点日期格式不正确。');
+  const calculated = value.feishuImport?.sales?.length ? r2ImportedFeishuState(value) : { storeViews: [] };
+  const view = (calculated.storeViews || []).find((item) => item.store_code === storeCode);
+  const catalog = value.materialCatalog?.length ? value.materialCatalog : r2DefaultMaterialCatalog();
+  const lines = names.map((materialName) => {
+    const master = catalog.find((item) => normalizedKey(item.material_name) === normalizedKey(materialName) && item.status !== 'inactive');
+    if (!master) return null;
+    const ledgerRow = (view?.ledger || []).find((item) => normalizedKey(item.material_name) === normalizedKey(master.material_name));
+    return {
+      material_name: master.material_name,
+      unit: ledgerRow?.unit || master.base_unit,
+      theoretical_qty: Number(ledgerRow?.theoretical_closing_qty || 0),
+      safety_qty: ledgerRow?.safety_qty ?? null,
+      source: ledgerRow ? '总部手动盘点下发时理论库存快照' : '主档物料（当前门店尚无库存流水）'
+    };
+  }).filter(Boolean);
+  if (!lines.length) return bad('所选物料均未在有效物料主档中。');
+  const sourceType = body.source_type === 'work_order' ? 'work_order' : 'manual';
+  const suffix = crypto.randomUUID().slice(0, 5).toUpperCase();
+  const planNo = `PD-${businessDate.replaceAll('-', '')}-${storeCode}-${sourceType === 'work_order' ? 'WO' : 'MAN'}-${suffix}`;
+  const plan = {
+    id: planNo, plan_no: planNo, plan_type: sourceType === 'work_order' ? 'work_order_material_set' : 'manual_material_set',
+    store_code: storeCode, business_date: businessDate, status: 'pending_store_count',
+    created_at: now(), generated_by: '总部运营', material_count: lines.length, lines,
+    submitted_material_count: 0, theoretical_snapshot_at: now(), snapshot_revision: 1,
+    source_work_order_id: String(body.source_work_order_id || '').trim().slice(0, 120) || null,
+    instruction: String(body.instruction || '').trim().slice(0, 240) || '请完成所选物料盘点并上传盘点照片。'
+  };
+  value.countPlans.unshift(plan);
+  r2Audit(value, '总部运营', sourceType === 'work_order' ? '从工单下发盘点' : '下发不定期盘点', `${plan.plan_no} · ${storeCode} · ${lines.map((item) => item.material_name).join('、')}`, plan.id);
+  const state = await r2SaveDemoState(env, value, 'manual-count-plan-create');
+  return json({ plan, countPlans: state.countPlans, storage: state.storage }, 201);
 }
 
 async function r2SyncSafetyStockPolicies(env) {
@@ -3138,11 +3204,20 @@ async function receiveFeishuEvent(request, env) {
 // 未来接入豆包 / OpenAI function calling 时，模型也只能返回下列 ui_action
 // 结构；密钥始终只保存在 Worker secret，绝不下发到 HTML。
 function r2StoreAgentNumber(message) {
-  const match = String(message || '').match(/(\d+(?:\.\d+)?)\s*(kg|公斤|千克|l|升|个|只|pcs?)?/i);
+  const match = String(message || '').match(/(?<![A-Za-z0-9])(\d+(?:\.\d+)?)\s*(kg|kilograms?|公斤|千克|g|grams?|克|l|liters?|litres?|liter|升|个|只|pcs?|pieces?|buah)?/i);
   if (!match) return { qty: null, unit: null };
   const rawUnit = String(match[2] || '').toLowerCase();
-  const unit = /kg|公斤|千克/.test(rawUnit) ? 'kg' : /l|升/.test(rawUnit) ? 'L' : /个|只|pcs?/.test(rawUnit) ? '个' : null;
+  const unit = /kg|kilogram|公斤|千克/.test(rawUnit) ? 'kg' : /g|gram|克/.test(rawUnit) ? 'g' : /l|liter|litre|升/.test(rawUnit) ? 'L' : /个|只|pcs?|piece|buah/.test(rawUnit) ? '个' : null;
   return { qty: Number(match[1]), unit };
+}
+
+function r2StoreAgentBaseQuantity(material, qty, inputUnit) {
+  const numeric = Number(qty);
+  if (!Number.isFinite(numeric) || numeric <= 0) return { qty: '', unit: material?.unit || inputUnit || '' };
+  const baseUnit = material?.unit || inputUnit || '';
+  if (baseUnit === 'g' && inputUnit === 'kg') return { qty: r2Round(numeric * 1000), unit: 'g' };
+  if (baseUnit === 'kg' && inputUnit === 'g') return { qty: r2Round(numeric / 1000), unit: 'kg' };
+  return { qty: numeric, unit: baseUnit };
 }
 
 function r2StoreAgentDestination(message) {
@@ -3163,15 +3238,25 @@ function r2StoreAgentMaterial(rows, message) {
   if (!normalizedMessage) return null;
   const exact = rows.find((row) => normalizedMessage.includes(normalizedKey(row.material_name)));
   if (exact) return exact;
+  const aliases = [
+    { names: ['milk', 'susu'], material: '牛奶' },
+    { names: ['freshmilk', 'sususegar'], material: '鲜牛奶' },
+    { names: ['brownsugarpearl', 'brownsugarboba', 'mutiaragulamerah', 'bobagulamerah'], material: '黑糖珍珠' },
+    { names: ['tea', 'daunteh'], material: '茶叶' },
+    { names: ['straw', 'sedotan'], material: '吸管' },
+    { names: ['plasticcup', 'gelasplastik'], material: '塑料杯' }
+  ];
+  const alias = aliases.find((item) => item.names.some((name) => normalizedMessage.includes(normalizedKey(name))));
+  if (alias) return rows.find((row) => normalizedKey(row.material_name) === normalizedKey(alias.material)) || null;
   return rows.find((row) => normalizedKey(row.material_name).includes(normalizedMessage)) || null;
 }
 
 function r2StoreAgentReason(message) {
   const text = String(message || '');
-  if (/过期|过了保质期/.test(text)) return '过期';
-  if (/破损|破了|碎/.test(text)) return '破损';
-  if (/变质|坏了|烂了|酸了/.test(text)) return '变质';
-  if (/洒|漏/.test(text)) return '洒漏';
+  if (/过期|过了保质期|expired|kedaluwarsa|kadaluarsa/i.test(text)) return '过期';
+  if (/破损|破了|碎|broken|damaged|rusak|pecah/i.test(text)) return '破损';
+  if (/变质|坏了|烂了|酸了|spoiled|basi/i.test(text)) return '变质';
+  if (/洒|漏|spill|leak|tumpah|bocor/i.test(text)) return '洒漏';
   return null;
 }
 
@@ -3194,8 +3279,9 @@ function r2StoreAgentTools() {
 function r2StoreAgentLlmAction(toolName, args, rows) {
   const material = r2StoreAgentMaterial(rows, args.material || args.material_name || '') || (args.material ? { material_name: String(args.material).trim(), unit: args.unit || '' } : null);
   const qty = Number(args.qty ?? args.quantity);
-  const safeQty = Number.isFinite(qty) && qty > 0 ? qty : '';
-  const unit = material?.unit || args.unit || '';
+  const normalizedQuantity = r2StoreAgentBaseQuantity(material, qty, args.unit || '');
+  const safeQty = normalizedQuantity.qty;
+  const unit = normalizedQuantity.unit;
   const prefill = { material_name: material?.material_name || '', unit, qty: safeQty };
   if (toolName === 'transfer_stok') {
     const requested = Array.isArray(args.destinations) ? args.destinations : [];
@@ -3269,7 +3355,7 @@ async function r2StoreAgentWithArk(env, message, storeCode, rows, history = [], 
         temperature: 0.1,
         thinking: { type: 'disabled' },
         messages: [
-          { role: 'system', content: `你是 ${storeCode} 的门店运营助手。仅处理调拨、报损、收货、盘点、补货和查库存。根据用户意图调用一个工具；参数不全时仍调用对应工具并只填写确定字段。用户问今日待办、帮我完成待办或今天做什么时，先说明当前待办，若第一项是盘点则调用 stok_opname。调拨可一对多：用户提到多个门店时，必须在 destinations 中逐店填入数量；不要合并或猜测数量。门店名称必须换成对应编码：${stores}。不要虚构物料、数量、门店、照片或库存数据，不要执行或承诺已提交；所有操作都要由店员确认后才会提交。当前可选物料：${materials || '暂未加载物料'}。当前今日待办：${todayTasks.length ? todayTasks.map((task) => `${task.title}（${task.detail}）`).join('；') : '无'}。当前未完成草稿：${currentDraft ? JSON.stringify(currentDraft).slice(0, 800) : '无'}。` },
+          { role: 'system', content: `你是 ${storeCode} 的门店运营助手。理解中文、English 和 Bahasa Indonesia，并使用用户当前语言简短回复。仅处理调拨、报损、收货、盘点、补货和查库存。根据用户意图调用一个工具；参数不全时仍调用对应工具并只填写确定字段。用户问今日待办、帮我完成待办或今天做什么时，先说明当前待办，若第一项是盘点则调用 stok_opname。调拨可一对多：用户提到多个门店时，必须在 destinations 中逐店填入数量；不要合并或猜测数量。门店名称必须换成对应编码：${stores}。不要虚构物料、数量、门店、照片或库存数据，不要执行或承诺已提交；所有操作都要由店员确认后才会提交。当前可选物料：${materials || '暂未加载物料'}。当前今日待办：${todayTasks.length ? todayTasks.map((task) => `${task.title}（${task.detail}）`).join('；') : '无'}。当前未完成草稿：${currentDraft ? JSON.stringify(currentDraft).slice(0, 800) : '无'}。` },
           ...history.slice(-8).map((turn) => ({ role: turn.role === 'assistant' ? 'assistant' : 'user', content: String(turn.content || '').slice(0, 600) })),
           { role: 'user', content: message }
         ],
@@ -3297,7 +3383,7 @@ async function r2StoreAgentDeterministic(env, body) {
   const message = String(body.message || '').trim().slice(0, 600);
   const storeCode = String(body.store_code || body.storeId || STORE_CODE).trim().slice(0, 64) || STORE_CODE;
   const bootstrap = await r2StoreBootstrap(env, storeCode);
-  const rows = bootstrap.ledger || [];
+  const rows = bootstrap.ledger?.length ? bootstrap.ledger : (bootstrap.materialCatalog || []).map((item) => ({ material_name: item.material_name, unit: item.base_unit, theoretical_closing_qty: 0, safety_qty: null }));
   const todayTasks = r2StoreAgentTodayTasks(bootstrap, storeCode);
   const toolContract = {
     provider: env.DOUBAO_API_KEY ? 'ark_function_calling' : 'deterministic_demo',
@@ -3317,7 +3403,7 @@ async function r2StoreAgentDeterministic(env, body) {
   if (/今日待办|今天.*待办|今天.*做什么|待办任务|帮我.*待办/.test(lower)) {
     return json({ reply: r2StoreAgentTodayTaskReply(storeCode, todayTasks), action: { type: 'none' }, today_tasks: todayTasks, tool_contract: toolContract });
   }
-  if (/库存|余量|还有多少|查.*(物料|库存)|查询/.test(lower)) {
+  if (/库存|余量|还有多少|查.*(物料|库存)|查询|inventory|stock|stok|cek stok|berapa.*stok/.test(lower)) {
     if (!material) return json({ reply: '请告诉我要查询的物料，例如“查牛奶库存”。', action: { type: 'none' }, tool_contract: toolContract });
     const qty = Number(material.theoretical_closing_qty || 0);
     return json({
@@ -3327,39 +3413,48 @@ async function r2StoreAgentDeterministic(env, body) {
     });
   }
   // 门店口语经常省略“拨”，例如“调 2kg 黑糖珍珠去 STORE002”。
-  if (/调拨|调出|转给|转到|调\s*\d|调.*?(?:去|到|至)/.test(lower)) {
+  if (currentDraft?.intent === 'transfer' || /调拨|调出|转给|转到|调\s*\d|调.*?(?:去|到|至)|transfer|move .* to|pindah|pindahkan|kirim .* store/.test(lower)) {
     const prior = currentDraft?.intent === 'transfer' ? currentDraft.values || {} : {};
     const priorDestinations = Array.isArray(prior.destinations) ? prior.destinations.filter((item) => item?.store_code || item?.qty) : [];
     const transferMaterial = material || r2StoreAgentMaterial(rows, prior.material_name || '');
-    const transferQty = number.qty || (Number(prior.qty) > 0 ? Number(prior.qty) : '');
+    const normalizedQuantity = number.qty ? r2StoreAgentBaseQuantity(transferMaterial, number.qty, number.unit) : { qty: Number(prior.qty) > 0 ? Number(prior.qty) : '', unit: transferMaterial?.unit || prior.unit || '' };
+    const transferQty = normalizedQuantity.qty;
     const toStore = r2StoreAgentDestination(message) || prior.to_store_code || priorDestinations[0]?.store_code || null;
     const destinations = priorDestinations.length ? priorDestinations.map((item) => ({ store_code: item.store_code, qty: Number(item.qty) > 0 ? Number(item.qty) : transferQty || '' })) : (toStore ? [{ store_code: toStore, qty: transferQty || '' }] : []);
     const missing = [!transferMaterial && '物料', !transferQty && '数量', !toStore && '调入门店'].filter(Boolean);
-    const prefill = { material_name: transferMaterial?.material_name || '', unit: transferMaterial?.unit || number.unit || prior.unit || '', qty: transferQty, to_store_code: toStore || '', destinations };
+    const prefill = { material_name: transferMaterial?.material_name || '', unit: normalizedQuantity.unit, qty: transferQty, to_store_code: toStore || '', destinations };
     return json({
       reply: missing.length ? `我识别到你要发起调拨，还缺少：${missing.join('、')}。我已打开调拨单，请补全后确认提交。` : `已识别调拨草稿：${transferMaterial.material_name} ${transferQty} ${prefill.unit} 调往 ${toStore}。请在表单中确认后提交。`,
       action: { type: 'open_transfer', prefill }, tool_contract: toolContract
     });
   }
-  if (/报损|报废|损耗|过期|破损|变质|烂了|坏了|洒|漏/.test(lower)) {
-    const reason = r2StoreAgentReason(message);
-    const missing = [!material && '物料', !number.qty && '数量', !reason && '报损原因'].filter(Boolean);
+  if (currentDraft?.intent === 'scrap' || /报损|报废|损耗|过期|破损|变质|烂了|坏了|洒|漏|scrap|waste|damaged|expired|lapor.*rusak|barang.*rusak|kedaluwarsa|kadaluarsa|basi|tumpah/.test(lower)) {
+    const prior = currentDraft?.intent === 'scrap' ? currentDraft.values || {} : {};
+    const scrapMaterial = material || r2StoreAgentMaterial(rows, prior.material_name || '');
+    const normalizedQuantity = number.qty ? r2StoreAgentBaseQuantity(scrapMaterial, number.qty, number.unit) : { qty: Number(prior.qty) > 0 ? Number(prior.qty) : '', unit: scrapMaterial?.unit || prior.unit || '' };
+    const scrapQty = normalizedQuantity.qty;
+    const reason = r2StoreAgentReason(message) || prior.reason || '';
+    const missing = [!scrapMaterial && '物料', !scrapQty && '数量', !reason && '报损原因'].filter(Boolean);
     return json({
-      reply: missing.length ? `我识别到报损登记，还缺少：${missing.join('、')}。请在上传页补全并拍照留证。` : `已识别报损草稿：${material.material_name} ${number.qty} ${material.unit}，原因：${reason}。请上传凭证并确认。`,
-      action: { type: 'open_scrap', prefill: { material_name: material?.material_name || '', unit: material?.unit || number.unit || '', qty: number.qty || '', reason: reason || '' } }, tool_contract: toolContract
+      reply: missing.length ? `我识别到报损登记，还缺少：${missing.join('、')}。请补全后确认。` : `已识别报损草稿：${scrapMaterial.material_name} ${scrapQty} ${scrapMaterial.unit}，原因：${reason}。请确认后提交，照片可选。`,
+      action: { type: 'open_scrap', prefill: { material_name: scrapMaterial?.material_name || '', unit: normalizedQuantity.unit, qty: scrapQty, reason } }, tool_contract: toolContract
     });
   }
-  if (/盘点|盘库|清点/.test(lower)) {
+  if (currentDraft?.intent === 'count' || /盘点|盘库|清点|count inventory|stock count|inventory count|stok opname|hitung stok/.test(lower)) {
     return json({
       reply: material ? `我会为你打开 ${material.material_name} 的盘点入口；请拍照识别后确认异常项。` : '我已打开今日盘点单。拍照后系统会先识别，只需确认未识别或异常项目。',
       action: { type: 'open_count', prefill: { material_name: material?.material_name || '' } }, tool_contract: toolContract
     });
   }
-  if (/收货|入库|到货/.test(lower)) {
-    const missing = [!material && '物料', !number.qty && '数量'].filter(Boolean);
-    return json({ reply: missing.length ? `我识别到收货入库，还缺少：${missing.join('、')}。请补全后上传收货凭证。` : `已识别收货草稿：${material.material_name} ${number.qty} ${material.unit}。请上传收货凭证并确认。`, action: { type: 'open_receipt', prefill: { material_name: material?.material_name || '', unit: material?.unit || number.unit || '', qty: number.qty || '' } }, tool_contract: toolContract });
+  if (currentDraft?.intent === 'receipt' || /收货|入库|到货|receive|received|goods receipt|penerimaan|terima barang/.test(lower)) {
+    const prior = currentDraft?.intent === 'receipt' ? currentDraft.values || {} : {};
+    const receiptMaterial = material || r2StoreAgentMaterial(rows, prior.material_name || '');
+    const normalizedQuantity = number.qty ? r2StoreAgentBaseQuantity(receiptMaterial, number.qty, number.unit) : { qty: Number(prior.qty) > 0 ? Number(prior.qty) : '', unit: receiptMaterial?.unit || prior.unit || '' };
+    const receiptQty = normalizedQuantity.qty;
+    const missing = [!receiptMaterial && '物料', !receiptQty && '数量'].filter(Boolean);
+    return json({ reply: missing.length ? `我识别到收货入库，还缺少：${missing.join('、')}。请补全后确认。` : `已识别收货草稿：${receiptMaterial.material_name} ${receiptQty} ${normalizedQuantity.unit}。请确认后提交，照片可选。`, action: { type: 'open_receipt', prefill: { material_name: receiptMaterial?.material_name || '', unit: normalizedQuantity.unit, qty: receiptQty } }, tool_contract: toolContract });
   }
-  if (/补货|缺货|库存不足|要货/.test(lower)) {
+  if (currentDraft?.intent === 'restock' || /补货|缺货|库存不足|要货|restock|replenish|out of stock|isi ulang stok|tambah stok|stok kurang/.test(lower)) {
     const missing = [!material && '物料', !number.qty && '数量', !/库存不足|促销|备货|缺货|断货/.test(message) && '申请原因'].filter(Boolean);
     const reason = /促销|备货/.test(message) ? '促销备货' : /库存不足|缺货|断货/.test(message) ? '库存不足' : '';
     return json({ reply: missing.length ? `我识别到补货申请，还缺少：${missing.join('、')}。` : `已识别补货申请：${material.material_name} ${number.qty}${material.unit}，请确认后提交给总部。`, action: { type: 'open_restock', prefill: { material_name: material?.material_name || '', unit: material?.unit || number.unit || '', qty: number.qty || '', urgency: /紧急|马上/.test(message) ? 'urgent' : 'normal', reason } }, tool_contract: toolContract });
@@ -3397,8 +3492,9 @@ async function r2StoreAgent(env, body) {
   const history = session.messages.slice(-8);
   session.messages.push({ role: 'user', content: message, at: now() });
   const todayTasks = r2StoreAgentTodayTasks(bootstrap, storeCode);
-  const llmResult = await r2StoreAgentWithArk(env, message, storeCode, bootstrap.ledger || [], history, draft, todayTasks);
-  const requestedOperation = /调拨|调出|转给|转到|调\s*\d|调.*?(?:去|到|至)|报损|报废|损耗|过期|破损|变质|烂了|坏了|洒|漏|盘点|盘库|清点|收货|入库|到货|补货|缺货|库存不足|要货|库存|余量|还有多少|查询/.test(message.toLowerCase());
+  const assistantRows = bootstrap.ledger?.length ? bootstrap.ledger : (bootstrap.materialCatalog || []).map((item) => ({ material_name: item.material_name, unit: item.base_unit, theoretical_closing_qty: 0, safety_qty: null }));
+  const llmResult = await r2StoreAgentWithArk(env, message, storeCode, assistantRows, history, draft, todayTasks);
+  const requestedOperation = /调拨|调出|转给|转到|调\s*\d|调.*?(?:去|到|至)|报损|报废|损耗|过期|破损|变质|烂了|坏了|洒|漏|盘点|盘库|清点|收货|入库|到货|补货|缺货|库存不足|要货|库存|余量|还有多少|查询|transfer|move .* to|pindah|pindahkan|scrap|waste|damaged|expired|rusak|kedaluwarsa|kadaluarsa|stock count|inventory count|stok opname|receive|goods receipt|penerimaan|terima barang|restock|replenish|isi ulang stok|tambah stok|inventory|stock|stok/.test(message.toLowerCase());
   if (llmResult && (llmResult.action?.type !== 'none' || !requestedOperation)) {
     const resolved = r2StoreAgentMergeActionDraft(llmResult.action, draft);
     const result = { ...llmResult, action: resolved.action };
@@ -3412,7 +3508,7 @@ async function r2StoreAgent(env, body) {
       tool_contract: { provider: 'ark_function_calling', model: env.DOUBAO_MODEL || R2_ARK_STORE_AGENT_MODEL, execution: 'draft_only', tools: ['lapor_kerugian', 'transfer_stok', 'stok_opname', 'receipt_inventory', 'request_restock', 'query_inventory'] }
     });
   }
-  const fallback = await r2StoreAgentDeterministic(env, body);
+  const fallback = await r2StoreAgentDeterministic(env, { ...body, draft });
   const fallbackPayload = await fallback.clone().json().catch(() => ({}));
   const resolvedFallback = r2StoreAgentMergeActionDraft(fallbackPayload.action, draft);
   session.draft = resolvedFallback.draft;
@@ -3469,6 +3565,7 @@ export default {
       return json({ material_catalog: value.materialCatalog || r2DefaultMaterialCatalog() });
     }
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/material-catalog/sync') return r2SyncMaterialCatalog(env);
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/material-catalog/count-policy') return r2UpdateMaterialCountPolicies(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/safety-stock-policies') {
       const value = await r2DemoState(env);
       return json({ safety_stock_policies: value.safetyStockPolicies || r2DefaultSafetyStockPolicies() });
@@ -3535,6 +3632,7 @@ export default {
     }
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/diagnosis-knowhow') return r2SaveDiagnosisKnowhow(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/count-plans/generate') return r2GenerateDailyCountPlans(env);
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/count-plans/manual') return r2CreateManualCountPlan(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/diagnosis-cases/') && url.pathname.endsWith('/auto-review')) return r2RunDiagnosisAutoReview(env, url.pathname.split('/')[3]);
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/diagnosis-cases/') && url.pathname.endsWith('/request-evidence')) return r2CreateDiagnosisFollowup(env, url.pathname.split('/')[3], 'request_receipt_evidence');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/diagnosis-cases/') && url.pathname.endsWith('/create-governance')) return r2CreateDiagnosisFollowup(env, url.pathname.split('/')[3], 'create_governance_task');
