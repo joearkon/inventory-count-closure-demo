@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>库存流水 · 小笼包门店运营</title>
+  <script src="/app-shell.js"></script>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f5f6f8;color:#1f2329;font:14px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}.wrap{max-width:1380px;margin:auto;padding:28px 24px 56px}.crumb{font-size:13px;color:#8f959e}.crumb a,.link{color:#2468e8;text-decoration:none}.head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin:12px 0 18px}.head h1{margin:0;font-size:28px}.head p{margin:3px 0 0;color:#646a73}.panel{background:#fff;border:1px solid #e5e6eb;border-radius:12px;margin-bottom:14px;overflow:hidden}.filters{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:15px}.filter label{display:block;color:#646a73;font-size:12px;margin-bottom:5px}.filter select{width:100%;padding:9px;border:1px solid #dcdfe6;border-radius:7px;background:#fff;font:inherit}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}.kpi{background:#fff;border:1px solid #e5e6eb;border-radius:10px;padding:13px 15px}.kpi span{display:block;color:#646a73;font-size:12px}.kpi b{font-size:23px}.panel-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #eef0f3}.panel-head h2{font-size:17px;margin:0}.panel-head span{font-size:12px;color:#8f959e}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:1020px}th,td{text-align:left;padding:12px 14px;border-bottom:1px solid #eef0f3;vertical-align:top}th{background:#fafbfc;color:#646a73;font-size:12px;font-weight:500}tbody tr:hover{background:#fafcff}.tag{display:inline-block;padding:2px 7px;border-radius:5px;background:#edf4ff;color:#2468e8;font-size:12px}.tag.sale{background:#fff7e6;color:#ad6800}.tag.transfer{background:#f0f5ff;color:#1d39c4}.tag.count{background:#f6ffed;color:#237804}.tag.scrap{background:#fff1f0;color:#cf1322}.in{color:#168f48;font-weight:650}.out{color:#d4380d;font-weight:650}.neutral{color:#646a73}.empty{text-align:center!important;color:#8f959e;padding:42px!important}.muted{color:#8f959e;font-size:12px}@media(max-width:900px){.wrap{padding:20px 14px}.filters{grid-template-columns:1fr 1fr}.kpis{grid-template-columns:1fr 1fr}.head{display:block}}
+  </style>
+</head>
+<body><main class="wrap">
+  <div class="crumb"><a href="/">运营中心</a> / <a href="/ledger/">库存管理</a> / 库存流水</div>
+  <header class="head"><div><h1>库存流水</h1><p>集中查看销售扣减、收货、调拨、报损与盘点记录；本页只读。</p></div><a class="link" href="/ledger/">查看库存台账 →</a></header>
+  <section class="panel filters" aria-label="流水筛选">
+    <div class="filter"><label for="store-filter">门店</label><select id="store-filter"></select></div>
+    <div class="filter"><label for="material-filter">物料</label><select id="material-filter"></select></div>
+    <div class="filter"><label for="direction-filter">增减方向</label><select id="direction-filter"><option value="all">全部方向</option><option value="in">增加</option><option value="out">扣减</option><option value="neutral">盘点核对</option></select></div>
+    <div class="filter"><label for="type-filter">业务标签</label><select id="type-filter"><option value="all">全部业务</option><option value="sale">销售</option><option value="receipt">收货</option><option value="transfer">调拨</option><option value="scrap">报损</option><option value="count">盘点</option><option value="opening">期初</option></select></div>
+    <div class="filter"><label for="date-filter">营业日</label><select id="date-filter"></select></div>
+  </section>
+  <section class="kpis"><div class="kpi"><span>筛选结果</span><b id="total-kpi">--</b></div><div class="kpi"><span>增加流水</span><b id="in-kpi">--</b></div><div class="kpi"><span>扣减流水</span><b id="out-kpi">--</b></div><div class="kpi"><span>盘点记录</span><b id="count-kpi">--</b></div></section>
+  <section class="panel"><div class="panel-head"><h2>业务流水明细</h2><span id="result-note">正在读取…</span></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>门店</th><th>业务标签</th><th>方向</th><th>物料</th><th>数量</th><th>理论余额</th><th>单据 / 来源</th></tr></thead><tbody id="flow-rows"><tr><td colspan="8" class="empty">正在读取库存流水…</td></tr></tbody></table></div></section>
+</main><script src="/inventory-flow-page.js"></script></body></html>

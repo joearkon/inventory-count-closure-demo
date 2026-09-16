@@ -1,9 +1,9 @@
 (() => {
   const RULES = {
-    NEGATIVE_THEORETICAL: { rank: 1, code: 'D2', title: '负库存', action: '核对调拨、收货与订货', link: '/ledger/' },
-    COUNT_VARIANCE: { rank: 2, code: 'D1', title: '理论与实盘差异', action: '复核盘点与报损', link: '/ledger/' },
-    BELOW_SAFETY_STOCK: { rank: 3, code: 'S1', title: '安全库存预警', action: '确认补货或调拨', link: '/ledger/' },
-    SELL_IN_IMBALANCE: { rank: 4, code: 'T2', title: '销入比失衡', action: '核对补货节奏', link: '/ledger/' }
+    NEGATIVE_THEORETICAL: { rank: 1, code: 'D2', title: '负库存', action: '核对调拨、收货与订货', link: '/flows/', note: '理论库存低于 0；先查收货、调拨、期初与单位。' },
+    COUNT_VARIANCE: { rank: 2, code: 'D1', title: '理论与实盘差异', action: '复核盘点与报损', link: '/flows/', note: '实盘与理论差异超过阈值；核对盘点、报损、收货与换算。' },
+    BELOW_SAFETY_STOCK: { rank: 3, code: 'S1', title: '安全库存预警', action: '确认补货或调拨', link: '/flows/', note: '理论期末低于安全库存；结合销售消耗与在途补货处理。' },
+    SELL_IN_IMBALANCE: { rank: 4, code: 'T2', title: '销入比失衡', action: '核对补货节奏', link: '/flows/', note: '销售消耗与入库量比例超过 MVP 阈值。' }
   };
   let payload = null, view = 'store';
   const filters = { store: 'all', rule: 'all', attribution: 'all' };
@@ -93,7 +93,7 @@
     const taskButton = task
       ? `<a class="button secondary" href="/?focus=operation&task=${encodeURIComponent(task.id)}">查看跟进工单</a>`
       : `<button class="button" data-create-work-order="${esc(signal.id)}">建立跟进工单</button>`;
-    return `<article class="issue"><div class="issue-head"><div><div class="issue-title"><span class="rule ${rule.code === 'D2' ? '' : 'mid'}">${rule.code}</span><h3>${esc(signal.material_name)}（${esc(signal.unit)}）</h3></div><p class="subline">${esc(signal.store_code)} · ${esc(signal.business_date || '')} · 首要归因：${attributionLabel(attribution(signal))}</p></div><span class="status ${task ? '' : (signal.status === 'no_issue' ? 'no-issue' : '')}">${task ? `工单 · ${taskLabel(task)}` : (signal.status === 'no_issue' ? '排查无异常' : '待处理')}</span></div><div class="finding"><span class="label">首要排查</span><b>${esc(location.title)}</b><p>${esc(location.text)}</p></div><div class="evidence"><h4>直接证据</h4><ul>${evidence(signal).map((line) => `<li>${esc(line)}</li>`).join('')}</ul></div><div class="next"><h4>下一步</h4><p>${esc(rule.action)}</p></div><div class="actions"><a class="button secondary" href="${rule.link}?${extra}">查看相关流水</a>${taskButton}<button class="button ghost" data-no-issue="${esc(signal.id)}">排查无异常</button></div><div class="meta">研判编号：${esc(signal.id)} · 规则更新时间：${esc(signal.updated_at || signal.created_at || '—')}</div></article>`;
+    return `<article class="issue"><div class="issue-head"><div><div class="issue-title"><span class="rule ${rule.code === 'D2' ? '' : 'mid'}">${rule.code}</span><h3>${esc(signal.material_name)}（${esc(signal.unit)}）</h3><span class="rule-note" title="${esc(rule.note)}">规则说明</span></div><p class="subline">${esc(signal.store_code)} · ${esc(signal.business_date || '')} · 首要归因：${attributionLabel(attribution(signal))}</p></div><span class="status ${task ? '' : (signal.status === 'no_issue' ? 'no-issue' : '')}">${task ? `工单 · ${taskLabel(task)}` : (signal.status === 'no_issue' ? '排查无异常' : '待处理')}</span></div><div class="finding"><span class="label">首要排查</span><b>${esc(location.title)}</b><p>${esc(location.text)}</p></div><div class="evidence"><h4>直接证据</h4><ul>${evidence(signal).map((line) => `<li>${esc(line)}</li>`).join('')}</ul></div><div class="next"><h4>下一步</h4><p>${esc(rule.action)}</p></div><div class="actions"><a class="button secondary" href="${rule.link}?${extra}">查看相关流水</a>${taskButton}<button class="button ghost" data-no-issue="${esc(signal.id)}">排查无异常</button></div><div class="meta">研判编号：${esc(signal.id)} · 规则更新时间：${esc(signal.updated_at || signal.created_at || '—')}</div></article>`;
   }
   function renderList() {
     const root = document.querySelector('#diagnosis-list'), items = filtered();

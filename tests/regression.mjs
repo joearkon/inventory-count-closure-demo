@@ -68,7 +68,7 @@ await check('brand BOM whitelist and mock coverage are explicit', async () => {
 });
 
 await check('new pages are served', async () => {
-  const paths = ['/count-plans/', '/documents/', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001'];
+  const paths = ['/count-plans/', '/documents/', '/flows/', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001'];
   for (const path of paths) {
     const response = await fetch(`${base}${path}`);
     if (!response.ok) throw new Error(`${path}: ${response.status}`);
