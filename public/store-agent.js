@@ -6,7 +6,8 @@
   const sessionKey = `store-agent-session:${storeCode}`;
   const sessionId = sessionStorage.getItem(sessionKey) || (() => { const value = `web-${crypto.randomUUID()}`; sessionStorage.setItem(sessionKey, value); return value; })();
   const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
-  const chat = by('store-agent-chat'), input = by('store-agent-input'), send = by('store-agent-send'), mic = by('store-agent-mic'), voiceNote = by('store-agent-voice-note'), language = by('store-agent-language');
+  const chat = by('store-agent-chat'), input = by('store-agent-input'), send = by('store-agent-send'), mic = by('store-agent-mic'), voiceNote = by('store-agent-voice-note'), language = by('store-agent-language'), voiceQa = by('store-agent-voice-qa');
+  if (voiceQa) voiceQa.href = `/voice-qa/?store=${encodeURIComponent(storeCode)}`;
   const sheet = by('agent-sheet'), sheetTitle = by('agent-sheet-title'), sheetForm = by('agent-sheet-form'), sheetStatus = by('agent-sheet-status'), sheetSubmit = by('agent-sheet-submit');
   let welcomed = false, busy = false, recognition = null, speaking = false, ledger = [], draft = null, latestStoreState = null;
 
