@@ -43,11 +43,29 @@
     try { recognition.start(); } catch (error) { test.status = 'fail'; test.error = error.message; active = null; render(); }
   }
 
+  async function probeMicrophone(timeoutMs = 8000) {
+    let timeoutId, timedOut = false;
+    const request = navigator.mediaDevices.getUserMedia({ audio:true });
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        timedOut = true;
+        const error = new Error('浏览器未返回麦克风权限结果'); error.name = 'TimeoutError'; reject(error);
+      }, timeoutMs);
+    });
+    try { return await Promise.race([request, timeout]); }
+    finally {
+      clearTimeout(timeoutId);
+      if (timedOut) request.then((stream) => stream.getTracks().forEach((track) => track.stop())).catch(() => {});
+    }
+  }
+
   $('support-check').onclick = async () => {
     const speech = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition), media = Boolean(navigator.mediaDevices?.getUserMedia);
     if (!speech || !media) { $('support-note').textContent = `不完整：语音识别 ${speech ? '支持' : '不支持'}，媒体设备 ${media ? '支持' : '不支持'}`; return; }
-    try { const stream = await navigator.mediaDevices.getUserMedia({ audio:true }); const tracks = stream.getAudioTracks(); $('support-note').textContent = tracks.length ? `可用：${tracks[0].label || '已授权麦克风'}` : '未检测到麦克风'; tracks.forEach((track) => track.stop()); }
-    catch (error) { $('support-note').textContent = `麦克风不可用：${error.name || error.message}`; }
+    const button = $('support-check'); button.disabled = true; $('support-note').textContent = '正在检查，请在浏览器中允许麦克风…';
+    try { const stream = await probeMicrophone(); const tracks = stream.getAudioTracks(); $('support-note').textContent = tracks.length ? `可用：${tracks[0].label || '已授权麦克风'}` : '未检测到麦克风'; tracks.forEach((track) => track.stop()); }
+    catch (error) { $('support-note').textContent = error.name === 'TimeoutError' ? '检查超时：当前内置浏览器未返回麦克风权限结果，请改用 Chrome 或 Edge 验收。' : `麦克风不可用：${error.name || error.message}`; }
+    finally { button.disabled = false; }
   };
   $('export').onclick = () => {
     const report = { generated_at:new Date().toISOString(), store_code:store, browser:navigator.userAgent, completed:tests.filter((test) => ['pass','fail'].includes(test.status)).length, passed:tests.filter((test) => test.status === 'pass').length, cases:tests };
