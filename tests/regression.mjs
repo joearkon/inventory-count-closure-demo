@@ -67,6 +67,16 @@ await check('brand BOM whitelist and mock coverage are explicit', async () => {
   return { product_master_skus:sync.mapping.product_skus, mapped_skus:sync.mapping.bom_skus, bom_lines:sync.mapping.bom_lines, brand_real_skus:sync.mapping.brand_real_skus, mvp_mock_bom_skus:sync.mapping.mvp_mock_bom_skus, products_without_bom:11 };
 });
 
+await check('master data quality gate distinguishes core readiness from brand process gaps', async () => {
+  const sync = await json('/api/feishu-sync/state');
+  const quality = sync.masterDataQuality;
+  if (!quality?.inventory_core_ready) throw new Error(`inventory core should be ready: ${JSON.stringify(quality?.blocking_issues || [])}`);
+  if (quality.brand_process_rules_ready) throw new Error('brand process rules must stay disabled until yield, loss and shelf-life are confirmed');
+  if (Number(quality.counts?.daily_count) !== 12 || Number(quality.counts?.optional_count) !== 8) throw new Error(`unexpected count scope: ${JSON.stringify(quality.counts)}`);
+  if ((quality.process_rule_gaps || []).length !== 3) throw new Error(`expected 3 process-rule gaps, got ${quality.process_rule_gaps?.length || 0}`);
+  return { status:quality.status, core_ready:true, process_rules_ready:false, daily_count:quality.counts.daily_count, optional_count:quality.counts.optional_count, process_rule_gaps:quality.process_rule_gaps.map((item) => item.material_name) };
+});
+
 await check('new pages are served', async () => {
   const paths = ['/count-plans/', '/documents/', '/flows/', '/voice-qa/?store=STORE001', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001'];
   for (const path of paths) {
