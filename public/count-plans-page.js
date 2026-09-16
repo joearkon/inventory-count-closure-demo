@@ -3,6 +3,7 @@
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[char]));
   const fmt = (value) => Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 3 });
   let state = null;
+  let currentPage = 1;
   const statusLabel = (plan) => plan.status === 'pending_hq_review' ? '待总部复核' : plan.status === 'closed' ? '已完成' : plan.submitted_material_count ? '待补齐物料' : '待门店盘点';
   const policy = (item) => item.count_policy || (item.daily_count_enabled === false ? 'optional' : 'daily');
 
@@ -15,11 +16,13 @@
   function show(message, type = '') { by('count-message').textContent = message; by('count-message').className = `message ${type}`; }
   function renderPlans(plans = state?.countPlans || []) {
     const rows = plans.slice().sort((left, right) => `${right.business_date}${right.created_at}`.localeCompare(`${left.business_date}${left.created_at}`));
-    by('rows').innerHTML = rows.length ? rows.map((plan) => {
+    const page = window.ListPager.slice(rows, currentPage, 10); currentPage = page.page;
+    by('rows').innerHTML = page.items.length ? page.items.map((plan) => {
       const lines = (plan.lines || []).map((line) => `<div class="line"><b>${esc(line.material_name)}</b><small>理论 ${fmt(line.theoretical_qty)} ${esc(line.unit)}</small></div>`).join('');
       const type = ({ daily_full: '每日计划', manual_material_set: '不定期盘点', work_order_material_set: '工单盘点', targeted_material: '定向盘点', targeted_material_set: '定向盘点' }[plan.plan_type] || '盘点计划');
       return `<tr><td><b>${esc(plan.plan_no || plan.id)}</b><br><small>${esc(type)}</small></td><td>${esc(plan.store_code)}</td><td>${esc(plan.business_date)}</td><td>${plan.material_count} 项<details><summary>查看物料</summary><div class="lines">${lines}</div></details></td><td><span class="tag ${plan.status === 'pending_hq_review' ? 'review' : ''}">${statusLabel(plan)}</span>${plan.instruction ? `<br><small>${esc(plan.instruction)}</small>` : ''}</td><td>${new Date(plan.created_at).toLocaleString('zh-CN', { hour12: false })}</td></tr>`;
     }).join('') : '<tr><td colspan="6" class="empty">尚未生成盘点计划。</td></tr>';
+    window.ListPager.render('count-plan-pager', page, (next) => { currentPage = next; renderPlans(plans); });
   }
   function renderMaterials() {
     const materials = state?.materialCatalog || [];
@@ -41,12 +44,12 @@
     by('manual-date').value = defaultDate;
   }
   async function load() {
-    state = await api('/api/state', { cache: 'no-store' });
+    state = await api('/api/state?view=count-plans', { cache: 'no-store' }); currentPage = 1;
     renderPlans(); renderMaterials(); renderSelectors();
   }
   by('generate').onclick = async () => {
     const button = by('generate'); button.disabled = true; button.textContent = '生成中…';
-    try { const result = await api('/api/count-plans/generate', { method: 'POST' }); state = result; renderPlans(result.countPlans); show(result.generated_count ? `已生成 ${result.generated_count} 张每日盘点单。` : '今日每日盘点单已存在或已刷新。', 'ok'); }
+    try { const result = await api('/api/count-plans/generate', { method: 'POST' }); state = result; currentPage = 1; renderPlans(result.countPlans); show(result.generated_count ? `已生成 ${result.generated_count} 张每日盘点单。` : '今日每日盘点单已存在或已刷新。', 'ok'); }
     catch (error) { show(error.message, 'error'); }
     finally { button.disabled = false; button.textContent = '生成今日每日计划'; }
   };
@@ -58,7 +61,7 @@
     const button = by('manual-submit'); button.disabled = true;
     try {
       const result = await api('/api/count-plans/manual', { method: 'POST', body: JSON.stringify({ store_code: by('manual-store').value, business_date: by('manual-date').value, material_names: names, source_type: by('manual-source').value, source_work_order_id: by('manual-work-order').value, instruction: by('manual-instruction').value }) });
-      state.countPlans = result.countPlans; renderPlans();
+      state.countPlans = result.countPlans; currentPage = 1; renderPlans();
       document.querySelectorAll('#manual-materials input:checked').forEach((input) => input.checked = false);
       show(`已下发 ${result.plan.plan_no}，共 ${result.plan.material_count} 项物料。`, 'ok');
     } catch (error) { show(error.message, 'error'); }

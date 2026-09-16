@@ -50,6 +50,6 @@
     try { const r = await fetch('/api/material-transfers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }), result = await r.json(); if (!r.ok) throw Error(result.error || '调拨失败'); await load(); }
     catch (error) { alert(error.message); button.disabled = false; button.textContent = '执行模拟调拨'; }
   }
-  async function load() { try { data = await (await fetch('/api/feishu-sync/state', { cache: 'no-store' })).json(); render(); } catch (error) { document.querySelector('#inventory-hq-summary').textContent = '库存数据读取失败'; document.querySelector('#inventory-hq-content').innerHTML = `<div class="muted">${esc(error.message)}</div>`; } }
+  async function load() { try { data = await (await fetch('/api/feishu-sync/state?view=hq-inventory', { cache: 'no-store' })).json(); render(); } catch (error) { document.querySelector('#inventory-hq-summary').textContent = '库存数据读取失败'; document.querySelector('#inventory-hq-content').innerHTML = `<div class="muted">${esc(error.message)}</div>`; } }
   load();
 })();

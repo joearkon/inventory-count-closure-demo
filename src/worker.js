@@ -348,6 +348,80 @@ async function r2SaveDemoState(env, value, action = 'update') {
 
 function r2Result(stateValue, status = 200) { return json(stateValue, status); }
 
+function r2StateView(value, view = '') {
+  const importSummary = value.feishuImport ? {
+    id: value.feishuImport.id, imported_at: value.feishuImport.imported_at,
+    latest_business_date: value.feishuImport.latest_business_date,
+    latest_records: value.feishuImport.latest_records, latest_sales_qty: value.feishuImport.latest_sales_qty
+  } : null;
+  if (view === 'count-plans') return { countPlans: value.countPlans || [], materialCatalog: value.materialCatalog || [], storeMasters: value.storeMasters || [], feishuImport: importSummary, storage: value.storage };
+  if (view === 'documents') return { storeMasters: value.storeMasters || [], materialEvents: value.materialEvents || [], transferOrders: value.transferOrders || [], storage: value.storage };
+  if (view === 'materials-evidence') return { countPlans: value.countPlans || [], documents: (value.documents || []).map(({ preview_data, ...item }) => item), storage: value.storage };
+  return {
+    ...value,
+    feishuImport: importSummary,
+    documents: (value.documents || []).map((item, index) => index < 5 ? item : (({ preview_data, ...rest }) => rest)(item)),
+    countPhotoReviews: (value.countPhotoReviews || []).map(({ preview_data, ...item }) => item),
+    diagnosisKnowledge: (value.diagnosisKnowledge || []).map(({ content_markdown, ...item }) => item),
+    storeAgentSessions: [],
+    demoDaySessions: (value.demoDaySessions || []).map(({ locked_import, ...item }) => item),
+    audits: (value.audits || []).slice(0, 200)
+  };
+}
+
+function r2FeishuStateView(value, view = '') {
+  if (!view) return value;
+  const common = {
+    latestBatch: value.latestBatch, coverage: value.coverage, mapping: value.mapping,
+    selectedStore: value.selectedStore, latestGroup: value.latestGroup, storage: value.storage,
+    r2Import: value.r2Import ? { id: value.r2Import.id, imported_at: value.r2Import.imported_at, latest_business_date: value.r2Import.latest_business_date } : null
+  };
+  const slimLedger = (rows, mode) => (rows || []).map((row) => {
+    const base = { material_name: row.material_name, unit: row.unit, theoretical_closing_qty: row.theoretical_closing_qty, safety_qty: row.safety_qty ?? null };
+    if (mode === 'events') return { ...base, opening_qty: row.opening_qty, bom_consumption_qty: row.bom_consumption_qty, actual_inventory_qty: row.actual_inventory_qty, actual_inventory_at: row.actual_inventory_at, actual_inventory_document_id: row.actual_inventory_document_id, actual_vs_theoretical_qty: row.actual_vs_theoretical_qty, baseline_source: row.baseline_source, manual_events: row.manual_events || [], sku_contributors: { length: (row.sku_contributors || []).length } };
+    if (mode === 'simulator') return { ...base, manual_events: row.manual_events || [] };
+    if (mode === 'ledger') return {
+      ...base,
+      opening_qty: row.opening_qty, bom_consumption_qty: row.bom_consumption_qty,
+      receipt_qty: row.receipt_qty, transfer_in_qty: row.transfer_in_qty,
+      scrap_qty: row.scrap_qty, transfer_out_qty: row.transfer_out_qty,
+      source_sales_qty: row.source_sales_qty,
+      actual_inventory_qty: row.actual_inventory_qty, actual_inventory_at: row.actual_inventory_at,
+      actual_inventory_document_id: row.actual_inventory_document_id,
+      actual_vs_theoretical_qty: row.actual_vs_theoretical_qty,
+      baseline_source: row.baseline_source, manual_events: row.manual_events || [],
+      sku_contributors: row.sku_contributors || [], anomaly: row.anomaly || null,
+      inventory_label: row.inventory_label || null, evidence_detail: row.evidence_detail || null,
+      receipt_evidence_note: row.receipt_evidence_note || null,
+      industry_profile: row.industry_profile || null, scrap_source: row.scrap_source || null
+    };
+    if (mode === 'hq') return { ...base, opening_qty: row.opening_qty, bom_consumption_qty: row.bom_consumption_qty };
+    return base;
+  });
+  const views = (mode) => (value.storeViews || []).map((item) => ({
+    store_code: item.store_code, business_date: item.business_date,
+    sales_lines: item.sales_lines, sales_qty: item.sales_qty, sales_amount: item.sales_amount,
+    ledger: slimLedger(item.ledger, mode)
+  }));
+  if (view === 'flows') return { ...common, storeViews: views('events') };
+  if (view === 'diagnosis') return { ...common, materialAnomalies: value.materialAnomalies || [], operationTasks: value.operationTasks || [], ledgerSnapshots: value.ledgerSnapshots || [], materialEvents: value.materialEvents || [] };
+  if (view === 'simulator') return { ...common, storeViews: views('simulator') };
+  if (view === 'transfers') return { ...common, storeViews: views('summary'), transfers: value.transfers || {} };
+  if (view === 'materials') return { ...common, storeViews: views('summary') };
+  if (view === 'ledger') return {
+    ...common,
+    r2Import: {
+      ...common.r2Import,
+      sales: (value.r2Import?.sales || []).filter((row) => !common.latestGroup?.business_date || row.business_date === common.latestGroup.business_date)
+        .map(({ store_code, business_date, sku_code, product_name, sku_name, sales_qty, sales_amount, created_at }) => ({ store_code, business_date, sku_code, product_name, sku_name, sales_qty, sales_amount, created_at }))
+    },
+    demoBaseline: value.demoBaseline, hqSummary: value.hqSummary,
+    storeViews: views('ledger'), calculation: value.calculation
+  };
+  if (view === 'hq-inventory') return { ...common, hqSummary: value.hqSummary, storeViews: views('hq') };
+  return value;
+}
+
 function r2Audit(stateValue, actorRole, action, detail, taskId = null) {
   stateValue.audits.unshift({ task_id: taskId, actor_role: actorRole, action, detail, created_at: now() });
 }
@@ -2667,7 +2741,7 @@ async function r2GenerateDailyCountPlans(env) {
   const calculated = value.feishuImport?.sales?.length ? r2ImportedFeishuState(value) : { storeViews: [] };
   const result = r2EnsureDailyCountPlans(value, calculated, '总部运营手动生成', chinaBusinessDate());
   const state = await r2SaveDemoState(env, value, result.created.length ? 'count-plan-generate' : result.refreshed.length ? 'count-plan-refresh' : result.blocked.length ? 'count-plan-blocked' : 'count-plan-exists');
-  return json({ ...state, generated_count: result.created.length, refreshed_count: result.refreshed.length, blocked: result.blocked, countPlans: state.countPlans });
+  return json({ ...r2StateView(state, 'count-plans'), generated_count: result.created.length, refreshed_count: result.refreshed.length, blocked: result.blocked });
 }
 
 function r2DiagnosisReview(value, caseItem) {
@@ -3688,7 +3762,10 @@ export default {
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/notifications/config') return r2NotificationConfig(env);
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/notifications/config') return r2UpdateNotificationConfig(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/notifications/preview') return r2PreviewNotification(env, await request.json().catch(() => ({})));
-    if (request.method === 'GET' && url.pathname === '/api/feishu-sync/state') return json(env.DEMO_STATE ? await r2FeishuSyncState(env) : await feishuSyncState(env.DB));
+    if (request.method === 'GET' && url.pathname === '/api/feishu-sync/state') {
+      const value = env.DEMO_STATE ? await r2FeishuSyncState(env) : await feishuSyncState(env.DB);
+      return json(env.DEMO_STATE ? r2FeishuStateView(value, url.searchParams.get('view') || '') : value);
+    }
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/store-masters') {
       const value = await r2DemoState(env);
       return json({ store_masters: value.storeMasters || r2DefaultStoreMasters() });
@@ -3764,7 +3841,7 @@ export default {
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo-day/reset') return r2ResetStoreBusinessDay(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo-day/initialize') return r2InitializeStoreBusinessDay(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo-day/run') return r2RunStoreDayDemo(env, await request.json().catch(() => ({})));
-    if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/state') return json(await r2DemoState(env));
+    if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/state') return json(r2StateView(await r2DemoState(env), url.searchParams.get('view') || ''));
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/diagnosis-knowhow') {
       const value = await r2DemoState(env);
       return json({ knowhow: r2DiagnosisKnowhowList(value), storage: value.storage });

@@ -35,7 +35,9 @@ try {
 
   $baseUrl = "http://127.0.0.1:$Port"
   $ready = $false
-  for ($attempt = 0; $attempt -lt 40; $attempt += 1) {
+  # Cold Wrangler startup on Windows can take more than 10 seconds after all
+  # migrations are applied. Allow up to 30 seconds without hiding real exits.
+  for ($attempt = 0; $attempt -lt 120; $attempt += 1) {
     if ($workerProcess.HasExited) { throw "Wrangler exited before becoming ready. See $stderrPath" }
     try {
       $response = Invoke-WebRequest -Uri "$baseUrl/api/system/storage-health" -TimeoutSec 2

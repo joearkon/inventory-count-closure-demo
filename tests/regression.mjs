@@ -86,6 +86,27 @@ await check('new pages are served', async () => {
   return paths;
 });
 
+await check('growing lists use pagination and lightweight API views', async () => {
+  const [shell, flowsPage, documentsPage, plansPage, diagnosisPage, simulatorPage, transfersPage] = await Promise.all([
+    fetch(`${base}/app-shell.js`).then((r) => r.text()), fetch(`${base}/flows/`).then((r) => r.text()),
+    fetch(`${base}/documents/`).then((r) => r.text()), fetch(`${base}/count-plans/`).then((r) => r.text()),
+    fetch(`${base}/diagnosis/`).then((r) => r.text()), fetch(`${base}/simulator/`).then((r) => r.text()),
+    fetch(`${base}/transfers/`).then((r) => r.text())
+  ]);
+  if (!shell.includes('window.ListPager')) throw new Error('shared pager is missing');
+  for (const [name, html, marker] of [['flows',flowsPage,'flow-pager'],['documents',documentsPage,'document-pager'],['plans',plansPage,'count-plan-pager'],['diagnosis',diagnosisPage,'diagnosis-pager'],['simulator',simulatorPage,'simulator-pager'],['transfers',transfersPage,'demo-transfer-pager']]) if (!html.includes(marker)) throw new Error(`${name} pagination marker missing`);
+  const [plans, documents, flows, diagnosis, simulator, transfers, ledger, hqInventory] = await Promise.all([
+    json('/api/state?view=count-plans'), json('/api/state?view=documents'), json('/api/feishu-sync/state?view=flows'),
+    json('/api/feishu-sync/state?view=diagnosis'), json('/api/feishu-sync/state?view=simulator'), json('/api/feishu-sync/state?view=transfers'),
+    json('/api/feishu-sync/state?view=ledger'), json('/api/feishu-sync/state?view=hq-inventory')
+  ]);
+  if (!Array.isArray(plans.countPlans) || !Array.isArray(documents.materialEvents)) throw new Error('state projections missing required collections');
+  if (!Array.isArray(ledger.storeViews) || !Array.isArray(hqInventory.storeViews)) throw new Error('inventory projections missing store views');
+  if ('productCatalog' in documents || 'documents' in documents || 'storeViews' in diagnosis || 'materialAnomalies' in flows || 'ledgerSnapshots' in simulator || 'materialEvents' in ledger || 'r2Import' in hqInventory && 'sales' in (hqInventory.r2Import || {})) throw new Error('projection leaked unrelated heavyweight collections');
+  const sizes = Object.fromEntries(Object.entries({ plans,documents,flows,diagnosis,simulator,transfers,ledger,hqInventory }).map(([key,value]) => [key, JSON.stringify(value).length]));
+  return { paged_pages:6, projection_sizes:sizes };
+});
+
 await check('store HTML exposes three speech languages and safe fallback', async () => {
   const [page, script] = await Promise.all([fetch(`${base}/store/?store=STORE001`).then((r) => r.text()), fetch(`${base}/store-agent.js`).then((r) => r.text())]);
   for (const token of ['agent-language', 'zh-CN', 'en-US', 'id-ID']) if (!page.includes(token)) throw new Error(`missing ${token} in store page`);

@@ -6,6 +6,7 @@
     SELL_IN_IMBALANCE: { rank: 4, code: 'T2', title: '销入比失衡', action: '核对补货节奏', link: '/flows/', note: '销售消耗与入库量比例超过 MVP 阈值。' }
   };
   let payload = null, view = 'store';
+  let currentPage = 1;
   const filters = { store: 'all', rule: 'all', attribution: 'all' };
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[c]));
   const qty = (value) => Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 3 });
@@ -97,9 +98,11 @@
   }
   function renderList() {
     const root = document.querySelector('#diagnosis-list'), items = filtered();
-    if (!items.length) { root.innerHTML = '<div class="empty">当前筛选条件下没有需要处理的库存问题。</div>'; return bindActions(); }
+    const page = window.ListPager.slice(items, currentPage, 10); currentPage = page.page;
+    window.ListPager.render('diagnosis-pager', page, (next) => { currentPage = next; render(); });
+    if (!page.items.length) { root.innerHTML = '<div class="empty">当前筛选条件下没有需要处理的库存问题。</div>'; return bindActions(); }
     const grouped = new Map();
-    for (const item of items) {
+    for (const item of page.items) {
       const key = view === 'store' ? (item.store_code || '未归属门店') : `${item.material_name}｜${item.unit || ''}`;
       if (!grouped.has(key)) grouped.set(key, []); grouped.get(key).push(item);
     }
@@ -116,12 +119,12 @@
     document.querySelectorAll('[data-no-issue]').forEach((button) => button.onclick = async () => { button.disabled = true; try { await mutate(button.dataset.noIssue, 'mvp-action'); } catch (error) { alert(error.message); button.disabled = false; } });
   }
   async function load() {
-    try { const response = await fetch('/api/feishu-sync/state'); payload = await response.json(); if (!response.ok) throw new Error(payload.error || '无法读取库存研判数据。'); render(); }
+    try { const response = await fetch('/api/feishu-sync/state?view=diagnosis'); payload = await response.json(); if (!response.ok) throw new Error(payload.error || '无法读取库存研判数据。'); render(); }
     catch (error) { document.querySelector('#diagnosis-list').innerHTML = `<div class="error">${esc(error.message || '无法读取库存研判数据。')}</div>`; }
   }
-  document.querySelectorAll('[data-view]').forEach((button) => button.onclick = () => { view = button.dataset.view; render(); });
-  document.querySelector('#store-filter').onchange = (event) => { filters.store = event.target.value; render(); };
-  document.querySelector('#rule-filter').onchange = (event) => { filters.rule = event.target.value; render(); };
-  document.querySelector('#attribution-filter').onchange = (event) => { filters.attribution = event.target.value; render(); };
+  document.querySelectorAll('[data-view]').forEach((button) => button.onclick = () => { view = button.dataset.view; currentPage = 1; render(); });
+  document.querySelector('#store-filter').onchange = (event) => { filters.store = event.target.value; currentPage = 1; render(); };
+  document.querySelector('#rule-filter').onchange = (event) => { filters.rule = event.target.value; currentPage = 1; render(); };
+  document.querySelector('#attribution-filter').onchange = (event) => { filters.attribution = event.target.value; currentPage = 1; render(); };
   load();
 })();

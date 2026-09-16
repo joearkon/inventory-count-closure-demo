@@ -30,6 +30,7 @@
 </main>
 <aside class="drawer" id="drawer"><button class="close" id="close">×</button><div class="pill">来源追溯</div><h2 id="drawer-title">销售 BOM 消耗</h2><p id="drawer-copy">查看此笔库存变化的原始来源与计算口径。</p><div class="detail-card" id="drawer-detail"></div></aside>
 <script>
+const ledgerFetch=window.fetch.bind(window);window.fetch=(input,options)=>ledgerFetch(input==='/api/feishu-sync/state'?'/api/feishu-sync/state?view=ledger':input,options);
 const ledgerHeader=document.querySelector('.top');ledgerHeader?.insertAdjacentHTML('beforebegin','<nav class="product-nav" aria-label="库存数据导航"><a href="/">运营任务</a><a class="active" href="/ledger/">库存台账</a><a href="/simulator/">库存模拟器</a><a href="/sync/">飞书同步</a></nav><div class="page-path"><a href="/">运营任务中心</a> / <a href="/ledger/">库存数据</a> / 库存台账与追溯</div>');ledgerHeader?.querySelector('.crumb')?.remove();
 // 旧版牛奶示例区已下线；仅在完整旧版节点仍存在时才初始化，避免阻断真实台账加载。
 if(document.getElementById('theory')&&document.getElementById('actual')&&document.getElementById('variance')){const data={

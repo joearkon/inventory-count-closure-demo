@@ -5,6 +5,7 @@
   const params = new URLSearchParams(location.search);
   const labels = { sale:'销售', receipt:'收货', transfer:'调拨', scrap:'报损', count:'盘点', opening:'期初' };
   let allRows = [];
+  let currentPage = 1;
 
   const typeClass = (type) => type === 'sale' ? 'sale' : type === 'transfer' ? 'transfer' : type === 'count' ? 'count' : type === 'scrap' ? 'scrap' : '';
   const displayTime = (value, fallback = '营业中') => {
@@ -45,20 +46,22 @@
     $('in-kpi').textContent = `${rows.filter((row) => row.direction === 'in').length} 笔`;
     $('out-kpi').textContent = `${rows.filter((row) => row.direction === 'out').length} 笔`;
     $('count-kpi').textContent = `${rows.filter((row) => row.type === 'count').length} 笔`;
-    $('result-note').textContent = `当前显示 ${rows.length} / ${allRows.length} 笔流水`;
-    $('flow-rows').innerHTML = rows.length ? rows.map((row) => `<tr><td>${esc(displayTime(row.time, row.date))}</td><td><b>${esc(row.store)}</b><br><span class="muted">${esc(row.date)}</span></td><td><span class="tag ${typeClass(row.type)}">${esc(labels[row.type] || row.type)}</span></td><td class="${row.direction}">${row.direction === 'in' ? '增加' : row.direction === 'out' ? '扣减' : '核对'}</td><td><b>${esc(row.material)}</b><br><span class="muted">${esc(row.unit)}</span></td><td class="${row.direction}">${row.direction === 'in' ? '+' : row.direction === 'out' ? '−' : '实盘 '}${fmt(row.qty)} ${esc(row.unit)}</td><td>${row.balance == null ? '—' : `${fmt(row.balance)} ${esc(row.unit)}`}</td><td>${esc(row.reference)}</td></tr>`).join('') : '<tr><td colspan="8" class="empty">当前筛选条件下没有流水。</td></tr>';
+    const page = window.ListPager.slice(rows, currentPage, 20); currentPage = page.page;
+    $('result-note').textContent = `筛选 ${rows.length} / 全部 ${allRows.length} 笔流水`;
+    $('flow-rows').innerHTML = page.items.length ? page.items.map((row) => `<tr><td>${esc(displayTime(row.time, row.date))}</td><td><b>${esc(row.store)}</b><br><span class="muted">${esc(row.date)}</span></td><td><span class="tag ${typeClass(row.type)}">${esc(labels[row.type] || row.type)}</span></td><td class="${row.direction}">${row.direction === 'in' ? '增加' : row.direction === 'out' ? '扣减' : '核对'}</td><td><b>${esc(row.material)}</b><br><span class="muted">${esc(row.unit)}</span></td><td class="${row.direction}">${row.direction === 'in' ? '+' : row.direction === 'out' ? '−' : '实盘 '}${fmt(row.qty)} ${esc(row.unit)}</td><td>${row.balance == null ? '—' : `${fmt(row.balance)} ${esc(row.unit)}`}</td><td>${esc(row.reference)}</td></tr>`).join('') : '<tr><td colspan="8" class="empty">当前筛选条件下没有流水。</td></tr>';
+    window.ListPager.render('flow-pager', page, (next) => { currentPage = next; render(); });
   }
 
   async function load() {
     try {
-      const response = await fetch('/api/feishu-sync/state', { cache:'no-store' });
+      const response = await fetch('/api/feishu-sync/state?view=flows', { cache:'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '无法读取流水');
       allRows = buildRows(data);
       fillOptions($('store-filter'), [...new Set(allRows.map((row) => row.store))].sort(), '全部门店', params.get('store'));
       fillOptions($('material-filter'), [...new Set(allRows.map((row) => row.material))].sort((a, b) => a.localeCompare(b, 'zh-CN')), '全部物料', params.get('material'));
       fillOptions($('date-filter'), [...new Set(allRows.map((row) => row.date).filter(Boolean))].sort().reverse(), '全部营业日', params.get('date'));
-      ['store-filter','material-filter','direction-filter','type-filter','date-filter'].forEach((id) => $(id).onchange = render);
+      ['store-filter','material-filter','direction-filter','type-filter','date-filter'].forEach((id) => $(id).onchange = () => { currentPage = 1; render(); });
       render();
     } catch (error) {
       $('result-note').textContent = '读取失败';
