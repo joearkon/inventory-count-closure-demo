@@ -1692,6 +1692,42 @@ function r2LocalBomBySku(materialCatalog = R2_MATERIAL_MASTERS) {
   })]));
 }
 
+function r2FeishuBrandBomBySku(bomRecords, materialRecords, materialCatalog, importedAt) {
+  const materialUnits = new Map((materialRecords || []).map((record) => [feishuText(record.fields?.['物料名称']), feishuText(record.fields?.['单位'])]));
+  const masterByName = new Map((materialCatalog || []).map((item) => [normalizedKey(item.material_name), item]));
+  const result = {};
+  const rejected = [];
+  for (const record of bomRecords || []) {
+    const fields = record.fields || {};
+    const sku = feishuText(fields['SKU编码']);
+    if (!R2_REAL_PRODUCT_SKU_SET.has(sku)) continue;
+    const materialName = feishuText(fields['物料名称']);
+    const rawUnit = feishuText(fields['单位']) || materialUnits.get(materialName) || '';
+    const usage = feishuNumber(fields['用量']);
+    const master = masterByName.get(normalizedKey(materialName));
+    const factor = r2ToBaseUnitFactor(rawUnit, master);
+    if (!materialName || !master || usage == null || usage <= 0 || factor == null) {
+      rejected.push({ sku_code: sku, source_record_id: record.record_id || null, material_name: materialName || null, unit: rawUnit || null });
+      continue;
+    }
+    const line = {
+      material_name: materialName,
+      unit: master.base_unit,
+      usage_per_sale: r2Round(usage * factor),
+      source: 'feishu_live_brand_bom',
+      source_record_id: record.record_id || null,
+      source_updated_at: importedAt,
+      data_classification: 'brand_real',
+      source_usage: usage,
+      source_unit: rawUnit
+    };
+    result[sku] = [...(result[sku] || []), line];
+  }
+  const counts = Object.fromEntries(R2_REAL_PRODUCT_SKUS.map((sku) => [sku, (result[sku] || []).length]));
+  const complete = R2_REAL_PRODUCT_SKUS.every((sku) => counts[sku] === 9) && rejected.length === 0;
+  return { complete, bomBySku: result, counts, rejected };
+}
+
 function r2ResolveLocalSku(directSku, productName, productCatalog = R2_LOCAL_PRODUCT_CATALOG) {
   if (R2_DEMO_BOM[directSku]) return directSku;
   const target = normalizedKey(productName);
@@ -2403,9 +2439,18 @@ async function r2ImportFeishuSales(env, dispatchNotifications = false, force = f
   const token = await getFeishuTenantToken(env);
   // 仅读取销售表。所有库存期初、物料、BOM、收货、报损与调拨都由系统/R2
   // 演示链路维护，确保“重新初始化门店”不会被飞书历史数据再次覆盖。
-  const records = await listFeishuRecords(token, FEISHU_SALES_TABLE_ID);
+  const [records, bomRecords, materialRecords] = await Promise.all([
+    listFeishuRecords(token, FEISHU_SALES_TABLE_ID),
+    listFeishuRecords(token, FEISHU_BOM_TABLE_ID),
+    listFeishuRecords(token, FEISHU_MATERIAL_TABLE_ID)
+  ]);
   const materialCatalog = current.materialCatalog?.length ? current.materialCatalog : r2DefaultMaterialCatalog();
-  const bomBySku = r2LocalBomBySku(materialCatalog);
+  const importedAt = now();
+  const localBomBySku = r2LocalBomBySku(materialCatalog);
+  const liveBrandBom = r2FeishuBrandBomBySku(bomRecords, materialRecords, materialCatalog, importedAt);
+  const bomBySku = liveBrandBom.complete
+    ? { ...localBomBySku, ...liveBrandBom.bomBySku }
+    : localBomBySku;
   const materialMaster = r2LocalMaterialMaster(materialCatalog);
   const productCatalog = current.productCatalog?.length ? current.productCatalog : r2DefaultProductCatalog();
   const productAliases = r2ProductCatalogAliases(productCatalog);
@@ -2418,8 +2463,8 @@ async function r2ImportFeishuSales(env, dispatchNotifications = false, force = f
   const value = current;
   const latestDate = sales.reduce((date, row) => row.business_date > date ? row.business_date : date, '');
   const latestRows = sales.filter((row) => row.business_date === latestDate);
-  const importId = id('R2-IMP'), importedAt = now();
-  value.feishuImport = { id: importId, imported_at: importedAt, records: sales.length, latest_business_date: latestDate || null, latest_records: latestRows.length, latest_sales_qty: r2Round(latestRows.reduce((sum, row) => sum + row.sales_qty, 0)), sales, bom_by_sku: bomBySku, bom_lines: Object.values(bomBySku).reduce((sum, lines) => sum + lines.length, 0), product_skus: productCatalog.length, product_catalog: productCatalog, material_catalog: materialCatalog, material_master: materialMaster, ledger_source: [], opening: {}, opening_by_store: {}, transfer_source: { enabled: false, scanned_records: 0, valid_records: 0, records: [], note: '正式演示暂不读取飞书调拨；仅销售表参与同步。' }, source_policy: { sales: 'feishu_read_only', opening: 'system_initialized', product_catalog: 'system_master_with_feishu_classification', material_catalog: 'system_local', bom: 'feishu_brand_snapshot_whitelist_plus_mvp_mock', receipts: 'system_events', scraps: 'system_events', transfers: 'system_events' } };
+  const importId = id('R2-IMP');
+  value.feishuImport = { id: importId, imported_at: importedAt, records: sales.length, latest_business_date: latestDate || null, latest_records: latestRows.length, latest_sales_qty: r2Round(latestRows.reduce((sum, row) => sum + row.sales_qty, 0)), sales, bom_by_sku: bomBySku, bom_lines: Object.values(bomBySku).reduce((sum, lines) => sum + lines.length, 0), product_skus: productCatalog.length, product_catalog: productCatalog, material_catalog: materialCatalog, material_master: materialMaster, ledger_source: [], opening: {}, opening_by_store: {}, bom_sync: { status: liveBrandBom.complete ? 'live' : 'snapshot_fallback', table_id: FEISHU_BOM_TABLE_ID, scanned_records: bomRecords.length, brand_sku_counts: liveBrandBom.counts, rejected_records: liveBrandBom.rejected.length, synced_at: importedAt, note: liveBrandBom.complete ? '已通过飞书应用只读获取 6 个 Brown Sugar SKU，每个 SKU 9 条有效 BOM。' : '飞书实时 BOM 未通过完整性门禁，本批次继续使用已验证快照。' }, transfer_source: { enabled: false, scanned_records: 0, valid_records: 0, records: [], note: '正式演示暂不读取飞书调拨；仅销售表参与同步。' }, source_policy: { sales: 'feishu_read_only', opening: 'system_initialized', product_catalog: 'system_master_with_feishu_classification', material_catalog: 'system_local', bom: liveBrandBom.complete ? 'feishu_live_brand_whitelist_plus_mvp_mock' : 'feishu_brand_snapshot_whitelist_plus_mvp_mock', receipts: 'system_events', scraps: 'system_events', transfers: 'system_events' } };
   for (const session of value.demoDaySessions || []) {
     if (session.status !== 'active' || session.business_date !== latestDate) continue;
     const storeSales = sales.filter((row) => row.store_code === session.store_code && row.business_date === session.business_date);
