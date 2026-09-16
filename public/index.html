@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Demo 2: 总部运营异常研判 + 任务指派</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f6f7;
+    color: #1f2329;
+    padding: 20px 24px;
+    line-height: 1.5;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  .header {
+    margin-bottom: 24px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #1f2329;
+  }
+  .header .subtitle {
+    font-size: 14px;
+    color: #8f959e;
+    margin-top: 4px;
+  }
+  .product-nav { display:flex; gap:6px; align-items:center; margin:-6px 0 18px; padding:7px; border:1px solid #e5e9f2; border-radius:9px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.03); }
+  .product-nav a { padding:7px 11px; border-radius:6px; color:#646a73; text-decoration:none; font-size:13px; }
+  .product-nav a:hover { background:#f5f8ff; color:#3370ff; }.product-nav a.active { background:#e8f0ff; color:#2468e8; font-weight:600; }
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .kpi-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .kpi-label {
+    font-size: 13px;
+    color: #8f959e;
+    margin-bottom: 6px;
+  }
+  .kpi-value {
+    font-size: 26px;
+    font-weight: 600;
+    color: #1f2329;
+  }
+  .kpi-value.danger { color: #d72a2a; }
+  .kpi-value.warn { color: #d68a00; }
+  .kpi-value.success { color: #2a9d3f; }
+  .kpi-sub {
+    font-size: 12px;
+    color: #8f959e;
+    margin-top: 4px;
+  }
+  .section {
+    background: #fff;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .section-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #f0f1f3;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1f2329;
+  }
+  .section-extra {
+    font-size: 13px;
+    color: #8f959e;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  th {
+    text-align: left;
+    padding: 12px 20px;
+    font-size: 12px;
+    color: #8f959e;
+    font-weight: 500;
+    background: #fafbfc;
+    border-bottom: 1px solid #f0f1f3;
+  }
+  td {
+    padding: 14px 20px;
+    border-bottom: 1px solid #f5f6f7;
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  .severity-tag {
+    display: inline-block;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .severity-tag.high { background: #ffe7e7; color: #d72a2a; }
+  .severity-tag.mid { background: #fff5e0; color: #d68a00; }
+  .severity-tag.low { background: #e8f4ff; color: #1d6fdc; }
+  .root-cause {
+    display: inline-block;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #f5f6f7;
+    color: #4e5969;
+  }
+  .strategy-tag { display: inline-block; max-width: 142px; padding: 3px 7px; border-radius: 4px; background: #f0f5ff; color: #3370ff; font-size: 12px; line-height: 1.35; }
+  .desc-cell {
+    max-width: 360px;
+    color: #4e5969;
+    font-size: 13px;
+  }
+  .action-cell {
+    max-width: 200px;
+    color: #1f2329;
+    font-size: 13px;
+  }
+  .responsible {
+    font-size: 12px;
+    color: #8f959e;
+  }
+  .btn-row { display: flex; gap: 6px; }
+  .demo-row { background: #f6f9ff; }
+  .demo-row td:first-child { position: relative; }
+  .demo-float { display: inline-block; margin: 0 0 5px; padding: 2px 7px; border-radius: 8px; background: #3370ff; color: #fff; font-size: 10px; font-weight: 700; line-height: 1.2; letter-spacing: .35px; }
+  .anomaly-compact { table-layout: fixed; min-width: 0; }
+  .anomaly-compact th, .anomaly-compact td { vertical-align: top; padding: 13px 12px; }
+  .anomaly-compact th:nth-child(1) { width: 15%; }.anomaly-compact th:nth-child(2) { width: 14%; }.anomaly-compact th:nth-child(3) { width: 14%; }.anomaly-compact th:nth-child(4) { width: 13%; }.anomaly-compact th:nth-child(5) { width: 24%; }.anomaly-compact th:nth-child(6) { width: 10%; }.anomaly-compact th:nth-child(7) { width: 10%; }
+  .anomaly-compact .task-no { display:block; color:#1f2329; font-size:13px; }.anomaly-compact small { display:block; margin-top:4px; color:#8f959e; font-size:12px; line-height:1.45; }.anomaly-compact .risk-title { font-weight:600; color:#1f2329; line-height:1.45; }.anomaly-compact .compact-copy { color:#4e5969; line-height:1.55; word-break:break-word; }.anomaly-compact .btn-row { flex-wrap:wrap; }
+  .list-pager { min-height: 48px; padding: 11px 20px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; color: #8f959e; font-size: 13px; border-top: 1px solid #f0f1f3; }
+  .list-pager .btn { min-width: 56px; padding: 5px 9px; }
+  .btn {
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid #dcdfe5;
+    background: #fff;
+    color: #1f2329;
+    cursor: pointer;
+  }
+  .btn-primary {
+    background: #3370ff;
+    color: #fff;
+    border-color: #3370ff;
+  }
+  .btn:hover { background: #f5f8ff; }
+  .btn-primary:hover { background: #1d6fdc; }
+  .status-tag {
+    display: inline-block;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .status-tag.pending { background: #fff5e0; color: #d68a00; }
+  .status-tag.assigned { background: #e8f4ff; color: #1d6fdc; }
+  .status-tag.closed { background: #e0f5e8; color: #2a9d3f; }
+  .empty { text-align: center; padding: 40px 20px; color: #8f959e; font-size: 14px; }
+  .footer-note {
+    font-size: 12px;
+    color: #8f959e;
+    text-align: center;
+    margin-top: 24px;
+    padding: 16px;
+  }
+  .demo-controls { text-align: center; margin: 18px 0 8px; }
+  .demo-reset { color: #8f959e; background: transparent; border: 1px solid #dcdfe5; }
+  .live-task-panel { margin: 16px 20px; padding: 14px 16px; border: 1px solid #b9d0ff; border-radius: 8px; background: #f5f8ff; display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+  .live-task-panel strong { display: block; margin: 4px 0; font-size: 15px; }
+  .live-task-panel p { color: #4e5969; font-size: 13px; max-width: 700px; }
+  .live-eyebrow { color: #3370ff; font-size: 12px; font-weight: 600; }
+  .live-task-actions { display: flex; flex-shrink: 0; gap: 8px; }
+  .live-empty { margin: 16px 20px; padding: 14px 16px; border-radius: 8px; background: #fafbfc; color: #8f959e; font-size: 13px; }
+  .live-row { background: #fffaf1; }
+  .live-closed-row { background: #f4fff7; }
+  .resolution { color: #2a9d3f !important; margin-top: 6px; }
+  .operation-panel { margin: 16px 20px; padding: 16px; border: 1px solid #d9e7ff; border-radius: 8px; background: #fbfdff; display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+  .operation-panel strong { display: block; margin: 4px 0; font-size: 15px; }
+  .operation-panel p { color: #4e5969; font-size: 13px; max-width: 740px; }
+  .operation-status { margin-top: 8px; font-size: 12px; color: #3370ff; }
+  .operation-workspace { padding: 16px 20px 20px; }
+  .operation-create { padding: 14px; border: 1px solid #e5e6eb; border-radius: 8px; background: #fafbfc; }
+  .operation-create-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .operation-create-title { font-size: 14px; font-weight: 600; }
+  .operation-fields { display: grid; grid-template-columns: 220px minmax(280px, 1fr) auto; gap: 10px; align-items: center; }
+  .operation-fields input, .operation-fields textarea { width: 100%; min-height: 34px; padding: 7px 9px; border: 1px solid #dcdfe5; border-radius: 5px; font: inherit; font-size: 13px; color: #1f2329; background: #fff; }
+  .operation-fields textarea { min-height: 50px; resize: vertical; }
+  .operation-form-tip { margin-top: 7px; color: #8f959e; font-size: 12px; }
+  .operation-detail { margin-top: 14px; padding: 14px; border-radius: 8px; background: #f5f8ff; border: 1px solid #d9e7ff; }
+  .operation-detail h3 { font-size: 15px; margin-bottom: 5px; }
+  .operation-detail p { font-size: 13px; color: #4e5969; }
+  .operation-list { margin-top: 14px; border: 1px solid #f0f1f3; border-radius: 8px; overflow: hidden; }
+  .operation-list table { min-width: 0; }
+  .operation-empty { padding: 16px; color: #8f959e; font-size: 13px; text-align: center; }
+  .operation-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+  .operation-metric { padding: 11px 12px; border: 1px solid #edf0f5; border-radius: 7px; background: #fafbfc; }
+  .operation-metric span { display: block; color: #8f959e; font-size: 12px; }
+  .operation-metric b { display: block; margin-top: 3px; font-size: 19px; color: #1f2329; }
+  .operation-metric b.success { color: #2a9d3f; }
+  .operation-metric b.warn { color: #d68a00; }
+  .legacy-section { display: none; }
+  .dimension-tabs { display: flex; gap: 8px; padding: 16px 20px 0; }
+  .dimension-tab { border: 1px solid #dcdfe5; background: #fff; color: #646a73; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .dimension-tab.active { background: #3370ff; border-color: #3370ff; color: #fff; }
+  .anomaly-toolbar { padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; color: #646a73; font-size: 13px; }
+  .anomaly-drawer { position: fixed; inset: 0; display: none; z-index: 20; background: rgba(31,35,41,.32); }
+  .anomaly-drawer.open { display: flex; justify-content: flex-end; }
+  .document-drawer { position: fixed; inset: 0; display: none; z-index: 30; background: rgba(31,35,41,.32); }
+  .document-drawer.open { display: flex; justify-content: flex-end; }
+  .document-preview { margin-top: 10px; overflow: hidden; border: 1px solid #edf0f5; border-radius: 8px; background: #fafbfc; }
+  .document-preview img { display: block; width: 100%; max-height: 380px; object-fit: contain; background: #f5f6f7; }
+  .document-no-preview { padding: 24px 18px; color: #8f959e; font-size: 13px; text-align: center; }
+  .document-detail-lines { margin: 8px 0 0; padding-left: 20px; color: #4e5969; font-size: 13px; line-height: 1.8; }
+  .drawer-panel { width: min(540px, 94vw); height: 100%; overflow-y: auto; background: #fff; padding: 24px; box-shadow: -12px 0 32px rgba(0,0,0,.14); }
+  .drawer-head { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid #f0f1f3; padding-bottom: 16px; }
+  .drawer-head h2 { font-size: 19px; margin-top: 5px; }
+  .drawer-close { border: 0; background: #f5f6f7; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; color: #646a73; }
+  .drawer-block { margin-top: 20px; }
+  .drawer-block h3 { font-size: 14px; margin-bottom: 9px; }
+  .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .drawer-field { background: #fafbfc; border-radius: 6px; padding: 9px 10px; font-size: 13px; color: #4e5969; }
+  .drawer-field span { display: block; color: #8f959e; font-size: 12px; margin-bottom: 3px; }
+  .timeline { border-left: 2px solid #d9e7ff; padding-left: 15px; }
+  .timeline-item { position: relative; margin: 0 0 14px; font-size: 13px; color: #4e5969; }
+  .timeline-item::before { content: ''; position: absolute; left: -20px; top: 4px; width: 8px; height: 8px; border-radius: 50%; background: #3370ff; }
+  .btn.is-loading { cursor: wait; opacity: .8; }
+  .spinner { display: inline-block; width: 11px; height: 11px; margin-right: 5px; border: 2px solid rgba(255,255,255,.55); border-top-color: #fff; border-radius: 50%; vertical-align: -1px; animation: rotate .75s linear infinite; }
+  .btn:not(.btn-primary) .spinner { border-color: #c9cdd4; border-top-color: #646a73; }
+  @keyframes rotate { to { transform: rotate(360deg); } }
+  @media (max-width: 760px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } .live-task-panel { align-items: flex-start; flex-direction: column; } .operation-fields { grid-template-columns: 1fr; } .section { overflow-x: auto; } table { min-width: 940px; } .anomaly-compact { min-width:760px; } .operation-list table { min-width: 720px; } }
+</style>
+<script src="/loading.js"></script>
+<script src="/app-shell.js"></script>
+</head>
+<body data-view="hq">
+<div class="container">
+
+  <div class="header">
+  <h1>🛡️ 运营任务中心</h1>
+  <div class="subtitle">门店任务、总部治理与工单闭环跟进</div>
+  </div>
+  <nav class="product-nav" aria-label="主导航"><a class="active" href="/">运营任务</a><a href="/ledger/">库存台账</a><a href="/simulator/">库存模拟器</a><a href="/sync/">飞书同步</a></nav>
+
+  <!-- 主动运营任务 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">跟进工单</div>
+      <div class="section-extra"><button class="btn btn-primary" data-open-task-create>创建任务</button></div>
+    </div>
+    <div id="operation-task-panel"></div>
+  </div>
+
+  <!-- 总部治理工单 -->
+  <div class="section" id="governance-task-workspace">
+    <div class="section-header">
+      <div><div class="section-title">总部治理工单</div><div class="section-extra" style="margin-top:3px">用于 SKU、BOM、单位和规则等跨门店问题的治理，不下发门店执行。</div></div>
+      <div class="section-extra" id="governance-summary-copy">待处理 0 项</div>
+    </div>
+    <div id="governance-task-panel"></div>
+  </div>
+
+  <!-- 旧版静态展示，保留源稿但不再作为数据来源 -->
+  <div class="section legacy-section">
+    <div class="section-header">
+      <div class="section-title">异常研判列表（按严重程度排序）</div>
+      <div class="section-extra">STORE004 11 条 · STORE005/006 各 1 条 · 其他 3 店 2 条</div>
+    </div>
+    <div id="live-task-panel"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>门店</th>
+          <th>异常类型</th>
+          <th>严重程度</th>
+          <th>根因</th>
+          <th>责任方</th>
+          <th>异常描述</th>
+          <th>建议动作</th>
+          <th>状态</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="live-anomaly-row"></tbody>
+      <tbody>
+        <tr>
+          <td>STORE004</td>
+          <td>负库存销售</td>
+          <td><span class="severity-tag high">高</span></td>
+          <td><span class="root-cause">收货未录</span></td>
+          <td><span class="responsible">加盟商</span></td>
+          <td class="desc-cell">黑糖冻期末 -0.5kg，但昨日销售 12 杯</td>
+          <td class="action-cell">盘点实际库存 + 补录入库单</td>
+          <td><span class="status-tag pending">待指派</span></td>
+          <td><div class="btn-row"><button class="btn btn-primary">指派</button></div></td>
+        </tr>
+        <tr>
+          <td>STORE004</td>
+          <td>负库存销售</td>
+          <td><span class="severity-tag high">高</span></td>
+          <td><span class="root-cause">收货未录</span></td>
+          <td><span class="responsible">加盟商</span></td>
+          <td class="desc-cell">鲜牛奶期末 -1.2L，但昨日销售 8 杯含奶款</td>
+          <td class="action-cell">盘点 + 报损登记</td>
+          <td><span class="status-tag pending">待指派</span></td>
+          <td><div class="btn-row"><button class="btn btn-primary">指派</button></div></td>
+        </tr>
+        <tr>
+          <td>STORE004</td>
+          <td>库存预警</td>
+          <td><span class="severity-tag high">高</span></td>
+          <td><span class="root-cause">收货未录</span></td>
+          <td><span class="responsible">加盟商</span></td>
+          <td class="desc-cell">黑糖珍珠期末 0.3kg &lt; 安全库存 5kg</td>
+          <td class="action-cell">紧急调拨（从 STORE005）</td>
+          <td><span class="status-tag assigned">已指派</span></td>
+          <td><div class="btn-row"><button class="btn">查看</button></div></td>
+        </tr>
+        <tr>
+          <td>STORE004</td>
+          <td>消耗 vs 入库失衡</td>
+          <td><span class="severity-tag high">高</span></td>
+          <td><span class="root-cause">盘点误差</span></td>
+          <td><span class="responsible">加盟商</span></td>
+          <td class="desc-cell">9/10 消耗 8kg 但入库 0（连续 3 天）</td>
+          <td class="action-cell">核查收货是否漏录</td>
+          <td><span class="status-tag pending">待指派</span></td>
+          <td><div class="btn-row"><button class="btn btn-primary">指派</button></div></td>
+        </tr>
+        <tr>
+          <td>STORE005</td>
+          <td>无盘点（7天）</td>
+          <td><span class="severity-tag mid">中</span></td>
+          <td><span class="root-cause">系统/流程缺陷</span></td>
+          <td><span class="responsible">混合责任</span></td>
+          <td class="desc-cell">连续 7 天无盘点记录</td>
+          <td class="action-cell">强制盘点 + 店长说明</td>
+          <td><span class="status-tag closed">已闭环</span></td>
+          <td><div class="btn-row"><button class="btn">查看</button></div></td>
+        </tr>
+        <tr>
+          <td>STORE006</td>
+          <td>无报损（7天）</td>
+          <td><span class="severity-tag mid">中</span></td>
+          <td><span class="root-cause">系统/流程缺陷</span></td>
+          <td><span class="responsible">总部</span></td>
+          <td class="desc-cell">连续 7 天无报损登记（实际应有损耗）</td>
+          <td class="action-cell">核查报损流程</td>
+          <td><span class="status-tag closed">已闭环</span></td>
+          <td><div class="btn-row"><button class="btn">查看</button></div></td>
+        </tr>
+        <tr style="color:#8f959e;">
+          <td colspan="9" style="text-align:center;">... 还有 10 条未展开（点击展开全部）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 已闭环案例 -->
+  <div class="section legacy-section">
+    <div class="section-header">
+      <div class="section-title">已闭环案例（3 条）</div>
+      <div class="section-extra">用于跟踪闭环质量</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>门店</th>
+          <th>异常类型</th>
+          <th>严重程度</th>
+          <th>完成凭证</th>
+          <th>闭环时间</th>
+        </tr>
+      </thead>
+      <tbody id="live-closed-row"></tbody>
+      <tbody>
+        <tr>
+          <td>STORE005</td>
+          <td>无盘点（7天）</td>
+          <td><span class="severity-tag mid">中</span></td>
+          <td>盘点单 PD-20260910-001 OCR 识别一致</td>
+          <td>2 小时 14 分钟</td>
+        </tr>
+        <tr>
+          <td>STORE006</td>
+          <td>无报损（7天）</td>
+          <td><span class="severity-tag mid">中</span></td>
+          <td>报损单 3 张 + 店长说明</td>
+          <td>4 小时 32 分钟</td>
+        </tr>
+        <tr>
+          <td>STORE001</td>
+          <td>差异说明</td>
+          <td><span class="severity-tag low">低</span></td>
+          <td>差异 &lt; 5%，属正常范围</td>
+          <td>1 小时 03 分钟</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer-note">
+    Demo 2 · 总部运营视角（PC 端 dashboard）<br>
+    真实数据：9/10 异常研判 16 条 · 闭环率 19%
+  </div>
+  <div class="anomaly-drawer" id="anomaly-drawer" aria-hidden="true"><aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title"><div id="anomaly-drawer-content"></div></aside></div>
+  <div class="document-drawer" id="governance-drawer" aria-hidden="true"><aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="governance-drawer-title"><div id="governance-drawer-content"></div></aside></div>
+  <div class="document-drawer" id="document-drawer" aria-hidden="true"><aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="document-drawer-title"><div id="document-drawer-content"></div></aside></div>
+  <div class="demo-controls"><button class="btn demo-reset" type="button" data-reset-demo>重置演示数据</button></div>
+
+</div>
+<script src="app.js"></script>
+<script src="/hq-task-hub.js"></script>
+</body>
+</html>

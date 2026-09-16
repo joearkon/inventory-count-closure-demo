@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>创建总部治理工单</title>
+  <style>
+    * { box-sizing: border-box; } body { margin: 0; background: #f5f6f7; color: #1f2329; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    .page { max-width: 900px; margin: 0 auto; padding: 32px 24px 60px; } .back { color: #3370ff; font-size: 14px; text-decoration: none; }
+    h1 { margin: 18px 0 6px; font-size: 24px; } .subtitle { color: #8f959e; font-size: 14px; }.card { margin-top: 22px; padding: 24px; background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+    .step { display:flex; align-items:center; gap:10px; color:#4e5969; font-size:13px; margin-bottom:22px; }.step b { display:inline-flex; width:22px; height:22px; align-items:center; justify-content:center; border-radius:50%; background:#3370ff; color:#fff; }
+    .field { margin-top:18px; } label { display:block; margin-bottom:8px; font-size:14px; font-weight:600; }.hint { margin-top:6px; font-size:12px; color:#8f959e; }.target { padding:12px; border-radius:7px; background:#f5f8ff; color:#3370ff; font-size:14px; }
+    input, textarea { width:100%; padding:10px 12px; border:1px solid #dcdfe5; border-radius:6px; font:inherit; color:#1f2329; } textarea { min-height:118px; resize:vertical; }.actions { display:flex; justify-content:flex-end; gap:10px; margin-top:28px; } button { border:1px solid #dcdfe5; border-radius:6px; padding:9px 16px; background:#fff; cursor:pointer; font-size:14px; } button.primary { background:#3370ff; border-color:#3370ff; color:#fff; } button:disabled { opacity:.65; cursor:wait; }
+    .notice { display:none; margin-top:16px; padding:11px 12px; border-radius:7px; font-size:13px; }.notice.error { display:block; background:#ffe7e7; color:#b42323; }.notice.success { display:block; background:#e0f5e8; color:#25783c; }
+  </style>
+<script src="/loading.js"></script>
+</head>
+<body data-view="governance-create">
+  <main class="page">
+    <a class="back" href="/">← 返回运营任务中心</a>
+    <h1>创建总部治理工单</h1>
+    <div class="subtitle">适用于 SKU、BOM、单位、主数据和规则等跨门店问题；工单由总部责任方处理，不会给门店增加待办。</div>
+    <form class="card" id="governance-task-create-form">
+      <div class="step"><b>1</b>确认问题来源　<b>2</b>指定治理责任　<b>3</b>建立可追踪工单</div>
+      <div class="field"><label>关联异常</label><div class="target" id="governance-task-target">ANM-SKU-002 · Roasted Oolong Milk Tea · SKU 配方缺失</div></div>
+      <div class="field"><label for="governance-task-title">工单名称</label><input id="governance-task-title" maxlength="60" value="Roasted Oolong Milk Tea · BOM 维护工单" required></div>
+      <div class="field"><label for="governance-task-owner">责任方</label><input id="governance-task-owner" maxlength="60" value="商品 / 数据治理" required></div>
+      <div class="field"><label for="governance-task-instruction">治理要求</label><textarea id="governance-task-instruction" maxlength="300" required>补齐 Roasted Oolong Milk Tea 的 BOM、单位和物料映射，重新运行理论消耗校验，并确认受影响门店库存台账。</textarea><div class="hint">完成后可在总部任务中心关闭工单，并保留责任、结论与完成时长。</div></div>
+      <div id="governance-task-create-notice" class="notice"></div>
+      <div class="actions"><a href="/" style="padding:9px 16px;color:#646a73;text-decoration:none">取消</a><button class="primary" type="submit">创建治理工单</button></div>
+    </form>
+  </main>
+  <script src="../app.js"></script>
+</body>
+</html>

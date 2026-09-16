@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>门店端每日任务卡片</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f6f7;
+    color: #1f2329;
+    padding: 0 0 84px;
+    max-width: 414px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+  .header {
+    background: linear-gradient(135deg, #3370ff 0%, #1e4fd9 100%);
+    color: #fff;
+    padding: 20px 16px 22px;
+    border-radius: 0 0 20px 20px;
+    margin-bottom: 12px;
+    text-align: left;
+  }
+  .header h1 {
+    font-size: 17px;
+    font-weight: 600;
+    color: #fff;
+  }
+  .header .subtitle {
+    font-size: 13px;
+    color: rgba(255,255,255,.82);
+    margin-top: 4px;
+  }
+  .store-header-name {
+    margin: 2px 0 0 25px;
+    font-size: 12px;
+    color: rgba(255,255,255,.82);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 245px;
+  }
+  .badge-direct {
+    display: inline-block;
+    font-size: 11px;
+    background: #e0f5e8;
+    color: #2a9d3f;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+  }
+  .header-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:14px; }
+  .header-date { font-size:12px; padding:3px 9px; border-radius:12px; background:rgba(255,255,255,.16); color:rgba(255,255,255,.9); white-space:nowrap; }
+  .stats-row { display:flex; gap:8px; }
+  .stat-pill { flex:1; text-align:center; padding:8px 5px; border-radius:11px; background:rgba(255,255,255,.16); }
+  .stat-number { display:block; font-size:20px; font-weight:700; }
+  .stat-label { font-size:10px; color:rgba(255,255,255,.82); }
+  .tab-content { display:none; padding:0 12px; }
+  .tab-content.active { display:block; animation:fadeIn .2s ease; }
+  @keyframes fadeIn { from{opacity:.5;transform:translateY(5px)} to{opacity:1;transform:none} }
+  .content { padding:0; }
+  .view-tabs { position:sticky; z-index:40; top:0; display:grid; grid-template-columns:1fr 1fr; gap:4px; margin:0 12px 12px; padding:4px; border:1px solid #e5e6eb; border-radius:11px; background:rgba(255,255,255,.96); box-shadow:0 2px 8px rgba(31,35,41,.07); backdrop-filter:blur(10px); }
+  .tab-btn { border:0; border-radius:8px; background:transparent; color:#646a73; font:inherit; font-size:14px; font-weight:500; padding:9px 8px; cursor:pointer; }
+  .tab-btn .tab-icon { margin-right:5px; }
+  .tab-btn.active { color:#245bdb; background:#eaf1ff; font-weight:650; }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 12px 16px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #1f2329;
+    border-bottom: 1px solid #f0f1f3;
+  }
+  details.card > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+  details.card > summary::-webkit-details-marker { display: none; }
+  details.card > summary::after { content: '展开'; color: #3370ff; font-size: 12px; font-weight: 400; }
+  details.card[open] > summary::after { content: '收起'; }
+  .task-section { padding: 10px 16px; }
+  .task-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px solid #f5f6f7;
+  }
+  .task-item:last-child { border-bottom: none; }
+  .task-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-right: 12px;
+  }
+  .task-icon.red { background: #ffe7e7; color: #d72a2a; }
+  .task-icon.yellow { background: #fff5e0; color: #d68a00; }
+  .task-icon.green { background: #e0f5e8; color: #2a9d3f; }
+  .task-icon.blue { background: #e8f4ff; color: #1d6fdc; }
+  .task-body { flex: 1; min-width: 0; }
+  .task-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: #1f2329;
+    margin-bottom: 4px;
+  }
+  .task-meta {
+    font-size: 13px;
+    color: #646a73;
+    line-height: 1.5;
+  }
+  .task-action {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+  }
+  .btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+  }
+  .btn-primary { background: #3370ff; color: #fff; }
+  .btn-outline { background: #fff; color: #3370ff; border: 1px solid #3370ff; }
+  .summary {
+    background: #f5f8ff;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #4e5969;
+  }
+  .summary-row { display: flex; justify-content: space-between; padding: 4px 0; }
+  .summary-value { color: #1f2329; font-weight: 500; }
+  .sop-section {
+    padding: 12px 16px;
+    background: #fafbfc;
+  }
+  .sop-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #8f959e;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+  }
+  .sop-step {
+    display: flex;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 13px;
+    color: #4e5969;
+  }
+  .sop-num {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #3370ff;
+    color: #fff;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  .upload-zone {
+    margin: 12px 16px;
+    padding: 16px;
+    border: 2px dashed #c9cdd4;
+    border-radius: 8px;
+    text-align: center;
+    color: #8f959e;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .footer-note {
+    font-size: 11px;
+    color: #8f959e;
+    text-align: center;
+    margin-top: 12px;
+    padding: 0 16px;
+  }
+  .demo-controls { text-align: center; margin: 18px 0 8px; }
+  .demo-reset { color: #8f959e; background: transparent; border: 1px solid #dcdfe5; }
+  .upload-zone button { margin-top: 8px; }
+  .upload-type-row { display: flex; gap: 8px; margin-bottom: 12px; justify-content: center; flex-wrap: wrap; }
+  .upload-type { border: 1px solid #dcdfe5; background: #fff; color: #4e5969; }
+  .upload-type.active { border-color: #3370ff; background: #f5f8ff; color: #3370ff; }
+  .document-list { margin: 0 16px 12px; display: grid; gap: 8px; }
+  .document-record { border: 1px solid #e5e6eb; border-radius: 8px; padding: 10px 12px; background: #fff; font-size: 12px; color: #646a73; }
+  .document-record summary { cursor: pointer; color: #1f2329; font-weight: 500; list-style: none; }
+  .document-record summary::-webkit-details-marker { display: none; }
+  .document-record summary::after { content: '查看详情'; float: right; color: #3370ff; font-weight: 400; }
+  .document-record[open] summary::after { content: '收起'; }
+  .document-meta { margin-top: 8px; line-height: 1.7; }
+  .document-lines { margin-top: 8px; padding: 8px; border-radius: 6px; background: #fafbfc; }
+  .document-lines li { margin-left: 16px; }
+  .btn.is-loading { cursor: wait; opacity: .8; }
+  .spinner { display: inline-block; width: 12px; height: 12px; margin-right: 5px; border: 2px solid rgba(255,255,255,.55); border-top-color: #fff; border-radius: 50%; vertical-align: -2px; animation: rotate .75s linear infinite; }
+  .btn:not(.btn-primary) .spinner { border-color: #c9cdd4; border-top-color: #646a73; }
+  @keyframes rotate { to { transform: rotate(360deg); } }
+  .count-status { margin: 0 16px 12px; padding: 9px 10px; border-radius: 6px; background: #f5f6f7; color: #646a73; font-size: 13px; }
+  .count-status.warning { background: #fff5e0; color: #9c6800; }
+  .count-status.success { background: #e0f5e8; color: #25783c; }
+  .count-status.error { background: #ffe7e7; color: #b42323; }
+  .count-status.muted { background: #f5f6f7; color: #646a73; }
+  #count-preview { padding: 0 16px 12px; color: #646a73; font-size: 12px; }
+  #count-image-preview { display: none; width: calc(100% - 32px); max-height: 180px; margin: 0 16px 12px; border-radius: 8px; border: 1px solid #e5e6eb; object-fit: contain; background: #fafbfc; }
+  .count-task { background: #fffaf1; border-radius: 8px; padding: 12px !important; margin: 0 16px 12px; border: 1px solid #ffe1ab; }
+  .closed-task { background: #f4fff7; border-color: #b8e7c6; }
+  .pending-copy { color: #9c6800; font-size: 13px; }
+  .closed-copy { color: #25783c; font-size: 12px; line-height: 1.5; }
+  .task-detail { margin-top: 8px; border-radius: 6px; background: #fff8eb; color: #7a5a18; font-size: 12px; }
+  .task-detail summary { padding: 7px 8px; cursor: pointer; }
+  .task-detail p { padding: 0 8px 8px; line-height: 1.5; }
+  .operation-task { background: #f5f8ff; border-color: #c6d8ff; }
+  .demo-flow, .store-demo-card { position: relative; }
+  .task-item.demo-flow { margin: 0 0 10px; padding: 12px !important; border: 1px solid #d9e7ff; border-left: 3px solid #3370ff; border-radius: 9px; background: #fff; }
+  .task-item.demo-flow:last-child { margin-bottom: 0; }
+  .task-item.demo-flow.closed-task { border-left-color: #2a9d3f; background: #f8fffa; }
+  .store-demo-card { border: 1px solid #c6d8ff; background: #fff; }
+  .store-demo-float { position: static; display: inline-flex; align-self: flex-start; flex: none; margin: 2px 9px 0 0; padding: 2px 7px; border-radius: 8px; background: #3370ff; color: #fff; font-size: 10px; font-weight: 700; line-height: 1.2; letter-spacing: .35px; }
+  .intake-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px 16px 16px; }
+  .intake-item { border:1px solid #d9e7ff; border-radius:9px; padding:12px; background:#f8fbff; }
+  .intake-item b { display:block; font-size:14px; margin-bottom:4px; }
+  .intake-item p { color:#646a73; font-size:12px; min-height:36px; }
+  .intake-item .task-action { margin-top:9px; flex-wrap:wrap; }
+  .intake-pill { display:inline-block; margin-left:5px; padding:1px 5px; border-radius:4px; color:#1d6fdc; background:#e8f4ff; font-size:10px; font-weight:500; }
+  .store-transfer-form { padding:12px 16px 16px; display:grid; gap:10px; }
+  .store-transfer-form label { color:#646a73; font-size:12px; }
+  .store-transfer-form input,.store-transfer-form select,.store-transfer-form textarea { display:block; width:100%; margin-top:4px; padding:8px; border:1px solid #dcdfe5; border-radius:6px; background:#fff; font:13px inherit; }
+  .store-transfer-form textarea { min-height:58px; resize:vertical; }
+  .store-transfer-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .store-transfer-target { display:grid; grid-template-columns:1fr .7fr auto; gap:8px; margin-top:6px; }
+  .store-transfer-target input { margin-top:0; }.store-transfer-target button { border:1px solid #dcdfe5; border-radius:6px; background:#fff; color:#3370ff; padding:0 9px; cursor:pointer; }
+  .today-card { border:1px solid #d9e7ff; }
+  .today-card .card-header { display:flex; align-items:center; justify-content:space-between; }
+  .today-count { color:#3370ff; font-size:12px; font-weight:500; }
+  .today-empty { display:flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:10px 12px; color:#8f959e; font-size:13px; text-align:center; }
+  .today-empty.is-ready { min-height:36px; padding:7px 12px; color:#646a73; }
+  .today-loading-dot { width:8px; height:8px; border:2px solid #c8d7f5; border-top-color:#3370ff; border-radius:50%; animation:rotate .75s linear infinite; }
+  .common-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:14px 16px 16px; }
+  .common-action { width:100%; min-height:132px; padding:17px 10px 12px; border:1px solid #e5e6eb; border-radius:14px; text-align:center; background:#fff; cursor:pointer; font:inherit; color:#1f2329; transition:transform .16s ease,border-color .16s ease,background .16s ease; }
+  .common-action:active{transform:scale(.97)}.common-action:hover { border-color:#9bb9ff; background:#f8fbff; }.common-action strong{display:block;font-size:15px;margin:8px 0 2px}.common-action span{display:block;color:#8f959e;font-size:12px;line-height:1.5}.common-icon{font-size:29px;line-height:1}
+  .ops-secondary{display:none}.store-recent-list{padding:0 16px 8px}.store-recent-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:8px;align-items:center;padding:11px 0;border-bottom:1px solid #f0f1f3}.store-recent-row:last-child{border-bottom:0}.store-recent-icon{font-size:18px}.store-recent-title{font-size:13px;font-weight:600;color:#1f2329}.store-recent-meta{margin-top:2px;color:#8f959e;font-size:11px}.store-recent-status{padding:3px 7px;border-radius:8px;background:#edf7ef;color:#2a9d3f;font-size:11px;white-space:nowrap}.store-recent-status.pending{background:#fff7e6;color:#d48806}.store-recent-empty{padding:16px 0;color:#8f959e;text-align:center;font-size:12px}
+  .task-code { display:inline-block; margin-top:5px; color:#3370ff; font-size:12px; font-weight:500; }
+  .manual-count-form { display:grid; gap:8px; width:100%; margin-top:10px; padding:10px; border-radius:8px; background:#f5f8ff; }
+  .manual-count-row { display:grid; grid-template-columns:minmax(0,1fr) 105px 32px; gap:7px; align-items:center; font-size:13px; }
+  .manual-count-row input { width:100%; min-width:0; padding:7px 8px; border:1px solid #c9cdd4; border-radius:6px; font:inherit; }
+  .manual-count-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:3px; }
+  .manual-count-status { font-size:12px; color:#646a73; }
+  .count-stage{display:grid;gap:10px;margin-top:12px;padding:11px;border:1px solid #d8e5ff;border-radius:10px;background:#fafcff}.count-stage-head{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:8px;align-items:start}.count-stage-dot{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3370ff;color:#fff;font-size:12px;font-weight:700}.count-stage-head b{display:block;color:#1f2329;font-size:14px;line-height:1.35}.count-stage-head small{display:block;margin-top:2px;color:#646a73;font-size:12px;line-height:1.45}.count-stage-head em{padding:3px 6px;border-radius:6px;background:#eaf1ff;color:#245bdb;font-size:11px;font-style:normal;white-space:nowrap}.count-stage.state-warning{border-color:#ffe0a3;background:#fffaf0}.count-stage.state-warning .count-stage-dot{background:#d48806}.count-stage.state-warning .count-stage-head em{background:#fff1d6;color:#ad6800}.count-stage.state-ready{border-color:#b7ebc3;background:#f6ffed}.count-stage.state-ready .count-stage-dot{background:#2a9d3f}.count-stage.state-ready .count-stage-head em{background:#e5f8e9;color:#237b42}.count-photo-primary{display:grid;gap:8px}.count-photo-picker{display:grid;grid-template-columns:30px 1fr;gap:2px 8px;align-items:center;padding:12px;border:1.5px dashed #7ca5ff;border-radius:10px;background:#f5f8ff;color:#245bdb;cursor:pointer}.count-photo-picker input{display:none}.count-photo-picker span{grid-row:span 2;font-size:22px}.count-photo-picker b{font-size:14px}.count-photo-picker small{font-size:12px;color:#646a73;line-height:1.45}.count-photo-picker.is-uploading{opacity:.65;pointer-events:none}.manual-count-hint{font-size:12px;color:#646a73;line-height:1.5}
+  #sop-card,#summary-card { display:none; }
+  @media(max-width:360px){.common-grid{grid-template-columns:1fr}}
+  /* 参考门店移动端原型：核心页面用底部三栏导航，助手始终可一键进入。 */
+  .store-tab-bar { position:fixed; bottom:0; left:50%; transform:translateX(-50%); z-index:100; display:grid; grid-template-columns:repeat(3,1fr); gap:0; width:100%; max-width:414px; margin:0; padding:6px 6px calc(8px + env(safe-area-inset-bottom)); border:0; border-top:1px solid #e5e6eb; border-radius:0; background:rgba(255,255,255,.98); box-shadow:0 -5px 18px rgba(31,35,41,.08); backdrop-filter:blur(12px); }
+  .store-tab-bar .tab-btn { display:flex; flex-direction:column; align-items:center; gap:2px; min-height:48px; padding:5px 8px; border-radius:9px; font-size:11px; }
+  .store-tab-bar .tab-btn .tab-icon { margin:0; font-size:19px; line-height:1.15; }
+  .store-tab-bar .tab-btn.active { background:#eaf1ff; color:#245bdb; }
+  .agent-card { min-height:calc(100vh - 184px); display:flex; flex-direction:column; }
+  .agent-card .card-header { display:flex; justify-content:space-between; align-items:center; }
+  .agent-online { color:#237b42; font-size:12px; font-weight:500; }
+  .agent-chat { flex:1; min-height:320px; max-height:54vh; overflow:auto; padding:14px 14px 4px; display:flex; flex-direction:column; gap:10px; background:linear-gradient(#fbfcff,#fff); }
+  .agent-message { max-width:86%; padding:10px 12px; border-radius:14px; font-size:14px; line-height:1.55; box-shadow:0 1px 3px rgba(31,35,41,.06); white-space:pre-wrap; }
+  .agent-message.assistant { align-self:flex-start; border-bottom-left-radius:4px; background:#f3f6fc; color:#1f2329; }
+  .agent-message.user { align-self:flex-end; border-bottom-right-radius:4px; background:#3370ff; color:#fff; }
+  .agent-message .agent-caption { display:block; margin-bottom:4px; color:#3370ff; font-size:11px; font-weight:700; }
+  .agent-chips { display:flex; gap:8px; overflow-x:auto; padding:10px 12px; border-top:1px solid #f0f1f3; white-space:nowrap; }
+  .agent-chip { flex:0 0 auto; border:1px solid #d8e4ff; border-radius:999px; background:#f5f8ff; color:#245bdb; padding:6px 10px; font:600 12px inherit; cursor:pointer; }
+  .agent-input-area { display:flex; gap:8px; align-items:flex-end; padding:10px 12px 14px; border-top:1px solid #f0f1f3; background:#fff; }
+  .agent-input { flex:1; min-height:38px; max-height:80px; padding:8px 12px; resize:none; border:1px solid #dcdfe5; border-radius:18px; background:#f5f6f7; color:#1f2329; font:14px inherit; line-height:1.5; outline:none; }
+  .agent-input:focus { border-color:#3370ff; background:#fff; box-shadow:0 0 0 3px rgba(51,112,255,.1); }
+  .agent-icon-btn { width:38px; height:38px; flex:0 0 38px; border:0; border-radius:50%; background:#fff; color:#3370ff; font-size:17px; cursor:pointer; }
+  .agent-icon-btn.send { background:#3370ff; color:#fff; }
+  .agent-icon-btn.recording { background:#d4380d; color:#fff; animation:agentPulse 1s ease-in-out infinite; }
+  .agent-helper { padding:0 14px 10px; color:#8f959e; font-size:11px; }
+  .agent-voice-note { padding:8px 12px; margin:0 12px 10px; border-radius:8px; background:#fff5e6; color:#9c6800; font-size:12px; display:none; }
+  .agent-voice-note.show { display:block; }
+  @keyframes agentPulse { 50% { transform:scale(1.08); } }
+  .agent-confirm { margin-top:8px; padding:10px; border:1px solid #d9e7ff; border-radius:10px; background:#fff; font-size:13px; }
+  .agent-confirm b { color:#1f2329; }.agent-confirm p{margin:2px 0;color:#646a73}.agent-confirm .btn{margin-top:8px;width:100%;padding:9px}
+  .agent-sheet[hidden] { display:none; }
+  .agent-sheet { position:fixed; inset:0; z-index:200; display:flex; align-items:flex-end; justify-content:center; background:rgba(31,35,41,.58); }
+  .agent-sheet-panel { width:100%; max-width:414px; max-height:90vh; overflow:auto; border-radius:18px 18px 0 0; background:#fff; box-shadow:0 -8px 30px rgba(0,0,0,.18); }
+  .agent-sheet-head { display:flex; align-items:center; justify-content:space-between; padding:18px 16px; border-bottom:1px solid #f0f1f3; font-size:18px; font-weight:650; }
+  .agent-sheet-close { border:0; background:transparent; color:#8f959e; font-size:24px; line-height:1; cursor:pointer; }
+  .agent-form { display:grid; gap:14px; padding:16px; }.agent-form label{display:grid;gap:7px;font-size:13px;font-weight:600;color:#4e5969}.agent-form input,.agent-form select,.agent-form textarea{width:100%;padding:11px 12px;border:1px solid #dcdfe5;border-radius:9px;background:#fff;font:14px inherit;color:#1f2329}.agent-form textarea{min-height:72px;resize:vertical}
+  .agent-choice-row{display:flex;gap:8px;flex-wrap:wrap}.agent-choice{padding:8px 12px;border:1px solid #dcdfe5;border-radius:8px;background:#fff;color:#4e5969;font:13px inherit;cursor:pointer}.agent-choice.active{border-color:#3370ff;background:#f0f5ff;color:#3370ff}
+  .agent-photo { display:grid; place-items:center; min-height:126px; padding:18px; border:2px dashed #c9cdd4; border-radius:10px; color:#646a73; text-align:center; cursor:pointer; }.agent-photo input{display:none}.agent-photo span{font-size:28px}.agent-photo small{display:block;margin-top:6px;font-size:13px}.agent-photo.has-file{border-color:#52c41a;background:#f6ffed;color:#237b42}
+  .agent-transfer-target{display:grid;grid-template-columns:minmax(0,1fr) 95px 32px;gap:7px;align-items:center;margin-bottom:7px}.agent-transfer-target input{min-width:0}.agent-target-remove{height:40px;border:0;border-radius:8px;background:#fff1f0;color:#cf1322;font-size:19px;cursor:pointer}.agent-add-target{margin-top:1px;padding:8px 10px;font-size:12px}
+  .agent-sheet-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 16px calc(16px + env(safe-area-inset-bottom));border-top:1px solid #f0f1f3}.agent-sheet-actions .btn{padding:13px;font-size:15px}.agent-sheet-status{min-height:18px;padding:0 16px 8px;color:#d4380d;font-size:12px}
+</style>
+<script src="/loading.js"></script>
+</head>
+<body data-view="store">
+
+<div class="header">
+  <div class="header-top"><div><h1>📋 <span id="store-header-code">STORE001</span><span class="badge-direct" id="store-header-role">普通门店</span></h1><div class="store-header-name" id="store-header-name">小茶日记</div></div><div class="header-date" id="store-header-date">今日</div></div>
+  <div class="stats-row" id="today-stats"><div class="stat-pill"><span class="stat-number" id="header-todo-count">0</span><span class="stat-label">未完成</span></div><div class="stat-pill"><span class="stat-number" id="header-risk-count">0</span><span class="stat-label">逾期</span></div><div class="stat-pill"><span class="stat-number" id="header-plan-count">0</span><span class="stat-label">每日 SOP</span></div></div>
+</div>
+
+<nav class="store-tab-bar" aria-label="门店运营页面切换">
+  <button class="tab-btn active" type="button" data-store-tab="tasks"><span class="tab-icon">📋</span>任务</button>
+  <button class="tab-btn" type="button" data-store-tab="ops"><span class="tab-icon">🏪</span>运营</button>
+  <button class="tab-btn" type="button" data-store-tab="agent"><span class="tab-icon">🤖</span>助手</button>
+</nav>
+
+<!-- 今日任务：只展示门店今天必须完成并可追溯的任务。 -->
+<div class="tab-content active" id="store-tab-tasks">
+<div class="card today-card">
+  <div class="card-header">⏰ 今日任务 <span class="today-count">待完成 <span id="todo-count">0</span> 项</span></div>
+  <div class="task-section" id="today-task-list"><div id="operation-task-area"></div><div id="daily-count-task"></div><div id="store-transfer-receipt-tasks"></div><div id="today-task-empty" class="today-empty"><span class="today-loading-dot" aria-hidden="true"></span><span>正在同步今日任务…</span></div></div>
+</div>
+
+<div class="card" id="completed-card">
+  <div class="card-header">✅ 最近完成</div>
+  <div class="task-section" id="recent-completed-list"><div class="task-item"><div class="task-icon green">✓</div><div class="task-body"><div class="task-title">暂无最近完成记录</div><div class="task-meta">完成盘点、收货确认和总部任务后，可在这里回看关联单号。</div></div></div></div>
+</div>
+</div>
+
+<!-- 常用运营：由门店主动发起，不混入今日待办。 -->
+<div class="tab-content" id="store-tab-ops">
+<div class="card" id="common-ops-card">
+  <div class="card-header">🏪 快捷运营</div>
+  <div class="common-grid">
+    <button class="common-action" type="button" data-common-action="transfer"><span class="common-icon">🔄</span><strong>调拨</strong><span>发货/接收</span></button>
+    <button class="common-action" type="button" data-common-action="scrap"><span class="common-icon">🗑️</span><strong>报损</strong><span>破损/过期</span></button>
+    <button class="common-action" type="button" data-common-action="count"><span class="common-icon">📷</span><strong>盘点</strong><span>拍照&上传</span></button>
+    <button class="common-action" type="button" data-common-action="restock"><span class="common-icon">📦</span><strong>申请补货</strong><span>向总部申请</span></button>
+  </div>
+</div>
+
+<div class="card" id="store-recent-card">
+  <div class="card-header">◷ 最近记录</div>
+  <div class="store-recent-list" id="store-recent-records"><div class="store-recent-empty">正在读取最近操作…</div></div>
+</div>
+
+<div class="card store-demo-card ops-secondary" id="store-transfer-request-card">
+  <span class="store-demo-float">DEMO</span>
+  <div class="card-header">↔️ 门店 HTML 调拨申请</div>
+  <div class="summary">一张主单可调往多个门店：调出门店提交后立即扣减总量；各调入门店按实际收货入库，总部只做追溯与异常监控。</div>
+  <form id="store-transfer-request" class="store-transfer-form">
+    <div class="store-transfer-grid"><label>调出门店<input id="store-transfer-from-store" value="STORE001" readonly></label><label>物料<select id="store-transfer-material" required><option>正在读取物料台账…</option></select></label></div>
+    <label>调入门店与计划数量<div id="store-transfer-targets"><div class="store-transfer-target"><input class="store-transfer-to-store" placeholder="调入门店，如 STORE002" maxlength="64" required><input class="store-transfer-qty" type="number" min="0.001" step="0.001" placeholder="数量" required><button type="button" class="store-transfer-remove" aria-label="删除调入门店">删除</button></div></div><button type="button" id="store-transfer-add-target" class="btn" style="margin-top:8px;background:#fff;color:#3370ff">+ 增加调入门店</button></label>
+    <label>业务日期<input id="store-transfer-date" type="date" required></label>
+    <label>申请说明（可选）<textarea id="store-transfer-note" maxlength="160" placeholder="例如：晚高峰前补货，门店冷藏库存不足"></textarea></label>
+    <button class="btn btn-primary" type="submit">提交调拨并扣减本店库存</button>
+  </form>
+  <div id="store-transfer-request-status" class="count-status muted">调出提交后会立即扣减本店库存；请由调入门店在其门店端确认收货。</div>
+  <div id="store-transfer-outbound-status" class="count-status muted">暂无本店发起的进行中调拨。</div>
+</div>
+
+<!-- OCR 上传区 -->
+<div class="card store-demo-card ops-secondary" id="document-upload-card">
+  <span class="store-demo-float">DEMO</span>
+  <div class="card-header">📷 拍照上传与识别</div>
+  <div class="upload-zone">
+    <div class="upload-type-row" role="group" aria-label="单据类型">
+      <button class="btn upload-type active" type="button" data-document-type="inventory_count">盘点单</button>
+      <button class="btn upload-type" type="button" data-document-type="receipt">收货单</button>
+      <button class="btn upload-type" type="button" data-document-type="scrap">报废单</button>
+    </div>
+    <div id="upload-copy">选择单据类型后拍照或上传；盘点单会自动核对理论库存。</div>
+    <button class="btn btn-primary" id="choose-document-file" type="button">上传盘点单</button>
+    <input id="document-file" type="file" accept="image/*" hidden>
+  </div>
+  <div id="count-preview"></div>
+  <img id="count-image-preview" alt="已选择的单据预览">
+  <div id="count-status" class="count-status muted">等待门店上传单据。</div>
+  <div id="count-task-area"></div>
+  <div id="document-list" class="document-list"></div>
+  <input id="operation-proof-file" type="file" accept="image/*" hidden>
+</div>
+</div>
+
+<!-- AI 助手：只生成可确认的表单草稿，实际库存写入仍沿用现有门店单据流程。 -->
+<div class="tab-content" id="store-tab-agent">
+  <section class="card agent-card" aria-label="门店 AI 助手">
+    <div class="card-header"><span>🤖 门店 AI 助手</span><span class="agent-online">● 在线</span></div>
+    <div class="agent-chat" id="store-agent-chat" aria-live="polite"></div>
+    <div class="agent-chips" aria-label="快捷操作">
+      <button type="button" class="agent-chip" data-agent-prompt="我要发起调拨">↔️ 发起调拨</button>
+      <button type="button" class="agent-chip" data-agent-prompt="我要登记报损">📝 报损登记</button>
+      <button type="button" class="agent-chip" data-agent-prompt="我要盘点">📋 执行盘点</button>
+      <button type="button" class="agent-chip" data-agent-prompt="我要申请补货">📦 申请补货</button>
+      <button type="button" class="agent-chip" data-agent-prompt="查牛奶库存">🔎 查库存</button>
+    </div>
+    <div class="agent-voice-note" id="store-agent-voice-note">正在聆听…松开即可识别</div>
+    <div class="agent-input-area">
+      <textarea id="store-agent-input" class="agent-input" rows="1" maxlength="600" placeholder="直接说：调 2kg 黑糖珍珠去 STORE002"></textarea>
+      <button type="button" id="store-agent-mic" class="agent-icon-btn" aria-label="按住说话">🎙️</button>
+      <button type="button" id="store-agent-send" class="agent-icon-btn send" aria-label="发送">➤</button>
+    </div>
+    <div class="agent-helper">AI 会先识别并预填表单；库存与单据仍需由门店确认提交。</div>
+  </section>
+</div>
+
+<!-- 机器人内完成操作：不切走当前聊天页，采用参考原型同款底部表单。 -->
+<div class="agent-sheet" id="agent-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="agent-sheet-title">
+  <section class="agent-sheet-panel">
+    <header class="agent-sheet-head"><span id="agent-sheet-title">门店操作</span><button class="agent-sheet-close" type="button" id="agent-sheet-close" aria-label="关闭">×</button></header>
+    <form class="agent-form" id="agent-sheet-form"></form>
+    <div class="agent-sheet-status" id="agent-sheet-status" aria-live="polite"></div>
+    <footer class="agent-sheet-actions"><button class="btn btn-outline" type="button" id="agent-sheet-cancel">取消</button><button class="btn btn-primary" type="submit" form="agent-sheet-form" id="agent-sheet-submit">提交</button></footer>
+  </section>
+</div>
+
+<!-- 已完成和 SOP 归入今日任务 Tab -->
+
+<!-- 次要信息默认收起，避免干扰门店先完成待办 -->
+<details class="card" id="sop-card">
+  <summary class="card-header">📖 今日 SOP 流程</summary>
+  <div class="sop-section">
+    <div class="sop-title">开店前 30 分钟</div>
+    <div class="sop-step"><div class="sop-num">1</div>检查物料温度（冷藏 0-4°C / 冷冻 -18°C）</div>
+    <div class="sop-step"><div class="sop-num">2</div>核对昨日报损</div>
+    <div class="sop-step"><div class="sop-num">3</div>拍摄盘点表发到群</div>
+  </div>
+  <div class="sop-section" style="border-top: 1px solid #f0f1f3;">
+    <div class="sop-title">营业中</div>
+    <div class="sop-step"><div class="sop-num">4</div>异常物料即时拍照反馈</div>
+    <div class="sop-step"><div class="sop-num">5</div>POS 数据每日 22:00 自动上传</div>
+  </div>
+</div>
+
+<details class="card" id="summary-card">
+  <summary class="card-header">📊 昨日概况</summary>
+  <div class="summary">
+    <div class="summary-row"><span>销量</span><span class="summary-value" id="summary-sales">读取中</span></div>
+    <div class="summary-row"><span>预警物料</span><span class="summary-value" id="summary-risk" style="color:#d68a00;">读取中</span></div>
+    <div class="summary-row"><span>损耗</span><span class="summary-value" id="summary-loss">读取中</span></div>
+    <div class="summary-row"><span>台账状态</span><span class="summary-value" id="summary-health">读取中</span></div>
+  </div>
+</details>
+
+<div class="footer-note" data-store-secondary>
+  门店库存运营闭环 MVP · <span id="store-footer-name">小茶日记 · STORE001</span>
+</div>
+<div class="demo-controls" data-store-secondary><button class="btn demo-reset" type="button" data-reset-demo>重置演示数据</button></div>
+
+<script src="../app.js"></script>
+<script src="/store-count-plan.js"></script>
+<script src="/store-transfer-request.js"></script>
+<script src="/store-agent.js"></script>
+<script>
+(() => {
+  const tabs = { tasks: document.querySelector('#store-tab-tasks'), ops: document.querySelector('#store-tab-ops'), agent: document.querySelector('#store-tab-agent') };
+  function switchStoreTab(name) { Object.entries(tabs).forEach(([key, node]) => node?.classList.toggle('active', key === name)); document.querySelectorAll('[data-store-tab]').forEach((button) => button.classList.toggle('active', button.dataset.storeTab === name)); ['sop-card','summary-card'].forEach((id) => { const node = document.getElementById(id); if (node) node.style.display = name === 'tasks' ? '' : 'none'; }); document.querySelectorAll('[data-store-secondary]').forEach((node) => { node.style.display = name === 'tasks' ? '' : 'none'; }); if (name === 'agent') window.storeAgentTabOpened?.(); if (name === 'ops') window.storeOpsRefresh?.(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  window.switchStoreTab = switchStoreTab;
+  document.querySelectorAll('[data-store-tab]').forEach((button) => button.addEventListener('click', () => switchStoreTab(button.dataset.storeTab)));
+  switchStoreTab('tasks');
+})();
+</script>
+</body>
+</html>

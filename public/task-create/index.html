@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>创建门店运营任务</title>
+  <style>
+    * { box-sizing: border-box; } body { margin: 0; background: #f5f6f7; color: #1f2329; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    .page { max-width: 900px; margin: 0 auto; padding: 32px 24px 60px; } .back { color: #3370ff; font-size: 14px; text-decoration: none; }
+    h1 { margin: 18px 0 6px; font-size: 24px; } .subtitle { color: #8f959e; font-size: 14px; }
+    .card { margin-top: 22px; padding: 24px; background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+    .step { display: flex; align-items: center; gap: 10px; color: #4e5969; font-size: 13px; margin-bottom: 22px; } .step b { display:inline-flex; width:22px; height:22px; align-items:center; justify-content:center; border-radius:50%; background:#3370ff; color:#fff; }
+    .field { margin-top: 18px; } label { display:block; margin-bottom:8px; font-size:14px; font-weight:600; } .hint { margin-top:6px; font-size:12px; color:#8f959e; }
+    input, textarea, select { width:100%; padding:10px 12px; border:1px solid #dcdfe5; border-radius:6px; font:inherit; color:#1f2329; } textarea { min-height:112px; resize:vertical; }
+    .templates { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; } .template { border:1px solid #dcdfe5; border-radius:8px; padding:13px; cursor:pointer; background:#fff; } .template.active { border-color:#3370ff; background:#f5f8ff; } .template strong { display:block; font-size:14px; margin-bottom:5px; } .template span { font-size:12px; color:#646a73; line-height:1.5; }
+    .target { padding:12px; border-radius:7px; background:#f5f8ff; color:#3370ff; font-size:14px; } .actions { display:flex; justify-content:flex-end; gap:10px; margin-top:28px; } button { border:1px solid #dcdfe5; border-radius:6px; padding:9px 16px; background:#fff; cursor:pointer; font-size:14px; } button.primary { background:#3370ff; border-color:#3370ff; color:#fff; } button:disabled { opacity:.65; cursor:wait; } .notice { display:none; margin-top:16px; padding:11px 12px; border-radius:7px; font-size:13px; } .notice.error { display:block; background:#ffe7e7; color:#b42323; } .notice.success { display:block; background:#e0f5e8; color:#25783c; }
+    @media(max-width:680px){ .templates{grid-template-columns:1fr;} .page{padding:24px 16px;} }
+  </style>
+<script src="/loading.js"></script>
+</head>
+<body data-view="task-create">
+  <main class="page">
+    <a class="back" href="/">← 返回运营任务中心</a>
+    <h1>创建门店运营任务</h1>
+    <div class="subtitle">总部下发任务后，门店待办会同步出现；门店提交凭证后，由总部验收关闭。</div>
+    <form class="card" id="task-create-form">
+      <div class="step"><b>1</b>选择任务模板　<b>2</b>完善执行要求　<b>3</b>下发至门店</div>
+      <div class="field"><label>任务模板</label><div class="templates">
+        <button class="template active" type="button" data-template="cold"><strong>冷藏温度巡检</strong><span>检查冷藏设备 0–4°C，上传温度凭证。</span></button>
+        <button class="template" type="button" data-template="handover"><strong>晚班收银交接检查</strong><span>核对现金、POS 退款与交接签字。</span></button>
+        <button class="template" type="button" data-template="receipt"><strong>收货单据核对</strong><span>核对入库数量与收货单据一致性。</span></button>
+      </div></div>
+      <div class="field"><label>执行门店</label><div class="target">STORE001 · 小茶日记（演示门店）</div></div>
+      <div class="field"><label for="create-task-title">任务名称</label><input id="create-task-title" maxlength="40" value="冷藏温度巡检" required></div>
+      <div class="field"><label for="create-task-instruction">执行要求</label><textarea id="create-task-instruction" maxlength="240" required>请在开店前检查冷藏设备温度是否处于 0–4°C，拍摄温度计或设备面板作为凭证后提交。</textarea><div class="hint">门店端会显示此说明；请写清任务目标、执行动作和所需凭证。</div></div>
+      <div id="task-create-notice" class="notice"></div>
+      <div class="actions"><a href="/" style="padding:9px 16px;color:#646a73;text-decoration:none">取消</a><button class="primary" type="submit">下发任务</button></div>
+    </form>
+  </main>
+  <script src="../app.js"></script>
+</body>
+</html>

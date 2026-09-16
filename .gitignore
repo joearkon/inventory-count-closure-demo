@@ -1,0 +1,9 @@
+.wrangler/
+.sites-runtime/
+node_modules/
+tmp-*.json
+*.log
+.env
+.env.*
+!.env.example
+

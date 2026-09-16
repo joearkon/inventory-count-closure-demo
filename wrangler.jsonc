@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "inventory-count-closure-demo",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-11",
+  "assets": { "directory": "public", "binding": "ASSETS" },
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "inventory-count-closure-demo-db",
+      "database_id": "92f92203-5114-4eb2-8ce8-0848328c436f",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DEMO_STATE",
+      "bucket_name": "inventory-count-closure-demo-state"
+    }
+  ]
+}
