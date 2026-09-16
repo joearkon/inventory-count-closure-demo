@@ -186,6 +186,19 @@ function r2DefaultProductCatalog() { return R2_PRODUCT_MASTERS.map((item) => ({ 
 function r2DefaultMaterialCatalog() { return R2_MATERIAL_MASTERS.map((item) => ({ ...item, count_policy: item.daily_count_enabled === false ? 'optional' : 'daily', status: 'active', source: '总部物料主档' })); }
 function r2DefaultSafetyStockPolicies() { return R2_SAFETY_STOCK_POLICIES.map((item) => ({ ...item, status: 'active', owner: '供应链 / 营运', source: '总部安全库存配置' })); }
 
+function r2NormalizeMaterialCatalog(items) {
+  const defaults = new Map(r2DefaultMaterialCatalog().map((item) => [normalizedKey(item.material_name), item]));
+  return (Array.isArray(items) && items.length ? items : r2DefaultMaterialCatalog()).map((item) => {
+    const fallback = defaults.get(normalizedKey(item.material_name));
+    const countPolicy = item.count_policy === 'optional' || item.count_policy === 'daily'
+      ? item.count_policy
+      : typeof item.daily_count_enabled === 'boolean'
+        ? (item.daily_count_enabled ? 'daily' : 'optional')
+        : (fallback?.count_policy || 'daily');
+    return { ...item, count_policy: countPolicy, daily_count_enabled: countPolicy === 'daily' };
+  });
+}
+
 function normalizeR2DemoState(value) {
   const initial = r2DemoInitialState();
   const source = value && typeof value === 'object' ? value : {};
@@ -203,7 +216,7 @@ function normalizeR2DemoState(value) {
     stockStandard: Array.isArray(source.stockStandard) ? source.stockStandard : initial.stockStandard,
     storeMasters: Array.isArray(source.storeMasters) && source.storeMasters.length ? source.storeMasters : initial.storeMasters,
     productCatalog: Array.isArray(source.productCatalog) && source.productCatalog.length ? source.productCatalog : initial.productCatalog,
-    materialCatalog: Array.isArray(source.materialCatalog) && source.materialCatalog.length ? source.materialCatalog : initial.materialCatalog,
+    materialCatalog: r2NormalizeMaterialCatalog(source.materialCatalog),
     safetyStockPolicies: Array.isArray(source.safetyStockPolicies) ? source.safetyStockPolicies : initial.safetyStockPolicies,
     operationTasks: Array.isArray(source.operationTasks) ? source.operationTasks : [],
     governanceTasks: Array.isArray(source.governanceTasks) ? source.governanceTasks : [],
