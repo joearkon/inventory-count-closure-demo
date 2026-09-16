@@ -10,7 +10,7 @@
 - [x] 完整 Knowhow 已版本化保存并部署为在线知识库页面；MVP 提炼与原始 Markdown 均可查看。
 - [x] 13 个 D1 迁移已在本地完整通过；远程 D1 备份后完成 0012/0013，R2 兜底保持健康。
 - [x] 完成三语言、多轮上下文、异常边界、HTML 语音绑定、盘点确认、收货/报损撤销、补货确认、工单闭环、通知兜底及 Knowhow R2 保存本地回归（24/24 通过）；真实录音待 Chrome/Edge 麦克风测试。
-- [x] 完成主数据/BOM/单位换算/单据状态检查与演示顺序手册；识别出 15 个 SKU BOM 待品牌确认。
+- [x] 完成主数据/BOM/单位换算/单据状态检查与演示顺序手册；Brown Sugar Boba Milk Tea 6 个真实 SKU 的 54 条飞书 BOM 已纳入白名单，其他商品明确标记为 MVP Mock。
 - [x] 输出总部飞书账号同步、门店 OAuth / 邮箱登录设计。
 
 ## 本轮研判强化（2026-09-15）
@@ -31,8 +31,8 @@
 ### P0：真实环境验证与数据补齐
 
 1. 在 Chrome / Edge 真机麦克风环境验证中文、English、Bahasa Indonesia 语音录入；浏览器不支持或印尼语稳定性不足时，改用 MediaRecorder + 服务端 ASR。
-2. 取得品牌确认的 15 个缺失 SKU BOM，以及盘点物料的采购包装、库存单位换算、标准出成率、合理损耗率和保质期；确认后升级主数据规则版本。
-3. GitHub 已完成：私有仓库 `joearkon/inventory-count-closure-demo` 的 `main` 与全部标签已推送，并核对远端 HEAD 为 `195c4abb01df8710be05c5237d1df6f67c035d56`。
+2. Brown Sugar Boba Milk Tea 6 个真实 SKU 已完成 BOM 白名单；继续确认其二级半成品出成率、合理损耗率和保质期。其余 12 个商品当前是 MVP Mock，不列为品牌 BOM 缺口；未来转正式时再取得配方与生效日期。
+3. GitHub 已完成：私有仓库 `joearkon/inventory-count-closure-demo` 的 `main` 与全部标签已推送；本轮 Brown Sugar BOM 白名单变更待提交后再次核对远端 HEAD。
 
 ### P1：飞书真实事件表接入
 

@@ -32,6 +32,8 @@ const R2_PRODUCT_MASTERS = Object.freeze([
   { sku_code: 'SKU017', product_name: 'Oreo Sundae', product_alias: 'Oreo', product_type: '雪糕', category: '雪糕' },
   { sku_code: 'SKU018', product_name: 'Brown Sugar Boba Milk Tea 400 LS', product_alias: '黑糖奶茶', product_type: '茶饮', category: '奶茶' }
 ]);
+const R2_REAL_PRODUCT_SKUS = Object.freeze(['SKU011', 'SKU013', 'SKU014', 'SKU015', 'SKU016', 'SKU018']);
+const R2_REAL_PRODUCT_SKU_SET = new Set(R2_REAL_PRODUCT_SKUS);
 const R2_MATERIAL_MASTERS = Object.freeze([
   { material_name: '牛奶', base_unit: 'L', procurement_unit: 'L', conversion_factor: 1, remark: '飞鹤纯牛奶 1L 装', brand: '小茶日记' },
   { material_name: '糖浆', base_unit: 'kg', procurement_unit: 'kg', conversion_factor: 1, remark: '中粮果糖糖浆 5kg/桶', brand: '小茶日记' },
@@ -182,7 +184,26 @@ function r2DemoInitialState() {
 function cloneDemoState(value) { return JSON.parse(JSON.stringify(value)); }
 function cloneNotificationSettings(value) { return JSON.parse(JSON.stringify(value)); }
 function r2DefaultStoreMasters() { return R2_STORE_MASTERS.map((item) => ({ ...item })); }
-function r2DefaultProductCatalog() { return R2_PRODUCT_MASTERS.map((item) => ({ ...item, aliases: Array.isArray(item.aliases) ? [...item.aliases] : [] })); }
+function r2ProductDataClassification(skuCode) { return R2_REAL_PRODUCT_SKU_SET.has(skuCode) ? 'brand_real' : 'mvp_mock'; }
+function r2DefaultProductCatalog() {
+  return R2_PRODUCT_MASTERS.map((item) => ({
+    ...item,
+    aliases: Array.isArray(item.aliases) ? [...item.aliases] : [],
+    data_classification: r2ProductDataClassification(item.sku_code),
+    data_label: R2_REAL_PRODUCT_SKU_SET.has(item.sku_code) ? '品牌真实商品' : 'MVP Mock',
+    source: R2_REAL_PRODUCT_SKU_SET.has(item.sku_code) ? '飞书商品/BOM 白名单' : 'MVP 演示商品'
+  }));
+}
+function r2NormalizeProductCatalog(items) {
+  const source = Array.isArray(items) && items.length ? items : r2DefaultProductCatalog();
+  return source.map((item) => ({
+    ...item,
+    aliases: Array.isArray(item.aliases) ? [...item.aliases] : [],
+    data_classification: r2ProductDataClassification(item.sku_code),
+    data_label: R2_REAL_PRODUCT_SKU_SET.has(item.sku_code) ? '品牌真实商品' : 'MVP Mock',
+    source: R2_REAL_PRODUCT_SKU_SET.has(item.sku_code) ? '飞书商品/BOM 白名单' : 'MVP 演示商品'
+  }));
+}
 function r2DefaultMaterialCatalog() { return R2_MATERIAL_MASTERS.map((item) => ({ ...item, count_policy: item.daily_count_enabled === false ? 'optional' : 'daily', status: 'active', source: '总部物料主档' })); }
 function r2DefaultSafetyStockPolicies() { return R2_SAFETY_STOCK_POLICIES.map((item) => ({ ...item, status: 'active', owner: '供应链 / 营运', source: '总部安全库存配置' })); }
 
@@ -215,7 +236,7 @@ function normalizeR2DemoState(value) {
     ...source,
     stockStandard: Array.isArray(source.stockStandard) ? source.stockStandard : initial.stockStandard,
     storeMasters: Array.isArray(source.storeMasters) && source.storeMasters.length ? source.storeMasters : initial.storeMasters,
-    productCatalog: Array.isArray(source.productCatalog) && source.productCatalog.length ? source.productCatalog : initial.productCatalog,
+    productCatalog: r2NormalizeProductCatalog(source.productCatalog),
     materialCatalog: r2NormalizeMaterialCatalog(source.materialCatalog),
     safetyStockPolicies: Array.isArray(source.safetyStockPolicies) ? source.safetyStockPolicies : initial.safetyStockPolicies,
     operationTasks: Array.isArray(source.operationTasks) ? source.operationTasks : [],
@@ -1614,6 +1635,22 @@ const R2_DEMO_BOM = Object.freeze({
     ['冰块', 'kg', 0.12], ['半成品奶茶', 'kg', 0.24], ['双杯袋', '个', 1], ['吸管', '个', 1], ['塑料杯', '个', 1],
     ['果糖', 'kg', 0.02], ['黑糖冻', 'kg', 0.03], ['黑糖成品', 'kg', 0.01], ['黑糖珍珠', 'kg', 0.07]
   ],
+  SKU014: [
+    ['冰块', 'kg', 0.12], ['半成品奶茶', 'kg', 0.24], ['双杯袋', '个', 1], ['吸管', '个', 1], ['塑料杯', '个', 1],
+    ['果糖', 'kg', 0.01], ['黑糖冻', 'kg', 0.03], ['黑糖成品', 'kg', 0.01], ['黑糖珍珠', 'kg', 0.07]
+  ],
+  SKU015: [
+    ['冰块', 'kg', 0.23], ['半成品奶茶', 'kg', 0.27], ['双杯袋', '个', 1], ['吸管', '个', 1], ['塑料杯', '个', 1],
+    ['果糖', 'kg', 0.025], ['黑糖冻', 'kg', 0.03], ['黑糖成品', 'kg', 0.01], ['黑糖珍珠', 'kg', 0.09]
+  ],
+  SKU016: [
+    ['冰块', 'kg', 0.23], ['半成品奶茶', 'kg', 0.27], ['双杯袋', '个', 1], ['吸管', '个', 1], ['塑料杯', '个', 1],
+    ['果糖', 'kg', 0.015], ['黑糖冻', 'kg', 0.03], ['黑糖成品', 'kg', 0.01], ['黑糖珍珠', 'kg', 0.09]
+  ],
+  SKU018: [
+    ['冰块', 'kg', 0.19], ['半成品奶茶', 'kg', 0.15], ['双杯袋', '个', 1], ['吸管', '个', 1], ['塑料杯', '个', 1],
+    ['果糖', 'kg', 0.02], ['黑糖冻', 'kg', 0.02], ['黑糖成品', 'kg', 0.01], ['黑糖珍珠', 'kg', 0.02]
+  ],
   SKU003: [['杯子', '个', 1], ['牛奶', 'L', 0.2], ['糖浆', 'kg', 0.02], ['茶叶', 'kg', 0.004]]
 });
 
@@ -1650,7 +1687,8 @@ function r2LocalBomBySku(materialCatalog = R2_MATERIAL_MASTERS) {
   return Object.fromEntries(Object.entries(R2_DEMO_BOM).map(([sku, lines]) => [sku, lines.map(([material_name, unit, usage_per_sale]) => {
     const master = masterByName.get(normalizedKey(material_name));
     const factor = r2ToBaseUnitFactor(unit, master) ?? 1;
-    return { material_name, unit: master?.base_unit || unit, usage_per_sale: r2Round(Number(usage_per_sale) * factor), source: 'system_bom' };
+    const isBrandReal = R2_REAL_PRODUCT_SKU_SET.has(sku);
+    return { material_name, unit: master?.base_unit || unit, usage_per_sale: r2Round(Number(usage_per_sale) * factor), source: isBrandReal ? 'feishu_brand_bom_snapshot' : 'mvp_mock_bom', source_updated_at: isBrandReal ? '2026-09-14T01:20:30.838Z' : null, data_classification: isBrandReal ? 'brand_real' : 'mvp_mock' };
   })]));
 }
 
@@ -1866,7 +1904,7 @@ async function r2FeishuSyncState(env) {
   return {
     source: { name: '飞书原始数据 + R2 可重置演示数据', tables: ['门店销售明细', '商品SKU主档', '商品BOM', '门店库存台账'], syncSchedule: '飞书每 10 分钟读取至 R2；演示数据按操作即时回算' },
     latestBatch, coverage: demo ? 100 : 0,
-    mapping: { product_skus: 3, bom_skus: 3, bom_lines: bomLines },
+    mapping: { product_skus: R2_PRODUCT_MASTERS.length, bom_skus: Object.keys(R2_DEMO_BOM).length, bom_lines: bomLines, brand_real_skus: R2_REAL_PRODUCT_SKUS.length, mvp_mock_bom_skus: Object.keys(R2_DEMO_BOM).filter((sku) => !R2_REAL_PRODUCT_SKU_SET.has(sku)).length },
     demo: demo ? { id: demo.id, business_date: demo.business_date, created_at: demo.created_at, records: rows.length, sales_qty: totalSales } : null,
     demoBaseline: demo ? { counted_date: demo.counted_date, effective_business_date: demo.business_date, material_count: Object.keys(demo.opening || {}).length } : null,
     groups: demo ? [{ store_code: STORE_CODE, business_date: demo.business_date, sales_lines: rows.length, sales_qty: totalSales, sales_amount: totalAmount }] : [],
@@ -1989,7 +2027,7 @@ async function r2SyncStoreMasters(env) {
 async function r2SyncProductCatalog(env) {
   const value = await r2DemoState(env);
   value.productCatalog = r2DefaultProductCatalog();
-  r2Audit(value, '总部运营', '更新商品主档', `已更新 ${value.productCatalog.length} 个 SKU（商品名称、别名、商品类型、品类）；未修改销售、BOM 或库存流水。`);
+  r2Audit(value, '总部运营', '更新商品主档', `已更新 ${value.productCatalog.length} 个 SKU（6 个 Brown Sugar 品牌真实商品，其余标记为 MVP Mock）；未修改销售或库存流水。`);
   const stateValue = await r2SaveDemoState(env, value, 'product-catalog-sync');
   return json({ product_catalog: stateValue.productCatalog, storage: stateValue.storage });
 }
@@ -2375,13 +2413,13 @@ async function r2ImportFeishuSales(env, dispatchNotifications = false, force = f
     const fields = record.fields || {};
     const directSku = feishuText(fields['SKU Code']), productName = feishuText(fields['商品']) || feishuText(fields['商品名称(OCR)']);
     const skuCode = r2ResolveLocalSku(directSku, productName, productAliases);
-    return { record_id: record.record_id, store_code: feishuText(fields['门店编码关联']), business_date: feishuDate(fields['日期']), sku_code: skuCode, product_name: productName || r2ProductName(productCatalog, skuCode), sales_qty: feishuNumber(fields['销售数量']), sales_amount: feishuNumber(fields['销售金额']) };
+    return { record_id: record.record_id, store_code: feishuText(fields['门店编码关联']), business_date: feishuDate(fields['日期']), sku_code: skuCode, product_name: productName || r2ProductName(productCatalog, skuCode), sales_qty: feishuNumber(fields['销售数量']), sales_amount: feishuNumber(fields['销售金额']), data_classification: r2ProductDataClassification(skuCode) };
   }).filter((row) => row.record_id && row.store_code && row.business_date && row.sales_qty != null && row.sales_qty >= 0);
   const value = current;
   const latestDate = sales.reduce((date, row) => row.business_date > date ? row.business_date : date, '');
   const latestRows = sales.filter((row) => row.business_date === latestDate);
   const importId = id('R2-IMP'), importedAt = now();
-  value.feishuImport = { id: importId, imported_at: importedAt, records: sales.length, latest_business_date: latestDate || null, latest_records: latestRows.length, latest_sales_qty: r2Round(latestRows.reduce((sum, row) => sum + row.sales_qty, 0)), sales, bom_by_sku: bomBySku, bom_lines: Object.values(bomBySku).reduce((sum, lines) => sum + lines.length, 0), product_skus: productCatalog.length, product_catalog: productCatalog, material_catalog: materialCatalog, material_master: materialMaster, ledger_source: [], opening: {}, opening_by_store: {}, transfer_source: { enabled: false, scanned_records: 0, valid_records: 0, records: [], note: '正式演示暂不读取飞书调拨；仅销售表参与同步。' }, source_policy: { sales: 'feishu_read_only', opening: 'system_initialized', product_catalog: 'system_local', material_catalog: 'system_local', bom: 'system_local', receipts: 'system_events', scraps: 'system_events', transfers: 'system_events' } };
+  value.feishuImport = { id: importId, imported_at: importedAt, records: sales.length, latest_business_date: latestDate || null, latest_records: latestRows.length, latest_sales_qty: r2Round(latestRows.reduce((sum, row) => sum + row.sales_qty, 0)), sales, bom_by_sku: bomBySku, bom_lines: Object.values(bomBySku).reduce((sum, lines) => sum + lines.length, 0), product_skus: productCatalog.length, product_catalog: productCatalog, material_catalog: materialCatalog, material_master: materialMaster, ledger_source: [], opening: {}, opening_by_store: {}, transfer_source: { enabled: false, scanned_records: 0, valid_records: 0, records: [], note: '正式演示暂不读取飞书调拨；仅销售表参与同步。' }, source_policy: { sales: 'feishu_read_only', opening: 'system_initialized', product_catalog: 'system_master_with_feishu_classification', material_catalog: 'system_local', bom: 'feishu_brand_snapshot_whitelist_plus_mvp_mock', receipts: 'system_events', scraps: 'system_events', transfers: 'system_events' } };
   for (const session of value.demoDaySessions || []) {
     if (session.status !== 'active' || session.business_date !== latestDate) continue;
     const storeSales = sales.filter((row) => row.store_code === session.store_code && row.business_date === session.business_date);
@@ -2480,7 +2518,7 @@ function r2ImportedFeishuState(value) {
   const totalRecords = storeViews.reduce((sum, view) => sum + view.sales_lines, 0);
   const totalMapped = storeViews.reduce((sum, view) => sum + view.mapped_sales_records, 0);
   const hqSummary = { business_date: latestDate, store_count: storeViews.length, sales_lines: totalRecords, sales_qty: r2Round(storeViews.reduce((sum, view) => sum + view.sales_qty, 0)), sales_amount: r2Round(storeViews.reduce((sum, view) => sum + view.sales_amount, 0)), active_material_anomalies: (value.materialAnomalies || []).filter((item) => item.business_date === latestDate && !['closed', 'auto_closed'].includes(item.status)).length };
-  return { source: { name: '飞书销售 → R2 锁定批次；系统物料 / BOM / 期初 → R2', tables: ['门店销售明细（只读）'], syncSchedule: '每 10 分钟读取销售；已初始化的营业日锁定批次' }, latestBatch: { id: imported.id, status: 'completed', started_at: imported.imported_at, completed_at: imported.imported_at, scanned_records: imported.records, imported_records: totalRecords, mapped_sales_records: totalMapped, unmapped_sales_records: totalRecords - totalMapped }, coverage: totalRecords ? Math.round(totalMapped / totalRecords * 100) : 0, mapping: { product_skus: imported.product_skus || 0, bom_skus: Object.keys(imported.bom_by_sku || {}).length, bom_lines: imported.bom_lines || 0 }, demo: null, demoBaseline: { counted_date: previousBusinessDate(latestDate), effective_business_date: latestDate, material_count: primary.ledger?.length || 0, source: '系统初始化有效期初（不读取飞书库存）' }, groups: storeViews.map(({ store_code, business_date, sales_lines, sales_qty, sales_amount }) => ({ store_code, business_date, sales_lines, sales_qty, sales_amount })), latestGroup: { store_code: primary.store_code, business_date: primary.business_date, sales_lines: primary.sales_lines, sales_qty: primary.sales_qty, sales_amount: primary.sales_amount }, selectedStore: primary.store_code, storeViews, hqSummary, materials: primary.materials, ledger: primary.ledger, materialEvents: (value.materialEvents || []).filter((event) => event.status === 'active'), materialAnomalies: value.materialAnomalies || [], operationTasks: value.operationTasks || [], documents: value.documents || [], diagnosisCases: value.diagnosisCases || [], diagnosisKnowledge: value.diagnosisKnowledge || [], eventSources: value.feishuEventSources || FEISHU_EVENT_SOURCE_SCHEMA, transfers: { ...(imported.transfer_source || { scanned_records: 0, valid_records: 0, records: [] }), demo_orders: value.transferOrders || [], store_requests: value.storeTransferRequests || [], inventory_archives: value.transferArchives || [] }, ledgerSnapshots: value.ledgerSnapshots || [], unmappedSkus: primary.unmappedSkus, highlight: null, calculation: { formula: '每个门店独立按：系统有效期初 + 系统收货 + 系统调拨入 − 系统调拨出 − 系统报损 − 飞书销售 SKU × 系统 BOM 用量 = 理论期末。', rollover: '本次正式演示不读取飞书库存、收货或调拨；STORE001 的期初由系统重新初始化。', writeback: '飞书销售只读；初始化期初、库存动作、盘点与回算全部写入 R2。' }, storage: value.storage, r2Import: imported };
+  return { source: { name: '飞书销售 → R2 锁定批次；系统物料 / BOM / 期初 → R2', tables: ['门店销售明细（只读）'], syncSchedule: '每 10 分钟读取销售；已初始化的营业日锁定批次' }, latestBatch: { id: imported.id, status: 'completed', started_at: imported.imported_at, completed_at: imported.imported_at, scanned_records: imported.records, imported_records: totalRecords, mapped_sales_records: totalMapped, unmapped_sales_records: totalRecords - totalMapped }, coverage: totalRecords ? Math.round(totalMapped / totalRecords * 100) : 0, mapping: { product_skus: imported.product_skus || 0, bom_skus: Object.keys(imported.bom_by_sku || {}).length, bom_lines: imported.bom_lines || 0, brand_real_skus: R2_REAL_PRODUCT_SKUS.length, mvp_mock_bom_skus: Object.keys(imported.bom_by_sku || {}).filter((sku) => !R2_REAL_PRODUCT_SKU_SET.has(sku)).length }, demo: null, demoBaseline: { counted_date: previousBusinessDate(latestDate), effective_business_date: latestDate, material_count: primary.ledger?.length || 0, source: '系统初始化有效期初（不读取飞书库存）' }, groups: storeViews.map(({ store_code, business_date, sales_lines, sales_qty, sales_amount }) => ({ store_code, business_date, sales_lines, sales_qty, sales_amount })), latestGroup: { store_code: primary.store_code, business_date: primary.business_date, sales_lines: primary.sales_lines, sales_qty: primary.sales_qty, sales_amount: primary.sales_amount }, selectedStore: primary.store_code, storeViews, hqSummary, materials: primary.materials, ledger: primary.ledger, materialEvents: (value.materialEvents || []).filter((event) => event.status === 'active'), materialAnomalies: value.materialAnomalies || [], operationTasks: value.operationTasks || [], documents: value.documents || [], diagnosisCases: value.diagnosisCases || [], diagnosisKnowledge: value.diagnosisKnowledge || [], eventSources: value.feishuEventSources || FEISHU_EVENT_SOURCE_SCHEMA, transfers: { ...(imported.transfer_source || { scanned_records: 0, valid_records: 0, records: [] }), demo_orders: value.transferOrders || [], store_requests: value.storeTransferRequests || [], inventory_archives: value.transferArchives || [] }, ledgerSnapshots: value.ledgerSnapshots || [], unmappedSkus: primary.unmappedSkus, highlight: null, calculation: { formula: '每个门店独立按：系统有效期初 + 系统收货 + 系统调拨入 − 系统调拨出 − 系统报损 − 飞书销售 SKU × 系统 BOM 用量 = 理论期末。', rollover: '本次正式演示不读取飞书库存、收货或调拨；STORE001 的期初由系统重新初始化。', writeback: '飞书销售只读；初始化期初、库存动作、盘点与回算全部写入 R2。' }, storage: value.storage, r2Import: imported };
 }
 
 function r2CountPlanGate(value, view) {

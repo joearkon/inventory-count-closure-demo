@@ -59,7 +59,9 @@ try {
   }
 } finally {
   if ($workerProcess -and -not $workerProcess.HasExited) {
-    $workerProcess.Kill($true)
+    # Windows PowerShell 5.1 exposes Process.Kill() but not the newer
+    # Kill(entireProcessTree) overload used by PowerShell 7 / modern .NET.
+    $workerProcess.Kill()
     $workerProcess.WaitForExit()
   }
   if ($workerProcess) { $workerProcess.Dispose() }

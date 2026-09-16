@@ -38,10 +38,14 @@ await check('master data and daily count range', async () => {
   const stores = state.storeMasters || [], products = state.productCatalog || [], materials = state.materialCatalog || [];
   if (stores.length !== 6) throw new Error(`expected 6 stores, got ${stores.length}`);
   if (products.length < 18) throw new Error(`expected >=18 products, got ${products.length}`);
+  const realProducts = products.filter((item) => item.data_classification === 'brand_real');
+  const mockProducts = products.filter((item) => item.data_classification === 'mvp_mock');
+  if (realProducts.length !== 6 || mockProducts.length !== 12) throw new Error(`unexpected product classification: real=${realProducts.length}, mock=${mockProducts.length}`);
+  if (realProducts.some((item) => !item.product_name.startsWith('Brown Sugar Boba Milk Tea'))) throw new Error('non-Brown Sugar product marked as brand real');
   if (materials.length !== 20) throw new Error(`expected 20 materials, got ${materials.length}`);
   const optional = materials.filter((item) => (item.count_policy || (item.daily_count_enabled === false ? 'optional' : 'daily')) === 'optional');
   if (optional.length !== 8) throw new Error(`expected 8 optional-count materials, got ${optional.length}`);
-  return { stores:stores.length, products:products.length, materials:materials.length, daily:materials.length-optional.length, optional:optional.length };
+  return { stores:stores.length, products:products.length, brand_real:realProducts.length, mvp_mock:mockProducts.length, materials:materials.length, daily:materials.length-optional.length, optional:optional.length };
 });
 
 await check('STORE001 safety stock scope and material conversions', async () => {
@@ -57,10 +61,10 @@ await check('STORE001 safety stock scope and material conversions', async () => 
   return { policy_count:policies.length, stores:[...new Set(policies.map((item) => item.store_code))], checked_conversions:Object.keys(expected) };
 });
 
-await check('known BOM coverage is explicit', async () => {
+await check('brand BOM whitelist and mock coverage are explicit', async () => {
   const sync = await json('/api/feishu-sync/state');
-  if (Number(sync.mapping?.product_skus || 0) !== 3 || Number(sync.mapping?.bom_skus || 0) !== 3) throw new Error(`unexpected demo BOM mapping: ${JSON.stringify(sync.mapping)}`);
-  return { mapped_skus:sync.mapping.bom_skus, product_master_skus:18, pending_brand_bom:15 };
+  if (Number(sync.mapping?.product_skus || 0) !== 18 || Number(sync.mapping?.bom_skus || 0) !== 7 || Number(sync.mapping?.bom_lines || 0) !== 58 || Number(sync.mapping?.brand_real_skus || 0) !== 6 || Number(sync.mapping?.mvp_mock_bom_skus || 0) !== 1) throw new Error(`unexpected BOM mapping: ${JSON.stringify(sync.mapping)}`);
+  return { product_master_skus:sync.mapping.product_skus, mapped_skus:sync.mapping.bom_skus, bom_lines:sync.mapping.bom_lines, brand_real_skus:sync.mapping.brand_real_skus, mvp_mock_bom_skus:sync.mapping.mvp_mock_bom_skus, products_without_bom:11 };
 });
 
 await check('new pages are served', async () => {
