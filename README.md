@@ -40,7 +40,13 @@ Worker 配置位于 `wrangler.jsonc`。生产部署使用项目配置中的较�
 
 ## 自动回归
 
-先启动本地 Worker，再执行：
+推荐直接执行隔离回归脚本：
+
+```powershell
+.\tests\run-local-regression.ps1
+```
+
+脚本会在项目目录内创建临时 D1 / R2、应用全部迁移、启动隐藏的本地 Worker、执行用例并在退出时安全清理。也可以手动启动 Worker 后执行：
 
 ```powershell
 $env:BASE_URL='http://127.0.0.1:8787'
