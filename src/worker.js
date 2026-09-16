@@ -305,7 +305,7 @@ async function r2CreateInitialCount(env, body) {
     }));
     if (!lines.length) return bad('该每日盘点计划未包含物料明细，请由总部重新生成计划。', 409);
     const recognitionLabel = body.recognition_note === 'ark_vision' ? 'LLM 图片识别后由门店确认' : body.recognition_note ? '照片识别结果由门店确认' : '门店手工确认';
-    const document = r2AddDocument(value, 'daily-plan', body.filename || '每日全物料盘点单.jpg', lines, `${recognitionLabel}：已提交 ${lines.length} 项计划物料，理论库存快照保留在盘点单中。`, 'inventory_count', validPreviewData(body.previewData), { store_code: dailyPlan.store_code, business_date: dailyPlan.business_date, count_plan_no: dailyPlan.plan_no });
+    const document = r2AddDocument(value, 'daily-plan', body.filename || '每日物料盘点单.jpg', lines, `${recognitionLabel}：已提交 ${lines.length} 项计划物料，理论库存快照保留在盘点单中。`, 'inventory_count', validPreviewData(body.previewData), { store_code: dailyPlan.store_code, business_date: dailyPlan.business_date, count_plan_no: dailyPlan.plan_no });
     r2LinkOperationDocument(value, String(body.operationTaskId || body.operation_task_id || ''), document.id, '关联盘点单');
     if (value.feishuImport?.sales?.length) r2ReconcileAllMaterialSignalsAndCases(value, value.feishuImport.latest_business_date, document.received_at);
     const submittedPlan = r2MarkCountPlanSubmission(value, STORE_CODE, document, dailyPlan.plan_no);
@@ -997,7 +997,7 @@ async function r2RunStoreDayDemo(env, body = {}) {
       const gate = (value.countPlanGateResults || []).find((item) => item.store_code === storeCode && item.business_date === businessDate);
       throw new Error(gate?.message || '未生成全物料盘点计划。');
     }
-    steps.push({ code: 'plan', label: '刷新并生成全物料盘点单', plan_no: fullPlan.plan_no, material_count: fullPlan.material_count, snapshot_revision: fullPlan.snapshot_revision, snapshot_event_count: fullPlan.snapshot_event_count, bom_gate: fullPlan.bom_gate?.message });
+    steps.push({ code: 'plan', label: '刷新并生成每日盘点物料清单', plan_no: fullPlan.plan_no, material_count: fullPlan.material_count, snapshot_revision: fullPlan.snapshot_revision, snapshot_event_count: fullPlan.snapshot_event_count, bom_gate: fullPlan.bom_gate?.message });
 
     const countCandidates = fullPlan.lines.filter((line) => receiptRows.some((row) => normalizedKey(row.material_name) === normalizedKey(line.material_name) && row.unit === line.unit) && Number(line.theoretical_qty) > 0);
     if (countCandidates.length < 2) throw new Error('找不到两项已收货且理论库存为正的盘点物料。');
@@ -1007,7 +1007,7 @@ async function r2RunStoreDayDemo(env, body = {}) {
     const firstActuals = Object.fromEntries(fullPlan.lines.map((line) => [`${line.material_name}|${line.unit}`, Number(line.theoretical_qty || 0)]));
     firstActuals[`${lossLine.material_name}|${lossLine.unit}`] = r2Round(Math.max(0, Number(lossLine.theoretical_qty) - lossDelta));
     firstActuals[`${entryLine.material_name}|${entryLine.unit}`] = r2Round(Number(entryLine.theoretical_qty) * 10);
-    await r2ActionResult(await r2CreateInitialCount(env, { planNo: fullPlan.plan_no, filename: `正式演示全物料盘点-${fullPlan.plan_no}`, actuals: firstActuals }), '提交全物料盘点');
+    await r2ActionResult(await r2CreateInitialCount(env, { planNo: fullPlan.plan_no, filename: `正式演示每日物料盘点-${fullPlan.plan_no}`, actuals: firstActuals }), '提交每日盘点');
 
     value = await r2DemoState(env);
     const diagnosis = (value.diagnosisCases || []).find((item) => item.case_type === 'store_daily' && item.store_code === storeCode && item.latest_business_date === businessDate && item.status !== 'closed');
@@ -2474,7 +2474,7 @@ function r2CountPlanGate(value, view) {
   const missingUnits = (view.ledger || []).filter((row) => !row.unit || /未配置/.test(row.unit));
   const unmapped = view.unmappedSkus || [];
   const missingBomRecords = Math.max(0, Number(view.sales_lines || 0) - Number(view.mapped_sales_records || 0));
-  // 未映射 SKU 不能扣减库存，但不应阻止全物料盘点；将它显式作为数据质量预警。
+  // 未映射 SKU 不能扣减库存，但不应阻止每日盘点计划；将它显式作为数据质量预警。
   const passed = !missingUnits.length;
   const warning = missingBomRecords ? `${missingBomRecords} 条销售未配置本地 BOM，已跳过物料扣减。` : null;
   return { passed, checked_at: now(), store_code: view.store_code, business_date: view.business_date, sales_lines: view.sales_lines || 0, mapped_sales_records: view.mapped_sales_records || 0, material_count: (view.ledger || []).length, missing_unit_materials: missingUnits.map((row) => row.material_name), unmapped_skus: unmapped, skipped_unmapped_sales_records: missingBomRecords, warning, message: passed ? `盘点计划可生成：${view.mapped_sales_records || 0}/${view.sales_lines || 0} 条销售可按本地 BOM 拆解，${(view.ledger || []).length} 项物料单位完整。${warning ? ` ${warning}` : ''}` : `盘点计划已阻止：${missingUnits.length} 项物料缺少有效单位。` };
@@ -2511,20 +2511,20 @@ function r2EnsureDailyCountPlans(value, calculated = r2ImportedFeishuState(value
     if (existing) {
       if (existing.status === 'pending_store_count' && !existing.document_id) {
         existing.lines = lines; existing.material_count = lines.length; existing.source_batch_id = value.feishuImport?.id || null; existing.theoretical_snapshot_at = now(); existing.snapshot_event_count = (value.materialEvents || []).filter((event) => event.store_code === view.store_code && event.business_date === businessDate && event.status === 'active').length; existing.bom_gate = gate; existing.snapshot_revision = Number(existing.snapshot_revision || 1) + 1;
-        refreshed.push(existing); r2Audit(value, actor, '盘点前刷新理论库存快照', `${existing.plan_no} · 已刷新为 ${lines.length} 项全物料，纳入 ${existing.snapshot_event_count} 笔当日库存动作。`, existing.id);
+        refreshed.push(existing); r2Audit(value, actor, '盘点前刷新理论库存快照', `${existing.plan_no} · 已刷新为 ${lines.length} 项每日盘点物料，纳入 ${existing.snapshot_event_count} 笔当日库存动作。`, existing.id);
       }
       continue;
     }
     const plan = { id: planNo, plan_no: planNo, plan_type: 'daily_full', store_code: view.store_code, business_date: businessDate, status: 'pending_store_count', created_at: now(), generated_by: actor, source_batch_id: value.feishuImport?.id || null, material_count: lines.length, lines, submitted_material_count: 0, theoretical_snapshot_at: now(), snapshot_revision: 1, snapshot_event_count: (value.materialEvents || []).filter((event) => event.store_code === view.store_code && event.business_date === businessDate && event.status === 'active').length, bom_gate: gate };
     value.countPlans.unshift(plan); created.push(plan);
-    r2Audit(value, actor, '生成每日全物料盘点计划', `${planNo} · ${view.store_code} · 默认纳入 ${lines.length} 项物料。`, plan.id);
+    r2Audit(value, actor, '生成每日物料盘点计划', `${planNo} · ${view.store_code} · 按物料盘点策略纳入 ${lines.length} 项每日盘点物料。`, plan.id);
   }
   return { created, refreshed, blocked };
 }
 
 async function r2GenerateDailyCountPlans(env) {
   const value = await r2DemoState(env);
-  if (!value.feishuImport?.sales?.length && !value.ledgerSnapshots?.length) return bad('请先完成一次飞书销售同步或日结快照，才能生成全物料盘点计划。', 409);
+  if (!value.feishuImport?.sales?.length && !value.ledgerSnapshots?.length) return bad('请先完成一次飞书销售同步或日结快照，才能生成每日物料盘点计划。', 409);
   const calculated = value.feishuImport?.sales?.length ? r2ImportedFeishuState(value) : { storeViews: [] };
   const result = r2EnsureDailyCountPlans(value, calculated, '总部运营手动生成', chinaBusinessDate());
   const state = await r2SaveDemoState(env, value, result.created.length ? 'count-plan-generate' : result.refreshed.length ? 'count-plan-refresh' : result.blocked.length ? 'count-plan-blocked' : 'count-plan-exists');

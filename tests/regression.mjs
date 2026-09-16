@@ -1,6 +1,7 @@
 const base = (process.env.BASE_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
 const mutationTests = process.env.MUTATION_TESTS === '1';
 const results = [];
+let manualPlan = null;
 const session = (name) => `qa-${name}-${Date.now()}`.replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 80);
 
 async function json(path, options = {}) {
@@ -36,6 +37,25 @@ await check('master data and daily count range', async () => {
   return { stores:stores.length, products:products.length, materials:materials.length, daily:materials.length-optional.length, optional:optional.length };
 });
 
+await check('STORE001 safety stock scope and material conversions', async () => {
+  const state = await json('/api/state');
+  const policies = state.safetyStockPolicies || [];
+  if (policies.length !== 4 || policies.some((item) => item.store_code !== 'STORE001')) throw new Error(`unexpected safety policies: ${JSON.stringify(policies)}`);
+  const byName = new Map((state.materialCatalog || []).map((item) => [item.material_name, item]));
+  const expected = { 杯子:['个','箱',100], 黑糖珍珠:['g','kg',1000], 吸管:['个','箱',5000], 双杯袋:['个','箱',4000], 四杯袋:['个','箱',3000] };
+  for (const [name, [base, procurement, factor]] of Object.entries(expected)) {
+    const item = byName.get(name);
+    if (!item || item.base_unit !== base || item.procurement_unit !== procurement || Number(item.conversion_factor) !== factor) throw new Error(`${name} conversion mismatch`);
+  }
+  return { policy_count:policies.length, stores:[...new Set(policies.map((item) => item.store_code))], checked_conversions:Object.keys(expected) };
+});
+
+await check('known BOM coverage is explicit', async () => {
+  const sync = await json('/api/feishu-sync/state');
+  if (Number(sync.mapping?.product_skus || 0) !== 3 || Number(sync.mapping?.bom_skus || 0) !== 3) throw new Error(`unexpected demo BOM mapping: ${JSON.stringify(sync.mapping)}`);
+  return { mapped_skus:sync.mapping.bom_skus, product_master_skus:18, pending_brand_bom:15 };
+});
+
 await check('new pages are served', async () => {
   const paths = ['/count-plans/', '/documents/', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001'];
   for (const path of paths) {
@@ -43,6 +63,14 @@ await check('new pages are served', async () => {
     if (!response.ok) throw new Error(`${path}: ${response.status}`);
   }
   return paths;
+});
+
+await check('store HTML exposes three speech languages and safe fallback', async () => {
+  const [page, script] = await Promise.all([fetch(`${base}/store/?store=STORE001`).then((r) => r.text()), fetch(`${base}/store-agent.js`).then((r) => r.text())]);
+  for (const token of ['agent-language', 'zh-CN', 'en-US', 'id-ID']) if (!page.includes(token)) throw new Error(`missing ${token} in store page`);
+  if (!/SpeechRecognition|webkitSpeechRecognition/.test(script) || !/recognition\.lang/.test(script)) throw new Error('speech recognition language binding missing');
+  if (!/不支持|not support|tidak mendukung/i.test(`${page}\n${script}`)) throw new Error('speech fallback message missing');
+  return { languages:['zh-CN','en-US','id-ID'], speech_binding:true, text_fallback:true };
 });
 
 if (mutationTests) {
@@ -59,7 +87,54 @@ if (mutationTests) {
     const date = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Shanghai' }).format(new Date());
     const value = await json('/api/count-plans/manual', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ store_code:'STORE001', business_date:date, material_names:['牛奶','黑糖珍珠'], source_type:'work_order', source_work_order_id:'QA-WO-001', instruction:'自动回归：仅本地状态' }) });
     if (value.plan?.material_count !== 2 || value.plan?.plan_type !== 'work_order_material_set') throw new Error(JSON.stringify(value.plan));
+    manualPlan = value.plan;
     return { plan_no:value.plan.plan_no, materials:value.plan.material_count };
+  });
+
+  await check('count photo review requires confirmation and completes plan', async () => {
+    if (!manualPlan?.plan_no) throw new Error('manual plan was not created');
+    const uploaded = await json('/api/count-photo-recognition', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ planNo:manualPlan.plan_no, filename:'qa-count.png', previewData:'data:image/png;base64,iVBORw0KGgo=' }) });
+    if (!uploaded.review?.id || uploaded.review.lines?.length !== 2 || uploaded.review.needs_confirmation_count !== 2) throw new Error(JSON.stringify(uploaded.review));
+    const actuals = Object.fromEntries(uploaded.review.lines.map((line, index) => [`${line.material_name}|${line.unit}`, index + 1]));
+    const confirmed = await json('/api/count-photo-recognition/confirm', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ reviewId:uploaded.review.id, actuals }) });
+    const plan = (confirmed.countPlans || []).find((item) => item.plan_no === manualPlan.plan_no);
+    const document = (confirmed.documents || []).find((item) => item.count_plan_no === manualPlan.plan_no);
+    if (plan?.status !== 'pending_hq_review' || !document || document.lines?.length !== 2) throw new Error(`plan=${JSON.stringify(plan)} document=${JSON.stringify(document)}`);
+    return { plan_no:plan.plan_no, status:plan.status, document_id:document.id, line_count:document.lines.length };
+  });
+
+  await check('receipt and scrap flows create traceable documents and can be reverted', async () => {
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Shanghai' }).format(new Date());
+    const receiptState = await json('/api/material-events', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ store_code:'STORE001', business_date:date, material_name:'牛奶', unit:'L', qty:3, type:'receipt', reference:'QA receipt' }) });
+    const receipt = (receiptState.materialEvents || []).find((item) => item.reference === 'QA receipt');
+    const scrapState = await json('/api/material-events', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ store_code:'STORE001', business_date:date, material_name:'牛奶', unit:'L', qty:0.5, type:'scrap', reference:'QA scrap' }) });
+    const scrap = (scrapState.materialEvents || []).find((item) => item.reference === 'QA scrap');
+    if (!receipt?.document_no?.startsWith('RK-') || !scrap?.document_no?.startsWith('SC-') || receipt.status !== 'active' || scrap.status !== 'active') throw new Error(`receipt=${JSON.stringify(receipt)} scrap=${JSON.stringify(scrap)}`);
+    const receiptReverted = await json(`/api/material-events/${receipt.id}/revert`, { method:'POST' });
+    const scrapReverted = await json(`/api/material-events/${scrap.id}/revert`, { method:'POST' });
+    if ((receiptReverted.materialEvents || []).find((item) => item.id === receipt.id)?.status !== 'reverted' || (scrapReverted.materialEvents || []).find((item) => item.id === scrap.id)?.status !== 'reverted') throw new Error('event revert status mismatch');
+    return { receipt_no:receipt.document_no, scrap_no:scrap.document_no, final_status:'reverted' };
+  });
+
+  await check('follow-up work order supports proof and closure', async () => {
+    const created = await json('/api/operation-tasks', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ storeCode:'STORE001', title:'QA 库存核查', instruction:'核对收货与盘点凭证', taskType:'qa_regression' }) });
+    const task = created.operationTask;
+    if (!task?.id || task.status !== 'pending_store_submission') throw new Error(JSON.stringify(task));
+    const submitted = await json(`/api/operation-tasks/${task.id}/submit`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ filename:'qa-proof.png', previewData:'data:image/png;base64,iVBORw0KGgo=' }) });
+    const submittedTask = (submitted.operationTasks || []).find((item) => item.id === task.id);
+    if (submittedTask?.status !== 'pending_hq_review' || !submittedTask.proof_document_id) throw new Error(JSON.stringify(submittedTask));
+    const closed = await json(`/api/operation-tasks/${task.id}/close`, { method:'POST' });
+    const closedTask = (closed.operationTasks || []).find((item) => item.id === task.id);
+    if (closedTask?.status !== 'closed' || !closedTask.closed_at) throw new Error(JSON.stringify(closedTask));
+    return { task_id:task.id, status:closedTask.status, proof_document_id:submittedTask.proof_document_id };
+  });
+
+  await check('inventory Knowhow can be saved and read from R2', async () => {
+    const saved = await json('/api/diagnosis-knowhow', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ title:'QA 库存异常知识', source_filename:'qa-knowhow.md', content_markdown:'# QA\n仅用于自动化验证。' }) });
+    if (!saved.knowhow?.id) throw new Error(JSON.stringify(saved));
+    const read = await json('/api/diagnosis-knowhow');
+    if (!(read.knowhow || []).some((item) => item.id === saved.knowhow.id && item.title === 'QA 库存异常知识')) throw new Error('saved Knowhow not found');
+    return { id:saved.knowhow.id, title:saved.knowhow.title };
   });
 }
 
@@ -95,6 +170,15 @@ await check('Indonesian inventory query', async () => {
   const value = await ask({ message:'Cek stok susu', lang:'id-ID' });
   if (value.action?.type !== 'show_inventory') throw new Error(JSON.stringify(value.action));
   return value.action;
+});
+
+await check('English and Indonesian welcome replies never render undefined', async () => {
+  const english = await ask({ message:'__welcome__', lang:'en-US' });
+  const indonesian = await ask({ message:'__welcome__', lang:'id-ID' });
+  for (const [label, value] of [['English', english], ['Indonesian', indonesian]]) {
+    if (typeof value.reply !== 'string' || !value.reply.trim() || /undefined|null/i.test(value.reply)) throw new Error(`${label}: ${JSON.stringify(value)}`);
+  }
+  return { english:english.reply, indonesian:indonesian.reply };
 });
 
 await check('Multi-turn transfer context', async () => {
