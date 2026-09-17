@@ -32,7 +32,7 @@
 
 ### P0：真实环境验证与数据补齐
 
-1. 已上线真人语音验收页，可在 Chrome / Edge 中对中文、English、Bahasa Indonesia 的 9 条用例录音、核对意图并导出 JSON 报告；当前仍需真人授权麦克风并朗读。浏览器不支持或印尼语稳定性不足时，改用 MediaRecorder + 服务端 ASR。
+1. 已上线 `MediaRecorder + Workers AI Whisper` 真人语音验收页，可对中文、English、Bahasa Indonesia 的 9 条用例录音、服务端转写、核对意图并导出 JSON 报告；当前仍需真人授权麦克风并完成 9 条朗读，以形成准确率报告。
 2. Brown Sugar Boba Milk Tea 6 个真实 SKU 已完成 BOM 白名单；继续确认其二级半成品出成率、合理损耗率和保质期。其余 12 个商品当前是 MVP Mock，不列为品牌 BOM 缺口；未来转正式时再取得配方与生效日期。
 3. GitHub 已完成：私有仓库 `joearkon/inventory-count-closure-demo` 的 `main` 已推送并包含冻结提交 `4454ae3`；当前冻结标签为 `release-2026-09-16-mvp.3`。
 

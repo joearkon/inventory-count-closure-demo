@@ -348,6 +348,37 @@ async function r2SaveDemoState(env, value, action = 'update') {
 
 function r2Result(stateValue, status = 200) { return json(stateValue, status); }
 
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  return btoa(binary);
+}
+
+async function transcribeVoice(request, env) {
+  if (!env.AI) return bad('语音转写服务尚未配置。', 503);
+  const declaredSize = Number(request.headers.get('content-length') || 0);
+  if (declaredSize > 5 * 1024 * 1024) return bad('录音超过 5 MB，请缩短后重试。', 413);
+  const audioBuffer = await request.arrayBuffer();
+  if (audioBuffer.byteLength < 512) return bad('录音内容过短，请重新录音。', 400);
+  if (audioBuffer.byteLength > 5 * 1024 * 1024) return bad('录音超过 5 MB，请缩短后重试。', 413);
+  const requestedLanguage = request.headers.get('x-speech-language') || new URL(request.url).searchParams.get('lang') || '';
+  const language = ({ 'zh-CN':'zh', 'en-US':'en', 'id-ID':'id', zh:'zh', en:'en', id:'id' })[requestedLanguage] || undefined;
+  try {
+    const result = await env.AI.run('@cf/openai/whisper-large-v3-turbo', {
+      audio: arrayBufferToBase64(audioBuffer), task: 'transcribe', language,
+      vad_filter: true, condition_on_previous_text: false,
+      initial_prompt: '门店库存操作语音，可能包含 STORE001、STORE002、牛奶、黑糖珍珠、调拨、报损、库存。'
+    });
+    const transcript = String(result?.text || result?.transcription_info?.text || '').trim();
+    if (!transcript) return bad('没有识别到有效语音，请靠近麦克风后重试。', 422);
+    return json({ transcript, language: language || 'auto', model: '@cf/openai/whisper-large-v3-turbo', retained: false });
+  } catch (error) {
+    console.error('Voice transcription failed', error instanceof Error ? error.message : String(error));
+    return bad('语音转写服务暂时不可用，请重试或使用文字输入。', 502);
+  }
+}
+
 function r2StateView(value, view = '') {
   const importSummary = value.feishuImport ? {
     id: value.feishuImport.id, imported_at: value.feishuImport.imported_at,
@@ -3791,6 +3822,7 @@ export default {
       const storeCode = String(url.searchParams.get('store') || STORE_CODE).trim().slice(0, 64) || STORE_CODE;
       return json(await r2StoreBootstrap(env, storeCode));
     }
+    if (request.method === 'POST' && url.pathname === '/api/voice-transcribe') return transcribeVoice(request, env);
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/store-agent') return r2StoreAgent(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/store-agent/evidence') return r2CreateStoreAgentEvidence(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/count-photo-recognition') return r2CreateCountPhotoReview(env, await request.json().catch(() => ({})));

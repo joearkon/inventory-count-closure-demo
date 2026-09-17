@@ -65,7 +65,7 @@ node tests/regression.mjs
 - 补货申请确认、通知设置和未配置 Webhook 时的安全失败；
 - Knowhow 的 R2 保存与读取；
 - 中、英、印尼语意图、多轮上下文、边界和多单位换算；
-- HTML 语音语言绑定和不支持语音时的文字输入兜底。
+- HTML 录音、Workers AI 服务端转写和不支持录音时的文字输入兜底。
 - 主数据质量门禁：库存核心主档可用性与品牌半成品工艺参数完整性分开判定。
 - 高增长列表分页及页面专用轻量接口，避免单据、流水和研判数据无限渲染或下载完整状态。
 
@@ -84,7 +84,7 @@ node tests/regression.mjs
 
 ## 语音验收说明
 
-页面使用 Web Speech API，并提供 `zh-CN`、`en-US`、`id-ID`。Codex 内置浏览器不提供 `SpeechRecognition`，因此真实录音须在最新版 Chrome 或 Edge 的 HTTPS 页面验收。若目标设备对 `id-ID` 支持不稳定，推荐使用 `MediaRecorder + 服务端 ASR`，转写结果仍进入同一确认表单，不能直接写库存。
+页面使用 `MediaRecorder` 采集音频，并通过 Workers AI 的 Whisper 服务端转写，支持 `zh-CN`、`en-US`、`id-ID`。操作方式为“开始录音 → 朗读 → 停止并转写”；音频仅用于当次转写，不保存到 R2。转写结果只进入测试判定或业务草稿，不能直接写库存。
 
 ## 版本与回滚
 
