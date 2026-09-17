@@ -94,7 +94,12 @@ await check('dense operation pages use focused tabs and voice has an immersive o
   if ((transfers.match(/data-transfer-tab=/g) || []).length !== 2 || !/data-transfer-source="demo"/.test(transfers)) throw new Error('transfer management tabs or source filter missing');
   if (/门店库存流水档案/.test(`${transfers}\n${transferScript}`) || /archive-rows/.test(transferScript)) throw new Error('duplicate transfer flow archive must be removed');
   if (!/agent-voice-overlay/.test(store) || !/voiceOverlay.*classList\.add\('show','recording'\)/s.test(storeScript)) throw new Error('store voice input needs an immersive recording overlay');
-  return { count_tabs:3, transfer_tabs:2, transfer_archive_removed:true, immersive_voice:true };
+  if (!/\.agent-input-area\s*\{[^}]*position:fixed/s.test(store)) throw new Error('mobile assistant input must stay fixed above the bottom navigation');
+  if (!/\.agent-voice-overlay\.show\s*\{[^}]*pointer-events:auto/s.test(store)) throw new Error('voice overlay must intercept touches while visible');
+  if (!/store-agent-voice-cancel/.test(store) || !/store-agent-voice-finish/.test(store)) throw new Error('voice overlay needs explicit cancel and finish actions');
+  if (!/voicePermissionPending/.test(storeScript) || /stopVoiceRequested/.test(storeScript)) throw new Error('voice permission flow can stop recording prematurely');
+  if (/mic\.addEventListener\('pointerdown'/.test(storeScript)) throw new Error('voice recording should not rely on press-and-release timing');
+  return { count_tabs:3, transfer_tabs:2, transfer_archive_removed:true, immersive_voice:true, mobile_input_fixed:true, permission_flow_guarded:true };
 });
 
 await check('growing lists use pagination and lightweight API views', async () => {

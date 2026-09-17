@@ -266,7 +266,7 @@
   .store-tab-bar .tab-btn { display:flex; flex-direction:column; align-items:center; gap:2px; min-height:48px; padding:5px 8px; border-radius:9px; font-size:11px; }
   .store-tab-bar .tab-btn .tab-icon { margin:0; font-size:19px; line-height:1.15; }
   .store-tab-bar .tab-btn.active { background:#eaf1ff; color:#245bdb; }
-  .agent-card { min-height:calc(100vh - 184px); display:flex; flex-direction:column; }
+  .agent-card { min-height:calc(100dvh - 184px); display:flex; flex-direction:column; padding-bottom:76px; }
   .agent-card .card-header { display:flex; justify-content:space-between; align-items:center; }
   .agent-online { color:#237b42; font-size:12px; font-weight:500; }
   .agent-chat { flex:1; min-height:320px; max-height:54vh; overflow:auto; padding:14px 14px 4px; display:flex; flex-direction:column; gap:10px; background:linear-gradient(#fbfcff,#fff); }
@@ -276,7 +276,7 @@
   .agent-message .agent-caption { display:block; margin-bottom:4px; color:#3370ff; font-size:11px; font-weight:700; }
   .agent-chips { display:flex; gap:8px; overflow-x:auto; padding:10px 12px; border-top:1px solid #f0f1f3; white-space:nowrap; }
   .agent-chip { flex:0 0 auto; border:1px solid #d8e4ff; border-radius:999px; background:#f5f8ff; color:#245bdb; padding:6px 10px; font:600 12px inherit; cursor:pointer; }
-  .agent-input-area { display:flex; gap:8px; align-items:flex-end; padding:10px 12px 14px; border-top:1px solid #f0f1f3; background:#fff; }
+  .agent-input-area { position:fixed; z-index:110; left:50%; bottom:calc(61px + env(safe-area-inset-bottom)); transform:translateX(-50%); display:flex; gap:8px; align-items:flex-end; width:100%; max-width:414px; padding:10px 12px 12px; border-top:1px solid #f0f1f3; background:rgba(255,255,255,.98); box-shadow:0 -5px 18px rgba(31,35,41,.08); backdrop-filter:blur(12px); }
   .agent-input { flex:1; min-height:38px; max-height:80px; padding:8px 12px; resize:none; border:1px solid #dcdfe5; border-radius:18px; background:#f5f6f7; color:#1f2329; font:14px inherit; line-height:1.5; outline:none; }
   .agent-input:focus { border-color:#3370ff; background:#fff; box-shadow:0 0 0 3px rgba(51,112,255,.1); }
   .agent-icon-btn { width:38px; height:38px; flex:0 0 38px; border:0; border-radius:50%; background:#fff; color:#3370ff; font-size:17px; cursor:pointer; }
@@ -285,13 +285,17 @@
   .agent-helper { padding:0 14px 10px; color:#8f959e; font-size:11px; }
   .agent-voice-note { padding:8px 12px; margin:0 12px 10px; border-radius:8px; background:#fff5e6; color:#9c6800; font-size:12px; display:none; }
   .agent-voice-note.show { display:block; }
-  .agent-voice-overlay { position:fixed; z-index:1200; left:0; right:0; bottom:0; min-height:300px; padding:38px 24px 32px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; border-radius:28px 28px 0 0; background:linear-gradient(180deg,#f4f7ff 0%,#fff 100%); box-shadow:0 -100vh 0 rgba(18,27,48,.48),0 -12px 40px rgba(31,57,116,.18); transform:translateY(110%); opacity:0; transition:transform .2s ease,opacity .2s ease; pointer-events:none; }
-  .agent-voice-overlay.show { transform:translateY(0); opacity:1; }
+  .agent-voice-overlay { position:fixed; z-index:1200; left:0; right:0; bottom:0; min-height:330px; padding:38px 24px calc(28px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:15px; border-radius:28px 28px 0 0; background:linear-gradient(180deg,#f4f7ff 0%,#fff 100%); box-shadow:0 -100vh 0 rgba(18,27,48,.56),0 -12px 40px rgba(31,57,116,.18); transform:translateY(110%); opacity:0; transition:transform .2s ease,opacity .2s ease; pointer-events:none; touch-action:none; }
+  .agent-voice-overlay.show { transform:translateY(0); opacity:1; pointer-events:auto; }
   .agent-voice-orb { position:relative; width:112px; height:112px; display:grid; place-items:center; border-radius:50%; background:#3370ff; color:#fff; font-size:42px; box-shadow:0 12px 32px rgba(51,112,255,.34); }
   .agent-voice-overlay.recording .agent-voice-orb::before,.agent-voice-overlay.recording .agent-voice-orb::after { content:""; position:absolute; inset:-12px; border:2px solid rgba(51,112,255,.35); border-radius:50%; animation:voicePulse 1.6s infinite; }
   .agent-voice-overlay.recording .agent-voice-orb::after { animation-delay:.8s; }
   .agent-voice-overlay strong { font-size:22px; color:#1f2329; }
   .agent-voice-overlay span { color:#646a73; font-size:14px; }
+  .agent-voice-actions { display:grid; grid-template-columns:1fr 1fr; gap:12px; width:min(330px,100%); margin-top:5px; }
+  .agent-voice-actions button { min-height:46px; border:0; border-radius:12px; font:600 15px inherit; cursor:pointer; touch-action:manipulation; }
+  .agent-voice-cancel { background:#f2f3f5; color:#4e5969; }
+  .agent-voice-finish { background:#3370ff; color:#fff; }
   @keyframes voicePulse { 0%{transform:scale(.85);opacity:.9} 100%{transform:scale(1.35);opacity:0} }
   .agent-voice-settings { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 12px 0; color:#646a73; font-size:12px; }
   .agent-voice-settings select { width:auto; min-width:130px; padding:6px 8px; border:1px solid #dcdfe5; border-radius:7px; background:#fff; color:#1f2329; font:12px inherit; }
@@ -408,10 +412,10 @@
     <div class="agent-voice-note" id="store-agent-voice-note">正在录音…松开后转写</div>
     <div class="agent-input-area">
       <textarea id="store-agent-input" class="agent-input" rows="1" maxlength="600" placeholder="直接说：调 2kg 黑糖珍珠去 STORE002"></textarea>
-      <button type="button" id="store-agent-mic" class="agent-icon-btn" aria-label="按住说话，松开后转写">🎙️</button>
+      <button type="button" id="store-agent-mic" class="agent-icon-btn" aria-label="点击开始语音输入">🎙️</button>
       <button type="button" id="store-agent-send" class="agent-icon-btn send" aria-label="发送">➤</button>
     </div>
-    <div class="agent-voice-overlay" id="store-agent-voice-overlay" aria-live="polite"><div class="agent-voice-orb">🎙️</div><strong id="store-agent-voice-overlay-title">正在聆听</strong><span id="store-agent-voice-overlay-text">请对着麦克风说话，松开后自动转写</span></div>
+    <div class="agent-voice-overlay" id="store-agent-voice-overlay" aria-live="polite" role="dialog" aria-modal="true"><div class="agent-voice-orb">🎙️</div><strong id="store-agent-voice-overlay-title">正在聆听</strong><span id="store-agent-voice-overlay-text">请对着麦克风说话，完成后点击下方按钮</span><div class="agent-voice-actions"><button class="agent-voice-cancel" id="store-agent-voice-cancel" type="button">取消</button><button class="agent-voice-finish" id="store-agent-voice-finish" type="button">完成录音</button></div></div>
     <div class="agent-helper">AI 会先识别并预填表单；库存与单据仍需由门店确认提交。</div>
   </section>
 </div>

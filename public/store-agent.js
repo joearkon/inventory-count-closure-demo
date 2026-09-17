@@ -6,10 +6,10 @@
   const sessionKey = `store-agent-session:${storeCode}`;
   const sessionId = sessionStorage.getItem(sessionKey) || (() => { const value = `web-${crypto.randomUUID()}`; sessionStorage.setItem(sessionKey, value); return value; })();
   const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
-  const chat = by('store-agent-chat'), input = by('store-agent-input'), send = by('store-agent-send'), mic = by('store-agent-mic'), voiceNote = by('store-agent-voice-note'), voiceOverlay = by('store-agent-voice-overlay'), voiceOverlayTitle = by('store-agent-voice-overlay-title'), voiceOverlayText = by('store-agent-voice-overlay-text'), language = by('store-agent-language'), voiceQa = by('store-agent-voice-qa');
+  const chat = by('store-agent-chat'), input = by('store-agent-input'), send = by('store-agent-send'), mic = by('store-agent-mic'), voiceNote = by('store-agent-voice-note'), voiceOverlay = by('store-agent-voice-overlay'), voiceOverlayTitle = by('store-agent-voice-overlay-title'), voiceOverlayText = by('store-agent-voice-overlay-text'), voiceCancel = by('store-agent-voice-cancel'), voiceFinish = by('store-agent-voice-finish'), language = by('store-agent-language'), voiceQa = by('store-agent-voice-qa');
   if (voiceQa) voiceQa.href = `/voice-qa/?store=${encodeURIComponent(storeCode)}`;
   const sheet = by('agent-sheet'), sheetTitle = by('agent-sheet-title'), sheetForm = by('agent-sheet-form'), sheetStatus = by('agent-sheet-status'), sheetSubmit = by('agent-sheet-submit');
-  let welcomed = false, busy = false, speaking = false, mediaRecorder = null, activeVoiceStream = null, voiceChunks = [], stopVoiceRequested = false, ledger = [], draft = null, latestStoreState = null;
+  let welcomed = false, busy = false, speaking = false, voicePermissionPending = false, discardVoice = false, mediaRecorder = null, activeVoiceStream = null, voiceChunks = [], ledger = [], draft = null, latestStoreState = null;
 
   function addMessage(text, role = 'assistant', html = false) {
     const node = document.createElement('div'); node.className = `agent-message ${role}`;
@@ -183,28 +183,31 @@
       const transcript = String(data.transcript || '').trim(); if (!transcript) throw new Error('没有识别到有效语音');
       input.value = transcript; resizeInput(); await ask(transcript);
     } catch (error) { addMessage(error.name === 'AbortError' ? '语音转写超时，请重试或直接输入文字。' : `${voiceErrorText(error.message.includes('有效语音') ? 'no-speech' : 'unavailable')}（${error.message}）`); }
-    finally { clearTimeout(timeoutId); speaking = false; stopVoiceRequested = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); releaseVoiceStream(); }
+    finally { clearTimeout(timeoutId); speaking = false; voicePermissionPending = false; discardVoice = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); releaseVoiceStream(); }
   }
   async function startVoice() {
     if (speaking || busy) return;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { addMessage(voiceErrorText('unsupported')); return; }
-    speaking = true; stopVoiceRequested = false; mic.classList.add('recording'); voiceNote.classList.add('show'); voiceOverlay?.classList.add('show','recording'); if (voiceOverlayTitle) voiceOverlayTitle.textContent = '正在聆听'; if (voiceOverlayText) voiceOverlayText.textContent = `请说${language?.selectedOptions?.[0]?.textContent || language?.value || '中文'}，松开后自动转写`; voiceNote.textContent = `正在录音（${language?.selectedOptions?.[0]?.textContent || language?.value || 'zh-CN'}）…松开后转写`;
+    speaking = true; voicePermissionPending = true; discardVoice = false; mic.classList.add('recording'); voiceNote.classList.add('show'); voiceNote.textContent = '正在请求麦克风权限…';
     try {
       activeVoiceStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
+      voicePermissionPending = false;
       const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
       mediaRecorder = new MediaRecorder(activeVoiceStream, mimeType ? { mimeType } : undefined); voiceChunks = [];
       mediaRecorder.ondataavailable = (event) => { if (event.data?.size) voiceChunks.push(event.data); };
       mediaRecorder.onerror = (event) => { addMessage(`录音错误：${event.error?.message || 'unknown'}`); speaking = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); };
-      mediaRecorder.onstop = () => { const blob = new Blob(voiceChunks, { type:mediaRecorder?.mimeType || mimeType || 'audio/webm' }); if (blob.size < 512) { speaking = false; voiceNote.classList.remove('show'); mic.classList.remove('recording'); releaseVoiceStream(); return addMessage(voiceErrorText('no-speech')); } transcribeVoice(blob); };
-      mediaRecorder.start(250); if (stopVoiceRequested) mediaRecorder.stop();
-    } catch (error) { speaking = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); addMessage(voiceErrorText(error.name === 'NotAllowedError' ? 'not-allowed' : 'unavailable')); }
+      mediaRecorder.onstop = () => { const blob = new Blob(voiceChunks, { type:mediaRecorder?.mimeType || mimeType || 'audio/webm' }); if (discardVoice) { speaking = false; discardVoice = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); return; } if (blob.size < 512) { speaking = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); return addMessage(voiceErrorText('no-speech')); } transcribeVoice(blob); };
+      mediaRecorder.start(250); voiceOverlay?.classList.add('show','recording'); if (voiceOverlayTitle) voiceOverlayTitle.textContent = '正在聆听'; if (voiceOverlayText) voiceOverlayText.textContent = `请说${language?.selectedOptions?.[0]?.textContent || language?.value || '中文'}，完成后点击下方按钮`; voiceNote.textContent = `正在录音（${language?.selectedOptions?.[0]?.textContent || language?.value || 'zh-CN'}）…`;
+    } catch (error) { speaking = false; voicePermissionPending = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); addMessage(voiceErrorText(error.name === 'NotAllowedError' ? 'not-allowed' : 'unavailable')); }
   }
-  function stopVoice() { if (!speaking) return; stopVoiceRequested = true; if (mediaRecorder?.state === 'recording') mediaRecorder.stop(); }
+  function stopVoice() { if (!speaking || voicePermissionPending) return; if (mediaRecorder?.state === 'recording') mediaRecorder.stop(); }
+  function cancelVoice() { if (!speaking) return; discardVoice = true; voicePermissionPending = false; if (mediaRecorder?.state === 'recording') mediaRecorder.stop(); else { speaking = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); } }
 
   send.addEventListener('click', () => ask(input.value)); input.addEventListener('input', resizeInput); input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); ask(input.value); } });
   document.querySelectorAll('[data-agent-prompt]').forEach((button) => button.addEventListener('click', () => ask(button.dataset.agentPrompt)));
   chat.addEventListener('click', (event) => { if (event.target.closest('[data-agent-open-sheet]')) { openSheet(); return; } const taskButton = event.target.closest('[data-agent-task-action]'); if (!taskButton) return; const type = taskButton.dataset.agentTaskAction; if (type === 'open_task_tab') { window.switchStoreTab?.('tasks'); return; } const intent = intentFromAction({ type }); if (!intent) return; startDraft(intent, { plan_no: taskButton.dataset.agentTaskPlan || '', request_id: taskButton.dataset.agentTaskRequest || '', direction: taskButton.dataset.agentTaskDirection || '' }, '', false); openSheet(); });
-  mic.addEventListener('pointerdown', (event) => { event.preventDefault(); startVoice(); }); ['pointerup', 'pointercancel', 'pointerleave'].forEach((type) => mic.addEventListener(type, stopVoice));
+  mic.addEventListener('click', (event) => { event.preventDefault(); if (speaking && !voicePermissionPending) stopVoice(); else startVoice(); });
+  voiceFinish?.addEventListener('click', stopVoice); voiceCancel?.addEventListener('click', cancelVoice);
   [by('agent-sheet-close'), by('agent-sheet-cancel')].forEach((button) => button?.addEventListener('click', closeSheet)); sheetForm.addEventListener('submit', submitSheet);
   window.storeAgentTabOpened = welcome;
   window.storeOpsRefresh = loadLedger;
