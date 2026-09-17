@@ -30,6 +30,16 @@
     const location = anomaly.primary_location?.title || anomaly.primary_attribution || '待验证位置';
     return `<strong>当前判断来源：规则引擎 · ${esc(code)}</strong>${esc(anomaly.material_name || '')}${anomaly.unit ? `（${esc(anomaly.unit)}）` : ''} · ${esc(location)}<br>关联研判：${esc(anomaly.judgment_task_no || anomaly.id)}`;
   };
+  const evidenceStatus = (value) => ({ confirmed:'已确认', suspect:'疑似', insufficient:'证据不足', pending_count:'待盘点', unknown:'未知', partial:'部分数据', unlinked:'未关联', triggered:'仍触发', not_triggered:'已恢复' }[value] || value || '未知');
+  const diagnosisHtml = (data) => {
+    const current = data.diagnosis_v2;
+    if (!current?.comparison) return '<div class="empty">该工单未关联可运行的 V2 研判。</div>';
+    const { comparison } = current, result = comparison.v2, packet = comparison.fact_packet, runs = data.diagnosis_runs || [];
+    const gaps = (result.evidence_gaps || []).length ? `<ul class="evidence-list">${result.evidence_gaps.map((item) => `<li><b>${esc(item.label)}</b> · ${esc(evidenceStatus(item.state))}<br><span>${esc(item.explanation || '')}</span></li>`).join('')}</ul>` : '<div class="good">当前没有待补充的关键证据。</div>';
+    const trace = (result.decision_trace || []).map((item) => `<li><b>${esc(item.node_id)}</b> ${esc(item.message)}</li>`).join('');
+    const history = runs.length ? `<div class="run-history"><b>已保存 ${runs.length} 次研判快照</b>${runs.map((run, index) => `<span>${index + 1}. ${formatDate(run.created_at)} · ${esc(evidenceStatus(run.anomaly_status))} · ${esc(run.primary_location)}</span>`).join('')}</div>` : '<div class="run-history"><b>当前为动态预览</b><span>点击重新研判后保存第一份工单快照。</span></div>';
+    return `<div class="v2-head"><div><span class="v2-label">规则 V2</span><h3>${esc(result.primary_location)}</h3><p>${esc(result.primary_hypothesis)}</p></div><div class="v2-states"><span>${esc(evidenceStatus(result.anomaly_status))}</span><span>${esc(evidenceStatus(result.cause_evidence_status))}</span><span>${esc(evidenceStatus(result.physical_status))}</span></div></div><div class="v2-balance">理论期末：<b>${esc(packet.quantities.theoretical_closing.value)} ${esc(comparison.unit)}</b>　实盘：<b>${packet.physical_count.value == null ? '未取得' : `${esc(packet.physical_count.value)} ${esc(comparison.unit)}`}</b></div><h4>缺失或待关联证据</h4>${gaps}<details><summary>查看决策轨迹</summary><ol class="trace">${trace}</ol></details>${history}`;
+  };
   const render = (data) => {
     const { task, documents = [], events = [] } = data;
     const status = statusInfo(task.status);
@@ -42,6 +52,7 @@
         <section class="panel"><div class="panel-head"><h2>工单信息</h2></div><div class="panel-body"><div class="meta-grid"><div class="meta"><span>工单编号</span>${esc(task.id)}</div><div class="meta"><span>门店 / 主体</span>${esc(task.store_code || '—')}</div><div class="meta"><span>责任角色</span>${esc(task.assigned_to || '—')}</div><div class="meta"><span>当前操作人</span>${esc(task.last_operator || '—')}</div><div class="meta"><span>创建时间</span>${formatDate(task.created_at)}</div><div class="meta"><span>最近更新</span>${formatDate(task.updated_at || task.submitted_at || task.created_at)}</div></div></div></section>
         <section class="panel"><div class="panel-head"><h2>任务详情</h2></div><div class="panel-body"><p class="instruction">${esc(task.instruction)}</p></div></section>
         <section class="panel"><div class="panel-head"><h2>来源与判断记录</h2></div><div class="panel-body"><div class="source">${sourceHtml(data)}</div></div></section>
+        <section class="panel"><div class="panel-head split"><h2>规则 V2 研判</h2><button class="btn" id="reassess-task">重新研判并保存快照</button></div><div class="panel-body">${diagnosisHtml(data)}</div></section>
         <section class="panel"><div class="panel-head"><h2>关联单据与业务记录</h2></div><div class="panel-body"><div class="document-list">${docs}</div>${eventRows}</div></section>
         <section class="panel"><div class="panel-head"><h2>处理时间线</h2></div><div class="panel-body"><div class="timeline">${timeRows}</div></div></section>
         ${task.resolution ? `<section class="panel"><div class="panel-head"><h2>闭环结论</h2></div><div class="panel-body"><div class="resolution">${esc(task.resolution)}</div></div></section>` : ''}
@@ -71,6 +82,11 @@
       if (!confirm('确认凭证无误并关闭这张工单吗？')) return;
       const restore = setLoading(event.currentTarget, '正在关闭…');
       try { await api(`/api/operation-tasks/${encodeURIComponent(data.task.id)}/close`, { method:'POST' }); await load(); }
+      catch (error) { alert(error.message); restore(); }
+    });
+    document.getElementById('reassess-task')?.addEventListener('click', async (event) => {
+      const restore = setLoading(event.currentTarget, '正在重新研判…');
+      try { await api(`/api/operation-tasks/${encodeURIComponent(data.task.id)}/reassess`, { method:'POST', body:'{}' }); await load(); }
       catch (error) { alert(error.message); restore(); }
     });
   };

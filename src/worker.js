@@ -691,12 +691,59 @@ async function r2AddOperationTaskNote(env, taskId, body) {
   return r2Result(await r2SaveDemoState(env, value, 'operation-note'));
 }
 
+function r2CurrentTaskDiagnosisV2(value, task) {
+  if (!task?.source_anomaly_id || !value.feishuImport?.sales) return null;
+  const calculated = r2ImportedFeishuState(value);
+  const report = buildDiagnosisShadowReport({
+    ...calculated,
+    purchaseOrders:value.purchaseOrders || [],
+    receiptOrders:value.receiptOrders || [],
+    storeTransferRequests:value.storeTransferRequests || []
+  }, value.materialCatalog || []);
+  const comparison = report.comparisons.find((item) => item.signal_id === task.source_anomaly_id) || null;
+  return comparison ? { generated_at:report.generated_at, comparison } : null;
+}
+
+function r2DiagnosisRunSnapshot(current, trigger = 'manual') {
+  if (!current?.comparison) return null;
+  const comparison = current.comparison;
+  return {
+    id:id('RUN'), trigger, created_at:current.generated_at || now(), ruleset_id:comparison.v2.ruleset_id,
+    rule_code:comparison.v2.rule_code, rule_version:comparison.v2.rule_version,
+    anomaly_status:comparison.v2.anomaly_status, cause_evidence_status:comparison.v2.cause_evidence_status,
+    physical_status:comparison.v2.physical_status, primary_location:comparison.v2.primary_location,
+    primary_hypothesis:comparison.v2.primary_hypothesis, evidence_gaps:comparison.v2.evidence_gaps || [],
+    recommended_action_ids:comparison.v2.recommended_action_ids || [], fact_packet_id:comparison.fact_packet.fact_packet_id,
+    theoretical_closing:comparison.fact_packet.quantities.theoretical_closing,
+    physical_count:comparison.fact_packet.physical_count,
+    decision_trace:comparison.v2.decision_trace || []
+  };
+}
+
+async function r2ReassessOperationTask(env, taskId) {
+  const value = await r2DemoState(env);
+  const task = (value.operationTasks || []).find((item) => item.id === taskId);
+  if (!task) return bad('跟进工单不存在。', 404);
+  if (!task.source_anomaly_id) return bad('该工单未关联库存研判，不能运行 V2。', 409);
+  const current = r2CurrentTaskDiagnosisV2(value, task);
+  if (!current) return bad('当前关联研判已关闭或缺少可计算事实，无法重新研判。', 409);
+  const run = r2DiagnosisRunSnapshot(current, 'manual_reassess');
+  task.diagnosis_runs = [...(task.diagnosis_runs || []), run].slice(-20);
+  task.latest_diagnosis_run_id = run.id; task.updated_at = run.created_at;
+  task.activity_log = [...(task.activity_log || []), { id:id('LOG'), type:'diagnosis_reassess', note:`V2 重新研判：${run.anomaly_status === 'triggered' ? '异常仍触发' : '异常已恢复'}；首要位置：${run.primary_location}。`, operator:'系统规则引擎', created_at:run.created_at, source:'diagnosis_v2' }];
+  r2Audit(value, '系统规则引擎', 'V2 重新研判', `${task.id} · ${run.rule_code} · ${run.anomaly_status} · ${run.primary_location}`, task.id);
+  value.operationTask = task;
+  await r2SaveDemoState(env, value, 'operation-diagnosis-reassess');
+  return json({ task, diagnosis_v2:current, diagnosis_runs:task.diagnosis_runs, storage:value.storage });
+}
+
 async function r2OperationTaskDetail(env, taskId) {
   const value = await r2DemoState(env);
   const task = (value.operationTasks || []).find((item) => item.id === taskId);
   if (!task) return bad('跟进工单不存在。', 404);
   const documentIds = new Set([...(task.linked_document_ids || []), task.proof_document_id].filter(Boolean));
   const eventIds = new Set(task.linked_event_ids || []);
+  const diagnosisV2 = r2CurrentTaskDiagnosisV2(value, task);
   return json({
     task,
     anomaly: (value.materialAnomalies || []).find((item) => item.id === task.source_anomaly_id) || null,
@@ -707,6 +754,8 @@ async function r2OperationTaskDetail(env, taskId) {
     ],
     events: (value.materialEvents || []).filter((item) => eventIds.has(item.id)),
     audits: (value.audits || []).filter((item) => item.task_id === task.id),
+    diagnosis_v2:diagnosisV2,
+    diagnosis_runs:task.diagnosis_runs || [],
     storage: value.storage
   });
 }
@@ -744,6 +793,8 @@ async function r2CreateDiagnosisWorkOrder(env, anomalyId) {
     source_anomaly_id: signal.id, source_rule_code: signal.rule_code,
     linked_document_ids: sourceDocumentId ? [sourceDocumentId] : [], linked_event_ids: []
   };
+  const firstRun = r2DiagnosisRunSnapshot(r2CurrentTaskDiagnosisV2(value, task), 'work_order_created');
+  if (firstRun) { task.diagnosis_runs = [firstRun]; task.latest_diagnosis_run_id = firstRun.id; }
   value.operationTasks.unshift(task); value.operationTask = task;
   r2Audit(value, '总部运营', '建立库存研判跟进工单', `${task.id} · ${signal.judgment_task_no || signal.id} · ${copy.title}`, task.id);
   return r2Result(await r2SaveDemoState(env, value, 'diagnosis-work-order-create'), 201);
@@ -4280,6 +4331,7 @@ export default {
     if (env.DEMO_STATE && request.method === 'GET' && /^\/api\/operation-tasks\/[^/]+$/.test(url.pathname)) return r2OperationTaskDetail(env, decodeURIComponent(url.pathname.split('/')[3]));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/operation-tasks') return r2CreateOperationTask(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/notes')) return r2AddOperationTaskNote(env, url.pathname.split('/')[3], await request.json().catch(() => ({})));
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/reassess')) return r2ReassessOperationTask(env, url.pathname.split('/')[3]);
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/submit')) return r2OperationTransition(env, url.pathname.split('/')[3], await request.json().catch(() => ({})), 'submit');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close')) return r2OperationTransition(env, url.pathname.split('/')[3], {}, 'close');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/governance-tasks') return r2Governance(env, null, await request.json().catch(() => ({})), 'create');
