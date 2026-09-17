@@ -272,6 +272,22 @@ await check('English inventory query', async () => {
   return value.action;
 });
 
+await check('Chinese multi-material inventory query', async () => {
+  const value = await ask({ message:'给我查询一下牛奶和黑糖珍珠两个物料的库存' });
+  const items = value.action?.data?.items || [];
+  if (value.action?.type !== 'show_inventory' || items.length !== 2) throw new Error(JSON.stringify(value));
+  if (!items.some((item) => item.material_name === '牛奶') || !items.some((item) => item.material_name === '黑糖珍珠')) throw new Error(JSON.stringify(items));
+  if (!value.reply.includes('牛奶') || !value.reply.includes('黑糖珍珠')) throw new Error(value.reply);
+  return { materials:items.map((item) => item.material_name), lines:value.reply.split('\n').length };
+});
+
+await check('English multi-material inventory query', async () => {
+  const value = await ask({ message:'Check milk and brown sugar pearl inventory', lang:'en-US' });
+  const items = value.action?.data?.items || [];
+  if (value.action?.type !== 'show_inventory' || items.length !== 2) throw new Error(JSON.stringify(value));
+  return { materials:items.map((item) => item.material_name) };
+});
+
 await check('Indonesian inventory query', async () => {
   const value = await ask({ message:'Cek stok susu', lang:'id-ID' });
   if (value.action?.type !== 'show_inventory') throw new Error(JSON.stringify(value.action));

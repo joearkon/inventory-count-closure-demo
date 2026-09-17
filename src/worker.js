@@ -3500,21 +3500,42 @@ function r2StoreAgentDestination(message) {
 }
 
 function r2StoreAgentMaterial(rows, message) {
+  return r2StoreAgentMaterials(rows, message)[0] || null;
+}
+
+function r2StoreAgentMaterials(rows, message) {
   const normalizedMessage = normalizedKey(message);
-  if (!normalizedMessage) return null;
-  const exact = rows.find((row) => normalizedMessage.includes(normalizedKey(row.material_name)));
-  if (exact) return exact;
+  if (!normalizedMessage) return [];
+  const matches = [];
+  const occupied = [];
+  const candidates = rows.map((row) => ({ row, key: normalizedKey(row.material_name) })).filter((item) => item.key).sort((a, b) => b.key.length - a.key.length);
+  for (const candidate of candidates) {
+    let offset = 0;
+    while (offset < normalizedMessage.length) {
+      const start = normalizedMessage.indexOf(candidate.key, offset);
+      if (start < 0) break;
+      const end = start + candidate.key.length;
+      if (!occupied.some((range) => start < range.end && end > range.start)) {
+        matches.push({ row:candidate.row, start }); occupied.push({ start, end }); break;
+      }
+      offset = start + 1;
+    }
+  }
   const aliases = [
     { names: ['milk', 'susu'], material: '牛奶' },
     { names: ['freshmilk', 'sususegar'], material: '鲜牛奶' },
-    { names: ['brownsugarpearl', 'brownsugarboba', 'mutiaragulamerah', 'bobagulamerah'], material: '黑糖珍珠' },
+    { names: ['黑糖', 'brownsugarpearl', 'brownsugarboba', 'mutiaragulamerah', 'bobagulamerah'], material: '黑糖珍珠' },
     { names: ['tea', 'daunteh'], material: '茶叶' },
     { names: ['straw', 'sedotan'], material: '吸管' },
     { names: ['plasticcup', 'gelasplastik'], material: '塑料杯' }
   ];
-  const alias = aliases.find((item) => item.names.some((name) => normalizedMessage.includes(normalizedKey(name))));
-  if (alias) return rows.find((row) => normalizedKey(row.material_name) === normalizedKey(alias.material)) || null;
-  return rows.find((row) => normalizedKey(row.material_name).includes(normalizedMessage)) || null;
+  for (const alias of aliases) {
+    const aliasPositions = alias.names.map((name) => normalizedMessage.indexOf(normalizedKey(name))).filter((position) => position >= 0);
+    if (!aliasPositions.length) continue;
+    const row = rows.find((item) => normalizedKey(item.material_name) === normalizedKey(alias.material));
+    if (row && !matches.some((item) => item.row.material_name === row.material_name)) matches.push({ row, start:Math.min(...aliasPositions) });
+  }
+  return matches.sort((a, b) => a.start - b.start).map((item) => item.row).slice(0, 12);
 }
 
 function r2StoreAgentReason(message) {
@@ -3538,7 +3559,7 @@ function r2StoreAgentTools() {
     { type: 'function', function: { name: 'receipt_inventory', description: '登记门店实际收货或入库草稿。', parameters: { type: 'object', properties: { material: { type: 'string' }, qty: { type: 'number' }, unit: { type: 'string', enum: ['kg', 'L', '个'] } }, required: [] } } },
     { type: 'function', function: { name: 'stok_opname', description: '发起门店盘点；用户提到盘点、盘库、清点时调用。', parameters: { type: 'object', properties: { material: { type: 'string', description: '指定物料；全盘时可不传' } }, required: [] } } },
     { type: 'function', function: { name: 'request_restock', description: '向总部发起补货申请。补货、缺货、要补货或库存不够时调用；申请须由门店确认后才提交。', parameters: { type: 'object', properties: { material: { type: 'string' }, qty: { type: 'number' }, unit: { type: 'string', enum: ['kg', 'L', '个'] }, urgency: { type: 'string', enum: ['normal', 'urgent', 'critical'] }, reason: { type: 'string' } }, required: [] } } },
-    { type: 'function', function: { name: 'query_inventory', description: '查询某一物料的当前理论库存。', parameters: { type: 'object', properties: { material: { type: 'string' } }, required: [] } } }
+    { type: 'function', function: { name: 'query_inventory', description: '查询一个或多个物料的当前理论库存。用户提到多个物料时必须全部放入 materials，不得只返回第一个。', parameters: { type: 'object', properties: { material: { type: 'string', description:'单物料查询时使用' }, materials: { type:'array', description:'多物料查询时使用，保留用户提到的全部物料', items:{ type:'string' } } }, required: [] } } }
   ];
 }
 
@@ -3562,7 +3583,13 @@ function r2StoreAgentLlmAction(toolName, args, rows) {
   if (toolName === 'receipt_inventory') return { type: 'open_receipt', prefill };
   if (toolName === 'stok_opname') return { type: 'open_count', prefill: { material_name: material?.material_name || '' } };
   if (toolName === 'request_restock') return { type: 'open_restock', prefill: { ...prefill, urgency: ['urgent', 'critical'].includes(args.urgency) ? args.urgency : 'normal', reason: String(args.reason || '').trim() } };
-  if (toolName === 'query_inventory') return { type: 'show_inventory', data: material ? { material_name: material.material_name, unit: material.unit, theoretical_closing_qty: Number(material.theoretical_closing_qty || 0), safety_qty: material.safety_qty ?? null } : null };
+  if (toolName === 'query_inventory') {
+    const requested = Array.isArray(args.materials) ? args.materials : [args.material || args.material_name || ''];
+    const items = [...new Map(requested.flatMap((name) => r2StoreAgentMaterials(rows, name)).map((item) => [item.material_name, item])).values()]
+      .map((item) => ({ material_name:item.material_name, unit:item.unit, theoretical_closing_qty:Number(item.theoretical_closing_qty || 0), safety_qty:item.safety_qty ?? null }));
+    if (!items.length && material) items.push({ material_name:material.material_name, unit:material.unit, theoretical_closing_qty:Number(material.theoretical_closing_qty || 0), safety_qty:material.safety_qty ?? null });
+    return { type:'show_inventory', data: items.length ? { ...items[0], items } : null };
+  }
   return null;
 }
 
@@ -3574,6 +3601,7 @@ function r2StoreAgentReplyForAction(action) {
   if (action.type === 'open_receipt') return '我已识别到收货登记。请补全缺少的信息并上传收货凭证。';
   if (action.type === 'open_restock') return '我已识别到补货申请。请补全原因后确认提交给总部。';
   if (action.type === 'open_count') return value.material_name ? `我会为你打开 ${value.material_name} 的盘点入口，请拍照识别后确认异常项。` : '我已为你打开今日盘点入口，请拍照识别后确认异常项。';
+  if (action.type === 'show_inventory' && Array.isArray(value.items) && value.items.length) return value.items.map((item) => `${item.material_name}：${r2Round(Number(item.theoretical_closing_qty || 0))} ${item.unit || ''}${item.safety_qty != null ? `（安全库存 ${r2Round(item.safety_qty)} ${item.unit || ''}）` : ''}`).join('\n');
   if (action.type === 'show_inventory' && value.material_name) return `${value.material_name} 当前理论库存为 ${r2Round(Number(value.theoretical_closing_qty || 0))} ${value.unit || ''}。`;
   return null;
 }
@@ -3621,7 +3649,7 @@ async function r2StoreAgentWithArk(env, message, storeCode, rows, history = [], 
         temperature: 0.1,
         thinking: { type: 'disabled' },
         messages: [
-          { role: 'system', content: `你是 ${storeCode} 的门店运营助手。理解中文、English 和 Bahasa Indonesia，并使用用户当前语言简短回复。仅处理调拨、报损、收货、盘点、补货和查库存。根据用户意图调用一个工具；参数不全时仍调用对应工具并只填写确定字段。用户问今日待办、帮我完成待办或今天做什么时，先说明当前待办，若第一项是盘点则调用 stok_opname。调拨可一对多：用户提到多个门店时，必须在 destinations 中逐店填入数量；不要合并或猜测数量。门店名称必须换成对应编码：${stores}。不要虚构物料、数量、门店、照片或库存数据，不要执行或承诺已提交；所有操作都要由店员确认后才会提交。当前可选物料：${materials || '暂未加载物料'}。当前今日待办：${todayTasks.length ? todayTasks.map((task) => `${task.title}（${task.detail}）`).join('；') : '无'}。当前未完成草稿：${currentDraft ? JSON.stringify(currentDraft).slice(0, 800) : '无'}。` },
+          { role: 'system', content: `你是 ${storeCode} 的门店运营助手。理解中文、English 和 Bahasa Indonesia，并使用用户当前语言简短回复。仅处理调拨、报损、收货、盘点、补货和查库存。根据用户意图调用一个工具；参数不全时仍调用对应工具并只填写确定字段。查询库存时，用户提到多个物料必须将全部名称放入 query_inventory.materials，不得遗漏。用户问今日待办、帮我完成待办或今天做什么时，先说明当前待办，若第一项是盘点则调用 stok_opname。调拨可一对多：用户提到多个门店时，必须在 destinations 中逐店填入数量；不要合并或猜测数量。门店名称必须换成对应编码：${stores}。不要虚构物料、数量、门店、照片或库存数据，不要执行或承诺已提交；所有操作都要由店员确认后才会提交。当前可选物料：${materials || '暂未加载物料'}。当前今日待办：${todayTasks.length ? todayTasks.map((task) => `${task.title}（${task.detail}）`).join('；') : '无'}。当前未完成草稿：${currentDraft ? JSON.stringify(currentDraft).slice(0, 800) : '无'}。` },
           ...history.slice(-8).map((turn) => ({ role: turn.role === 'assistant' ? 'assistant' : 'user', content: String(turn.content || '').slice(0, 600) })),
           { role: 'user', content: message }
         ],
@@ -3663,18 +3691,19 @@ async function r2StoreAgentDeterministic(env, body) {
     });
   }
   const number = r2StoreAgentNumber(message);
-  const material = r2StoreAgentMaterial(rows, message);
+  const matchedMaterials = r2StoreAgentMaterials(rows, message);
+  const material = matchedMaterials[0] || null;
   const currentDraft = r2StoreAgentDraft(body);
   const lower = message.toLowerCase();
   if (/今日待办|今天.*待办|今天.*做什么|待办任务|帮我.*待办/.test(lower)) {
     return json({ reply: r2StoreAgentTodayTaskReply(storeCode, todayTasks), action: { type: 'none' }, today_tasks: todayTasks, tool_contract: toolContract });
   }
   if (/库存|余量|还有多少|查.*(物料|库存)|查询|inventory|stock|stok|cek stok|berapa.*stok/.test(lower)) {
-    if (!material) return json({ reply: '请告诉我要查询的物料，例如“查牛奶库存”。', action: { type: 'none' }, tool_contract: toolContract });
-    const qty = Number(material.theoretical_closing_qty || 0);
+    if (!matchedMaterials.length) return json({ reply: '请告诉我要查询的物料，例如“查牛奶和黑糖珍珠库存”。', action: { type: 'none' }, tool_contract: toolContract });
+    const items = matchedMaterials.map((item) => ({ material_name:item.material_name, unit:item.unit, theoretical_closing_qty:Number(item.theoretical_closing_qty || 0), safety_qty:item.safety_qty ?? null }));
     return json({
-      reply: `${material.material_name} 当前理论库存为 ${r2Round(qty)} ${material.unit}${material.safety_qty != null ? `，安全库存 ${r2Round(material.safety_qty)} ${material.unit}` : ''}。`,
-      action: { type: 'show_inventory', data: { material_name: material.material_name, unit: material.unit, theoretical_closing_qty: qty, safety_qty: material.safety_qty ?? null } },
+      reply: items.map((item) => `${item.material_name}：当前理论库存 ${r2Round(item.theoretical_closing_qty)} ${item.unit}${item.safety_qty != null ? `，安全库存 ${r2Round(item.safety_qty)} ${item.unit}` : ''}`).join('\n'),
+      action: { type: 'show_inventory', data: { ...items[0], items } },
       tool_contract: toolContract
     });
   }
