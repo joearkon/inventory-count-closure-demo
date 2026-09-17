@@ -115,6 +115,7 @@ await check('store HTML exposes three speech languages and safe fallback', async
   if (!/not-allowed/.test(script) || !/no-speech/.test(script) || !/Akses mikrofon belum diizinkan/.test(script)) throw new Error('localized speech error handling missing');
   if (!/probeMicrophone/.test(voiceQaScript) || !/TimeoutError/.test(voiceQaScript) || !/Chrome 或 Edge/.test(voiceQaScript)) throw new Error('microphone capability check needs a bounded timeout and browser fallback');
   if (!/MediaRecorder/.test(voiceQaScript) || !/\/api\/voice-transcribe/.test(voiceQaScript) || !/停止并转写/.test(voiceQaScript) || !/whisper-large-v3-turbo/.test(voiceQaScript)) throw new Error('voice QA must use recorded audio and server ASR');
+  if (!/播放标准读音/.test(voiceQaScript) || !/stor nol nol dua/.test(voiceQaScript) || !/speechSynthesis/.test(voiceQaScript)) throw new Error('Indonesian QA must provide a standard pronunciation aid');
   const shortAudio = await fetch(`${base}/api/voice-transcribe?lang=en-US`, { method:'POST', headers:{ 'content-type':'audio/webm' }, body:new Uint8Array([1,2,3]) });
   const shortAudioPayload = await shortAudio.json();
   if (shortAudio.status !== 400 || !/过短/.test(shortAudioPayload.error || '')) throw new Error(`voice endpoint validation failed: ${shortAudio.status} ${JSON.stringify(shortAudioPayload)}`);

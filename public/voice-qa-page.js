@@ -9,10 +9,10 @@
     ['en-US','English','Transfer 2 kg of brown sugar pearls to STORE002.','open_transfer',['STORE002']],
     ['en-US','English','Show me the milk inventory.','show_inventory',['milk']],
     ['en-US','English','Record 2 liters of expired milk as waste.','open_scrap',['milk']],
-    ['id-ID','Bahasa Indonesia','Pindahkan 2 kg mutiara gula merah ke STORE002.','open_transfer',['STORE002']],
-    ['id-ID','Bahasa Indonesia','Tampilkan stok susu.','show_inventory',['susu']],
-    ['id-ID','Bahasa Indonesia','Catat susu kedaluwarsa 2 liter sebagai kerusakan.','open_scrap',['susu']]
-  ].map(([lang,label,prompt,expected,keywords], index) => ({ id:index + 1, lang,label,prompt,expected,keywords,status:'pending',transcript:'',actual:'',error:'' }));
+    ['id-ID','Bahasa Indonesia','Pindahkan 2 kg mutiara gula merah ke STORE002.','open_transfer',['STORE002'],'Pindahkan dua kilogram mutiara gula merah ke stor nol nol dua.'],
+    ['id-ID','Bahasa Indonesia','Tampilkan stok susu.','show_inventory',['susu'],'Tampilkan stok susu.'],
+    ['id-ID','Bahasa Indonesia','Catat susu kedaluwarsa 2 liter sebagai kerusakan.','open_scrap',['susu'],'Catat susu kedaluwarsa dua liter sebagai kerusakan.']
+  ].map(([lang,label,prompt,expected,keywords,spokenPrompt], index) => ({ id:index + 1, lang,label,prompt,expected,keywords,spokenPrompt:spokenPrompt || prompt,status:'pending',transcript:'',actual:'',error:'' }));
   let active = null, mediaRecorder = null, activeStream = null, audioChunks = [], stopTimer = null;
   $('back-link').href = `/store/?store=${encodeURIComponent(store)}`;
 
@@ -20,11 +20,22 @@
     $('cases').innerHTML = tests.map((test) => {
       const recording = active === test && test.status === 'recording', transcribing = active === test && test.status === 'transcribing';
       const statusText = test.status === 'pass' ? '通过' : test.status === 'fail' ? '未通过' : recording ? '录音中' : transcribing ? '转写中' : '待测';
-      return `<article class="case"><div class="case-head"><div><h2>${test.id}. ${esc(test.label)} · ${esc(test.expected)}</h2><span class="muted">${esc(test.lang)} · 关键词：${esc(test.keywords.join(' / '))}</span></div><span class="status ${test.status}">${statusText}</span></div><div class="prompt">${esc(test.prompt)}</div><button class="btn" data-record="${test.id}" ${(active && active !== test) || transcribing ? 'disabled' : ''}>${recording ? '停止并转写' : transcribing ? '正在转写…' : '开始录音'}</button><div class="result"><div><label>转写结果</label>${esc(test.transcript || '—')}</div><div><label>助手判定</label>${esc(test.error || test.actual || '—')}</div></div></article>`;
+      const pronunciation = test.lang === 'id-ID' ? `<div class="pronunciation"><span>跟读文本：${esc(test.spokenPrompt)}</span><button class="btn secondary compact" data-speak="${test.id}" ${active ? 'disabled' : ''}>播放标准读音</button></div>` : '';
+      return `<article class="case"><div class="case-head"><div><h2>${test.id}. ${esc(test.label)} · ${esc(test.expected)}</h2><span class="muted">${esc(test.lang)} · 关键词：${esc(test.keywords.join(' / '))}</span></div><span class="status ${test.status}">${statusText}</span></div><div class="prompt">${esc(test.prompt)}</div>${pronunciation}<button class="btn" data-record="${test.id}" ${(active && active !== test) || transcribing ? 'disabled' : ''}>${recording ? '停止并转写' : transcribing ? '正在转写…' : '开始录音'}</button><div class="result"><div><label>转写结果</label>${esc(test.transcript || '—')}</div><div><label>助手判定</label>${esc(test.error || test.actual || '—')}</div></div></article>`;
     }).join('');
     const done = tests.filter((test) => ['pass','fail'].includes(test.status)), passed = done.filter((test) => test.status === 'pass');
     $('done').textContent = done.length; $('passed').textContent = passed.length; $('accuracy').textContent = done.length ? `${Math.round(passed.length / done.length * 100)}%` : '--'; $('export').disabled = !done.length;
     document.querySelectorAll('[data-record]').forEach((button) => button.onclick = () => toggleRecording(tests.find((test) => test.id === Number(button.dataset.record))));
+    document.querySelectorAll('[data-speak]').forEach((button) => button.onclick = () => speakPrompt(tests.find((test) => test.id === Number(button.dataset.speak))));
+  }
+
+  function speakPrompt(test) {
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) { test.error = '当前浏览器不支持示范读音，请改用最新版 Chrome 或 Edge。'; return render(); }
+    speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(test.spokenPrompt); utterance.lang = 'id-ID'; utterance.rate = 0.82;
+    const voice = speechSynthesis.getVoices().find((item) => String(item.lang || '').toLowerCase().startsWith('id'));
+    if (voice) utterance.voice = voice;
+    speechSynthesis.speak(utterance);
   }
 
   async function evaluate(test, transcript) {
@@ -61,6 +72,7 @@
   }
 
   async function startRecording(test) {
+    window.speechSynthesis?.cancel();
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { test.status = 'fail'; test.error = '当前浏览器不支持录音，请改用最新版 Chrome 或 Edge。'; return render(); }
     try {
       activeStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
