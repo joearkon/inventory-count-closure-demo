@@ -9,7 +9,7 @@
   const chat = by('store-agent-chat'), input = by('store-agent-input'), send = by('store-agent-send'), mic = by('store-agent-mic'), voiceNote = by('store-agent-voice-note'), language = by('store-agent-language'), voiceQa = by('store-agent-voice-qa');
   if (voiceQa) voiceQa.href = `/voice-qa/?store=${encodeURIComponent(storeCode)}`;
   const sheet = by('agent-sheet'), sheetTitle = by('agent-sheet-title'), sheetForm = by('agent-sheet-form'), sheetStatus = by('agent-sheet-status'), sheetSubmit = by('agent-sheet-submit');
-  let welcomed = false, busy = false, recognition = null, speaking = false, ledger = [], draft = null, latestStoreState = null;
+  let welcomed = false, busy = false, speaking = false, mediaRecorder = null, activeVoiceStream = null, voiceChunks = [], stopVoiceRequested = false, ledger = [], draft = null, latestStoreState = null;
 
   function addMessage(text, role = 'assistant', html = false) {
     const node = document.createElement('div'); node.className = `agent-message ${role}`;
@@ -171,14 +171,40 @@
     if (noSpeech) return '没有识别到语音，请重试或直接输入文字。';
     return '当前语音识别不可用，请直接输入文字。';
   }
-  function configureVoice() { const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!Recognition) return false; recognition = new Recognition(); recognition.interimResults = true; recognition.continuous = false; let finalText = ''; recognition.onresult = (event) => { let text = ''; for (let index = event.resultIndex; index < event.results.length; index += 1) text += event.results[index][0].transcript; input.value = text; resizeInput(); if (event.results[event.results.length - 1].isFinal) finalText = text; }; recognition.onerror = (event) => { const code = String(event?.error || 'unavailable').toLowerCase(); stopVoice(false); if (code !== 'aborted') addMessage(voiceErrorText(code)); }; recognition.onend = () => { const shouldSend = speaking && finalText.trim(); speaking = false; mic.classList.remove('recording'); voiceNote.classList.remove('show'); if (shouldSend) ask(finalText); }; return true; }
-  function startVoice() { if (speaking || busy) return; if (!recognition && !configureVoice()) { addMessage(voiceErrorText('unsupported')); return; } recognition.lang = language?.value || 'zh-CN'; voiceNote.textContent = `正在聆听（${language?.selectedOptions?.[0]?.textContent || recognition.lang}）…松开即可识别`; speaking = true; mic.classList.add('recording'); voiceNote.classList.add('show'); try { recognition.start(); } catch (_) { stopVoice(false); addMessage(voiceErrorText('unavailable')); } }
-  function stopVoice(sendAfter) { if (!speaking) return; if (!sendAfter) speaking = false; try { recognition?.stop(); } catch (_) {} mic.classList.remove('recording'); voiceNote.classList.remove('show'); }
+  function releaseVoiceStream() { activeVoiceStream?.getTracks().forEach((track) => track.stop()); activeVoiceStream = null; mediaRecorder = null; voiceChunks = []; }
+  async function transcribeVoice(blob) {
+    voiceNote.textContent = '正在转写并理解…'; mic.classList.remove('recording');
+    const controller = new AbortController(), timeoutId = setTimeout(() => controller.abort(), 45000);
+    try {
+      const lang = language?.value || 'zh-CN';
+      const response = await fetch(`/api/voice-transcribe?lang=${encodeURIComponent(lang)}`, { method:'POST', headers:{ 'content-type':blob.type || 'audio/webm', 'x-speech-language':lang }, body:blob, signal:controller.signal });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || '语音转写失败');
+      const transcript = String(data.transcript || '').trim(); if (!transcript) throw new Error('没有识别到有效语音');
+      input.value = transcript; resizeInput(); await ask(transcript);
+    } catch (error) { addMessage(error.name === 'AbortError' ? '语音转写超时，请重试或直接输入文字。' : `${voiceErrorText(error.message.includes('有效语音') ? 'no-speech' : 'unavailable')}（${error.message}）`); }
+    finally { clearTimeout(timeoutId); speaking = false; stopVoiceRequested = false; voiceNote.classList.remove('show'); releaseVoiceStream(); }
+  }
+  async function startVoice() {
+    if (speaking || busy) return;
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { addMessage(voiceErrorText('unsupported')); return; }
+    speaking = true; stopVoiceRequested = false; mic.classList.add('recording'); voiceNote.classList.add('show'); voiceNote.textContent = `正在录音（${language?.selectedOptions?.[0]?.textContent || language?.value || 'zh-CN'}）…松开后转写`;
+    try {
+      activeVoiceStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
+      const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
+      mediaRecorder = new MediaRecorder(activeVoiceStream, mimeType ? { mimeType } : undefined); voiceChunks = [];
+      mediaRecorder.ondataavailable = (event) => { if (event.data?.size) voiceChunks.push(event.data); };
+      mediaRecorder.onerror = (event) => { addMessage(`录音错误：${event.error?.message || 'unknown'}`); speaking = false; voiceNote.classList.remove('show'); mic.classList.remove('recording'); releaseVoiceStream(); };
+      mediaRecorder.onstop = () => { const blob = new Blob(voiceChunks, { type:mediaRecorder?.mimeType || mimeType || 'audio/webm' }); if (blob.size < 512) { speaking = false; voiceNote.classList.remove('show'); mic.classList.remove('recording'); releaseVoiceStream(); return addMessage(voiceErrorText('no-speech')); } transcribeVoice(blob); };
+      mediaRecorder.start(250); if (stopVoiceRequested) mediaRecorder.stop();
+    } catch (error) { speaking = false; voiceNote.classList.remove('show'); mic.classList.remove('recording'); releaseVoiceStream(); addMessage(voiceErrorText(error.name === 'NotAllowedError' ? 'not-allowed' : 'unavailable')); }
+  }
+  function stopVoice() { if (!speaking) return; stopVoiceRequested = true; if (mediaRecorder?.state === 'recording') mediaRecorder.stop(); }
 
   send.addEventListener('click', () => ask(input.value)); input.addEventListener('input', resizeInput); input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); ask(input.value); } });
   document.querySelectorAll('[data-agent-prompt]').forEach((button) => button.addEventListener('click', () => ask(button.dataset.agentPrompt)));
   chat.addEventListener('click', (event) => { if (event.target.closest('[data-agent-open-sheet]')) { openSheet(); return; } const taskButton = event.target.closest('[data-agent-task-action]'); if (!taskButton) return; const type = taskButton.dataset.agentTaskAction; if (type === 'open_task_tab') { window.switchStoreTab?.('tasks'); return; } const intent = intentFromAction({ type }); if (!intent) return; startDraft(intent, { plan_no: taskButton.dataset.agentTaskPlan || '', request_id: taskButton.dataset.agentTaskRequest || '', direction: taskButton.dataset.agentTaskDirection || '' }, '', false); openSheet(); });
-  mic.addEventListener('pointerdown', (event) => { event.preventDefault(); startVoice(); }); ['pointerup', 'pointercancel', 'pointerleave'].forEach((type) => mic.addEventListener(type, () => stopVoice(true)));
+  mic.addEventListener('pointerdown', (event) => { event.preventDefault(); startVoice(); }); ['pointerup', 'pointercancel', 'pointerleave'].forEach((type) => mic.addEventListener(type, stopVoice));
   [by('agent-sheet-close'), by('agent-sheet-cancel')].forEach((button) => button?.addEventListener('click', closeSheet)); sheetForm.addEventListener('submit', submitSheet);
   window.storeAgentTabOpened = welcome;
   window.storeOpsRefresh = loadLedger;

@@ -110,7 +110,7 @@ await check('growing lists use pagination and lightweight API views', async () =
 await check('store HTML exposes three speech languages and safe fallback', async () => {
   const [page, script, voiceQaScript] = await Promise.all([fetch(`${base}/store/?store=STORE001`).then((r) => r.text()), fetch(`${base}/store-agent.js`).then((r) => r.text()), fetch(`${base}/voice-qa-page.js`).then((r) => r.text())]);
   for (const token of ['agent-language', 'zh-CN', 'en-US', 'id-ID']) if (!page.includes(token)) throw new Error(`missing ${token} in store page`);
-  if (!/SpeechRecognition|webkitSpeechRecognition/.test(script) || !/recognition\.lang/.test(script)) throw new Error('speech recognition language binding missing');
+  if (!/MediaRecorder/.test(script) || !/\/api\/voice-transcribe/.test(script) || !/x-speech-language/.test(script)) throw new Error('store assistant must use recorded audio and server ASR');
   if (!/不可用|unavailable|tidak tersedia/i.test(`${page}\n${script}`)) throw new Error('speech fallback message missing');
   if (!/not-allowed/.test(script) || !/no-speech/.test(script) || !/Akses mikrofon belum diizinkan/.test(script)) throw new Error('localized speech error handling missing');
   if (!/probeMicrophone/.test(voiceQaScript) || !/TimeoutError/.test(voiceQaScript) || !/Chrome 或 Edge/.test(voiceQaScript)) throw new Error('microphone capability check needs a bounded timeout and browser fallback');
