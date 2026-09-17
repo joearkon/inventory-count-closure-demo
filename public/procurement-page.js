@@ -44,6 +44,10 @@
     }
     if (!by('line-rows').children.length) addLine();
     const query = new URLSearchParams(location.search), sourceOrder = query.get('order_id'), sourceWorkOrder = query.get('source_work_order_id');
+    if (query.get('date')) {
+      by('date').value = query.get('date');
+      if (mode === 'purchase') by('expected-date').value = query.get('date');
+    }
     if (sourceWorkOrder) {
       by('work-order').value = sourceWorkOrder; by('source-type').value = 'work_order'; by('urgency').value = query.get('urgency') || 'urgent';
       if (query.get('store') && [...by('store').options].some((option) => option.value === query.get('store'))) by('store').value = query.get('store');
