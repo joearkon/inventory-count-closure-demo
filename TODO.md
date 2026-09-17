@@ -3,7 +3,7 @@
 ## 今日执行（2026-09-16 至 2026-09-17）
 
 - [x] 建立本地 Git 版本基线 dec1c5f 与标签 baseline-2026-09-16。
-- [x] 创建 GitHub 仓库并推送 `main`、完整提交历史与既有回滚标签；2026-09-17 核验仓库当前为 Public，最新冻结提交暂不继续推送，待用户确认先转为 Private。
+- [x] 创建 GitHub 仓库并推送 `main`、完整提交历史与全部回滚标签；2026-09-17 用户确认仓库保持 Public，最终冻结版本已按授权公开推送。
 - [x] 盘点物料增加“每日盘点 / 按需盘点”策略与总部自由选择物料下发接口。
 - [x] 门店语音增加中文、English、Bahasa Indonesia 选择；补齐麦克风未授权、无语音和服务不可用的三语言提示；报损和收货照片改为可选。
 - [x] 提炼库存异常 Knowhow；MVP 只启用 D2 / D1 / S1 / T2 硬规则。
@@ -37,7 +37,7 @@
 
 1. 已上线 `MediaRecorder + Workers AI Whisper` 真人语音验收页及门店助手业务语音入口；中文、English 真人 6/6 通过，标准印尼语合成音频链路 3/3 通过。仍建议由印尼语使用者补充真机口音验收，但不阻塞当前 MVP 语音链路使用。
 2. Brown Sugar Boba Milk Tea 6 个真实 SKU 已完成 BOM 白名单；继续确认其二级半成品出成率、合理损耗率和保质期。其余 12 个商品当前是 MVP Mock，不列为品牌 BOM 缺口；未来转正式时再取得配方与生效日期。
-3. GitHub 仓库 `joearkon/inventory-count-closure-demo` 的远端 `main` 当前停在 `196b28a`。本地已建立最终冻结标签 `release-2026-09-17-mvp.4`；因仓库实际为 Public，为避免继续公开项目代码，待确认转为 Private 后再推送该提交与标签。
+3. GitHub 仓库 `joearkon/inventory-count-closure-demo` 按用户确认保持 Public；远端 `main` 和最终冻结标签 `release-2026-09-17-mvp.4` 已推送并核对一致。
 
 ### P1：飞书真实事件表接入（暂缓，不阻塞 MVP）
 
