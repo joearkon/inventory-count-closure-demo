@@ -25,7 +25,16 @@ export function buildDiagnosisShadowReport(calculated, materialCatalog = []) {
       asOf: signal.updated_at || new Date().toISOString()
     });
     const engine = ENGINES[signal.rule_code];
-    const v2 = engine.evaluate(packet);
+    const evaluated = engine.evaluate(packet);
+    // Engines may exit early when a rule no longer triggers. Keep identity
+    // metadata on every result so recovered snapshots remain auditable.
+    const v2 = {
+      ...evaluated,
+      ruleset_id:evaluated.ruleset_id || engine.ruleset.ruleset_id,
+      rule_code:evaluated.rule_code || engine.ruleset.rule_code,
+      rule_version:evaluated.rule_version || engine.ruleset.rule_version,
+      fact_packet_id:evaluated.fact_packet_id || packet.fact_packet_id
+    };
     return {
       signal_id:signal.id,
       store_code:signal.store_code,

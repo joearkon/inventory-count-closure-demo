@@ -773,9 +773,19 @@ async function r2OperationTaskDetail(env, taskId) {
   const documentIds = new Set([...(task.linked_document_ids || []), task.proof_document_id].filter(Boolean));
   const eventIds = new Set(task.linked_event_ids || []);
   const diagnosisV2 = r2CurrentTaskDiagnosisV2(value, task);
+  const sourceAnomaly = (value.materialAnomalies || []).find((item) => item.id === task.source_anomaly_id) || null;
+  const followUpAnomalies = sourceAnomaly ? (value.materialAnomalies || []).filter((item) =>
+    item.id !== sourceAnomaly.id &&
+    !['closed', 'auto_closed'].includes(item.status) &&
+    item.store_code === sourceAnomaly.store_code &&
+    item.business_date === sourceAnomaly.business_date &&
+    normalizedKey(item.material_name) === normalizedKey(sourceAnomaly.material_name) &&
+    item.unit === sourceAnomaly.unit
+  ) : [];
   return json({
     task,
-    anomaly: (value.materialAnomalies || []).find((item) => item.id === task.source_anomaly_id) || null,
+    anomaly: sourceAnomaly,
+    follow_up_anomalies: followUpAnomalies,
     documents: [
       ...(value.documents || []).filter((item) => documentIds.has(item.id)),
       ...(value.purchaseOrders || []).filter((item) => documentIds.has(item.id)).map((item) => ({ ...item, document_type:'purchase_order', document_no:item.order_no })),

@@ -17,9 +17,17 @@
   }[status] || { label:'待处理', css:'' });
   const typeText = (type) => ({ custom:'主动运营任务', diagnosis_negative_inventory:'负库存核查', diagnosis_count_variance:'盘点差异复核', diagnosis_safety_stock:'安全库存跟进', diagnosis_sell_in_ratio:'销入比核查', receipt_evidence:'收货凭证核查', sku_inventory_check:'SKU 库存核查', inventory_receipt_check:'收货与库存核查', qa_regression:'测试工单' }[type] || '跟进工单');
   const ruleText = (code) => ({ NEGATIVE_THEORETICAL:'D2 · 负库存', D2_NEGATIVE_STOCK:'D2 · 负库存', D2_NEGATIVE_THEORETICAL:'D2 · 负库存', COUNT_VARIANCE:'D1 · 理论与实盘差异', D1_COUNT_VARIANCE:'D1 · 理论与实盘差异', D1_STOCK_VARIANCE:'D1 · 理论与实盘差异', BELOW_SAFETY_STOCK:'S1 · 安全库存预警', S1_SAFETY_STOCK:'S1 · 安全库存预警', S1_REPLENISHMENT_RISK:'S1 · 安全库存预警', SELL_IN_IMBALANCE:'T2 · 销入比失衡', T2_SELL_IN_IMBALANCE:'T2 · 销入比失衡', T2_SUPPLY_CONSUMPTION_IMBALANCE:'T2 · 销入比失衡' }[code] || code || '未标注规则');
+  const auditDetail = (item, task) => {
+    if (item.action !== 'V2 重新研判') return item.detail;
+    const parts = String(item.detail || '').split(' · ');
+    const code = parts[1] && parts[1] !== 'undefined' ? parts[1] : task.source_rule_code;
+    const state = parts[2] || '';
+    const location = parts[3] && parts[3] !== '待判断' ? parts[3] : (state === 'not_triggered' ? '原异常不再触发' : '等待更多证据');
+    return `${ruleText(code)} · ${evidenceStatus(state)} · ${location}`;
+  };
   const timeline = ({ task, audits }) => {
     const rows = [{ title:'工单已创建', detail:task.instruction, actor:'—', time:task.created_at }];
-    (audits || []).slice().reverse().forEach((item) => rows.push({ title:item.action, detail:item.detail, actor:item.actor_role || '—', time:item.created_at }));
+    (audits || []).slice().reverse().forEach((item) => rows.push({ title:item.action, detail:auditDetail(item, task), actor:item.actor_role || '—', time:item.created_at }));
     if (task.submitted_at && !rows.some((item) => item.time === task.submitted_at)) rows.push({ title:'门店已提交处理凭证', detail:task.proof_filename || '凭证已归档', actor:'—', time:task.submitted_at });
     if (task.closed_at && !rows.some((item) => item.time === task.closed_at)) rows.push({ title:'工单已闭环', detail:task.resolution || '处理完成', actor:'—', time:task.closed_at });
     return rows.sort((a, b) => new Date(a.time || 0) - new Date(b.time || 0));
@@ -108,6 +116,38 @@
     };
     return actions.length ? `<div class="action-plan">${actions.map((item, index) => { const info = meta[item.action_id] || { reason:'按研判结果补充证据并记录处理结果。', owner:data.task.assigned_to || '待分配' }; const state = info.done ? '已完成' : info.ready ? '可查看' : '待处理'; const href = item.route ? actionUrl(item.route, data.task, comparison.material_name, comparison.business_date) : '#note-form'; return `<article class="action-card ${info.done ? 'done' : ''}"><div class="action-rank">${info.done ? '✓' : index + 1}</div><div class="action-content"><div class="action-title"><div><span>建议动作 ${index + 1}</span><h3>${esc(item.label)}</h3></div><em class="action-state">${state}</em></div><p>${esc(info.reason)}</p><div class="action-meta"><span>责任角色：${esc(info.owner)}</span>${item.requires_confirmation ? '<span>需要人工确认</span>' : '<span>只读核查</span>'}</div><a class="btn ${index === 0 && !info.done ? 'primary' : ''}" href="${esc(href)}">${item.mode === 'manual' ? '记录核查结果' : esc(item.label)}</a></div></article>`; }).join('')}</div>` : '<div class="good">最新 V2 未生成新的处理动作，可以进入人工闭环确认。</div>';
   };
+  const quantityFrom = (run, key) => Number(run?.calculation?.quantities?.[key]?.value || 0);
+  const documentHref = (item, task) => item.document_type === 'purchase_order'
+    ? `/procurement-detail/?type=purchase&id=${encodeURIComponent(item.id)}`
+    : item.document_type === 'receipt_order'
+      ? `/procurement-detail/?type=receipt&id=${encodeURIComponent(item.id)}`
+      : item.document_type === 'transfer_order'
+        ? `/transfers/?source_work_order_id=${encodeURIComponent(task.id)}`
+        : `/documents/?document=${encodeURIComponent(item.id)}`;
+  const correctionSummaryHtml = (data) => {
+    const runs = data.diagnosis_runs || [];
+    if (!runs.length) return '<div class="empty">完成收货、调拨签收或盘点后，系统将在这里展示库存修正前后变化。</div>';
+    const first = runs[0], latest = runs.at(-1), unit = latest.source_signal?.unit || first.source_signal?.unit || '';
+    const before = Number(first.theoretical_closing?.value ?? 0), after = Number(latest.theoretical_closing?.value ?? before), delta = after - before;
+    const receiptsBefore = quantityFrom(first, 'receipt'), receiptsAfter = quantityFrom(latest, 'receipt');
+    const changed = first.id !== latest.id && (delta !== 0 || first.anomaly_status !== latest.anomaly_status);
+    const docs = (data.documents || []).filter((item) => ['purchase_order','receipt_order','transfer_order'].includes(item.document_type));
+    const events = data.events || [];
+    const businessSteps = [
+      ...docs.map((item) => ({ title:item.document_type === 'purchase_order' ? '建立订货单' : item.document_type === 'receipt_order' ? '确认收货单' : '处理调拨单', ref:item.document_no || item.order_no || item.receipt_no || item.id, href:documentHref(item, data.task) })),
+      ...events.map((item) => ({ title:item.type === 'receipt' ? '生成收货入库流水' : '生成库存流水', ref:`${item.document_no || item.id} · ${item.qty}${item.unit || ''}`, href:actionUrl('/flows/', data.task, item.material_name, item.business_date) }))
+    ];
+    const checks = [
+      { label:'业务单据已关联', ok:docs.length > 0 },
+      { label:'库存流水已生成', ok:events.length > 0 },
+      { label:'处理后 V2 已重算', ok:runs.length > 1 },
+      { label:'原异常已不再触发', ok:latest.anomaly_status === 'not_triggered' },
+      { label:'人工结论已确认', ok:data.task.status === 'closed' }
+    ];
+    const followUps = data.follow_up_anomalies || [];
+    const followUpHtml = followUps.length ? `<div class="follow-up-alert"><div><span>修正后发现新的问题</span><h4>${followUps.map((item) => esc(ruleText(item.rule_code))).join('、')}</h4><p>${followUps.map((item) => esc(item.evidence || '需要进一步核查。')).join('<br>')}</p></div><div class="follow-up-actions"><a class="btn" href="/diagnosis/">查看研判证据</a>${followUps.map((item) => `<button class="btn primary" type="button" data-followup-work-order="${esc(item.id)}">建立后续工单</button>`).join('')}</div></div>` : (latest.anomaly_status === 'not_triggered' ? '<div class="correction-clear">✓ 原异常恢复，当前没有发现同物料的后续异常。</div>' : '');
+    return `<div class="correction-summary"><div class="correction-formulas"><article><span>处理前</span><b>${esc(ruleText(first.rule_code || first.source_signal?.v1_rule_code))} · ${esc(evidenceStatus(first.anomaly_status))}</b><code>${esc(first.calculation?.formula || `${before} ${unit}`)}</code></article><i>→</i><article class="after"><span>处理后</span><b>${esc(ruleText(latest.rule_code || latest.source_signal?.v1_rule_code))} · ${esc(evidenceStatus(latest.anomaly_status))}</b><code>${esc(latest.calculation?.formula || `${after} ${unit}`)}</code></article></div><div class="correction-delta"><div><span>收货入库</span><b>${receiptsBefore} → ${receiptsAfter} ${esc(unit)}</b></div><div><span>理论库存</span><b>${before} → ${after} ${esc(unit)}</b></div><div><span>库存变化</span><b class="${delta >= 0 ? 'positive' : ''}">${delta > 0 ? '+' : ''}${delta} ${esc(unit)}</b></div><div><span>验证结论</span><b>${changed ? `${evidenceStatus(first.anomaly_status)} → ${evidenceStatus(latest.anomaly_status)}` : '等待有效修正'}</b></div></div><div class="correction-columns"><div><h4>实际处理动作</h4>${businessSteps.length ? `<ol class="business-steps">${businessSteps.map((item) => `<li><span>${esc(item.title)}</span><a href="${esc(item.href)}">${esc(item.ref)} →</a></li>`).join('')}</ol>` : '<div class="empty">尚未关联会改变库存的业务动作。</div>'}</div><div><h4>系统验证</h4><ul class="verification-list">${checks.map((item) => `<li class="${item.ok ? 'ok' : ''}"><i>${item.ok ? '✓' : '○'}</i>${item.label}</li>`).join('')}</ul></div></div>${followUpHtml}</div>`;
+  };
   const diagnosisHtml = (data) => {
     const current = data.diagnosis_v2;
     if (!current?.comparison) return '<div class="empty">该工单未关联可运行的 V2 研判。</div>';
@@ -124,7 +164,7 @@
     const status = task.status === 'pending_hq_review' && task.escalation_level ? { label:'总部处理中', css:'review' } : statusInfo(task.status);
     const material = data.anomaly?.material_name || task.material_names?.[0] || '';
     const businessDate = data.anomaly?.business_date || data.diagnosis_v2?.comparison?.business_date || '';
-    const docs = documents.length ? documents.map((item) => { const href = item.document_type === 'purchase_order' ? `/procurement-detail/?type=purchase&id=${encodeURIComponent(item.id)}` : item.document_type === 'receipt_order' ? `/procurement-detail/?type=receipt&id=${encodeURIComponent(item.id)}` : item.document_type === 'transfer_order' ? `/transfers/?source_work_order_id=${encodeURIComponent(task.id)}` : `/documents/?document=${encodeURIComponent(item.id)}`; return `<div class="document"><div><b>${esc(item.original_filename || item.document_no || item.order_no || item.receipt_no || item.id)}</b><small>${esc(item.document_type || '业务凭证')} · ${formatDate(item.received_at || item.created_at)}</small></div><a class="link" href="${href}">查看单据 →</a></div>`; }).join('') : '<div class="empty">暂无关联单据</div>';
+    const docs = documents.length ? documents.map((item) => `<div class="document"><div><b>${esc(item.original_filename || item.document_no || item.order_no || item.receipt_no || item.id)}</b><small>${esc(item.document_type || '业务凭证')} · ${formatDate(item.received_at || item.created_at)}</small></div><a class="link" href="${documentHref(item, task)}">查看单据 →</a></div>`).join('') : '<div class="empty">暂无关联单据</div>';
     const eventRows = events.length ? `<ul>${events.map((item) => `<li>${esc(item.document_no || item.id)} · ${esc(item.material_name)} ${esc(item.qty)}${esc(item.unit)}</li>`).join('')}</ul>` : '';
     const timeRows = timeline(data).map((item) => `<div class="timeline-item"><h3>${esc(item.title)}</h3>${item.detail ? `<p>${esc(item.detail)}</p>` : ''}<div class="timeline-meta"><span>${formatDate(item.time)}</span><span>操作人：${esc(item.actor || '—')}</span></div></div>`).join('');
     root.innerHTML = `<header class="page-head"><div><div class="eyebrow">跟进工单 · ${esc(task.id)}</div><h1>${esc(task.title)}</h1><p class="subtitle">${esc(task.store_code || '—')} · ${esc(typeText(task.task_type))}</p></div><span class="status ${status.css}">${status.label}</span></header>
@@ -132,10 +172,11 @@
       <div class="layout"><div class="stack">
         <section class="panel task-panel"><div class="panel-head"><span class="section-index">01</span><div><h2>本次任务</h2><p>先明确需要完成什么，以及什么条件下才能结束。</p></div></div><div class="panel-body">${taskBriefHtml(data)}</div></section>
         <section class="panel action-panel"><div class="panel-head"><span class="section-index">02</span><div><h2>建议动作与执行</h2><p>按优先级处理；完成业务动作后系统会自动重新研判。</p></div></div><div class="panel-body">${actionPlanHtml(data)}</div></section>
-        <section class="panel"><div class="panel-head split"><div class="section-heading"><span class="section-index">03</span><div><h2>系统研判过程</h2><p>从触发、回溯到首要判断，所有结论均可追溯。</p></div></div><button class="btn" id="reassess-task">重新研判并保存快照</button></div><div class="panel-body">${diagnosisHtml(data)}</div></section>
+        <section class="panel correction-panel"><div class="panel-head"><span class="section-index">03</span><div><h2>库存修正与验证</h2><p>把业务动作、库存变化和规则复核串成一条可读的闭环链路。</p></div></div><div class="panel-body">${correctionSummaryHtml(data)}</div></section>
+        <section class="panel"><div class="panel-head split"><div class="section-heading"><span class="section-index">04</span><div><h2>系统研判过程</h2><p>从触发、回溯到首要判断，所有结论均可追溯。</p></div></div><button class="btn" id="reassess-task">重新研判并保存快照</button></div><div class="panel-body">${diagnosisHtml(data)}</div></section>
         <details class="panel compact-meta"><summary><span>工单基础信息与判断来源</span><small>编号、责任角色、创建时间及规则来源</small></summary><div class="panel-body"><div class="meta-grid"><div class="meta"><span>工单编号</span>${esc(task.id)}</div><div class="meta"><span>门店 / 主体</span>${esc(task.store_code || '—')}</div><div class="meta"><span>责任角色</span>${esc(task.assigned_to || '—')}</div><div class="meta"><span>当前操作人</span>${esc(task.last_operator || '—')}</div><div class="meta"><span>创建时间</span>${formatDate(task.created_at)}</div><div class="meta"><span>最近更新</span>${formatDate(task.updated_at || task.submitted_at || task.created_at)}</div></div><div class="source">${sourceHtml(data)}</div></div></details>
         <section class="panel"><div class="panel-head"><h2>关联单据与业务记录</h2></div><div class="panel-body"><div class="document-list">${docs}</div>${eventRows}</div></section>
-        <section class="panel"><div class="panel-head"><h2>处理时间线</h2></div><div class="panel-body"><div class="timeline">${timeRows}</div></div></section>
+        <details class="panel audit-panel"><summary><span>审计记录与处理时间线</span><small>共 ${timeline(data).length} 条 · 点击展开</small></summary><div class="panel-body"><div class="timeline">${timeRows}</div></div></details>
         ${task.resolution ? `<section class="panel"><div class="panel-head"><h2>${task.status === 'closed' ? '闭环结论' : '最近一次处理结论'}</h2></div><div class="panel-body"><div class="resolution ${task.status === 'closed' ? '' : 'pending'}">${esc(task.resolution)}</div></div></section>` : ''}
       </div><aside class="stack side-column">
         <section class="panel progress-panel"><div class="panel-head"><h2>当前处理状态</h2></div><div class="panel-body"><div class="progress-main"><span class="status ${status.css}">${status.label}</span><h3>${esc(task.assigned_to || '待分配')}</h3><p>最近更新 ${formatDate(task.updated_at || task.submitted_at || task.created_at)}</p></div><a class="side-link" href="${actionUrl('/flows/', task, material, businessDate)}">查看该物料库存流水 →</a><a class="side-link" href="/#operation-task-panel">返回工单列表 →</a></div></section>
@@ -151,6 +192,15 @@
     render(data);
   };
   const bind = (data) => {
+    document.querySelectorAll('[data-followup-work-order]').forEach((button) => button.addEventListener('click', async () => {
+      const restore = setLoading(button, '正在建立…');
+      try {
+        const result = await api(`/api/anomalies/${encodeURIComponent(button.dataset.followupWorkOrder)}/work-order`, { method:'POST' });
+        const next = result.operationTask;
+        if (!next?.id) throw new Error('后续工单已建立，但未返回工单编号。');
+        location.href = `/work-order/?id=${encodeURIComponent(next.id)}`;
+      } catch (error) { alert(error.message); restore(); }
+    }));
     document.querySelectorAll('[data-run-page]').forEach((button) => button.addEventListener('click', () => {
       const page = Number(button.dataset.runPage || 0);
       document.querySelectorAll('.run-row').forEach((row) => { row.hidden = Math.floor(Number(row.dataset.runIndex || 0) / 10) !== page; });

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { fact } from '../src/diagnosis/contracts.js';
 import { evaluateD2 } from '../src/diagnosis/d2-engine.js';
 import { buildFactPacket } from '../src/diagnosis/facts.js';
+import { buildDiagnosisShadowReport } from '../src/diagnosis/shadow.js';
 
 const packet = (overrides = {}) => ({
   schema_version:'1.0', fact_packet_id:'FACT-QA-D2', store_code:'STORE001', business_date:'2026-09-15', material_name:'黑糖珍珠', unit:'g', as_of:'2026-09-15T23:59:59.000Z',
@@ -37,6 +38,10 @@ assert.equal(normal.anomaly_status, 'not_triggered');
 assert.deepEqual(normal.recommended_action_ids, []);
 
 const signal = { id:'MAT-QA', store_code:'STORE001', business_date:'2026-09-15', material_name:'黑糖珍珠', unit:'g', evidence_detail:{ opening_qty:12000, receipt_qty:0, transfer_in_qty:0, transfer_out_qty:13000, scrap_qty:0, bom_consumption_qty:90, theoretical_qty:-1090 } };
+const recoveredShadow = buildDiagnosisShadowReport({ materialAnomalies:[{ ...signal, rule_code:'NEGATIVE_THEORETICAL', status:'open', evidence_detail:{ ...signal.evidence_detail, transfer_out_qty:1000, theoretical_qty:10910 } }], ledgerSnapshots:[], materialEvents:[] }).comparisons[0].v2;
+assert.equal(recoveredShadow.anomaly_status, 'not_triggered');
+assert.equal(recoveredShadow.rule_code, 'D2_NEGATIVE_STOCK');
+assert.equal(recoveredShadow.rule_version, '1.0.0-shadow');
 const integrated = buildFactPacket(signal, { materialEvents:[{ id:'EVT-QA', status:'active', type:'transfer_out', store_code:'STORE001', business_date:'2026-09-15', material_name:'黑糖珍珠', unit:'g', transfer_order_id:'TRF-QA' }], purchaseOrders:[{ id:'PO-QA', store_code:'STORE001', business_date:'2026-09-15', status:'pending_receipt', lines:[{ material_name:'黑糖珍珠', unit:'g' }] }], receiptOrders:[], storeTransferRequests:[{ id:'TRQ-QA', parent_order_id:'TRF-QA', status:'received', material_name:'黑糖珍珠', unit:'g' }] });
 assert.equal(integrated.data_availability.purchase_orders.status, 'confirmed');
 assert.equal(integrated.data_availability.destination_acceptance.status, 'confirmed');
@@ -49,4 +54,4 @@ const receiptWithoutDocument = buildFactPacket({ ...signal, evidence_detail:{ ..
 assert.match(receiptWithoutDocument.data_availability.arrival_receipts.note, /已找到收货流水 500g/);
 assert.doesNotMatch(receiptWithoutDocument.data_availability.arrival_receipts.note, /库存流水为 0/);
 
-console.log(JSON.stringify({ suite:'diagnosis-v2-d2', passed:16, primary_location:transferCase.primary_location, trace_nodes:transferCase.decision_trace.length }, null, 2));
+console.log(JSON.stringify({ suite:'diagnosis-v2-d2', passed:19, primary_location:transferCase.primary_location, trace_nodes:transferCase.decision_trace.length }, null, 2));
