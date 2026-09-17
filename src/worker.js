@@ -846,19 +846,29 @@ async function r2OperationTransition(env, taskId, body, action) {
     const finalCause = String(body.final_cause || '').trim().slice(0, 500);
     const resolutionNote = String(body.resolution_note || '').trim().slice(0, 800);
     const operator = String(body.operator || '').trim().slice(0, 80);
+    const requestedFollowUp = ['reopen_store', 'escalate_hq', 'escalate_governance'].includes(body.follow_up_action) ? body.follow_up_action : 'reopen_store';
     const latestRun = r2AppendDiagnosisRun(value, task, 'closure_verification') || (task.diagnosis_runs || []).at(-1) || null;
     const gate = evaluateClosureGate({ outcome, finalCause, resolutionNote, operator, storeAdopted:body.store_adopted, hqConfirmed:body.hq_confirmed, latestRun, requireReassessment:!!task.source_anomaly_id, evidenceCount:(task.linked_document_ids || []).length + (task.linked_event_ids || []).length, noteCount:(task.activity_log || []).filter((item) => item.type === 'progress_note').length });
     if (!gate.ok) return bad(gate.errors.join('；'), 409);
     const closedAt = now();
-    task.closure = { outcome, outcome_label:gate.outcome_label, final_cause:finalCause, resolution_note:resolutionNote, operator, store_adopted:body.store_adopted, hq_confirmed:true, diagnosis_run_id:latestRun?.id || null, completed_at:closedAt };
+    const closureAttempt = { id:id('CLS'), outcome, outcome_label:gate.outcome_label, final_cause:finalCause, resolution_note:resolutionNote, operator, store_adopted:body.store_adopted, hq_confirmed:true, diagnosis_run_id:latestRun?.id || null, follow_up_action:['unresolved', 'master_data_issue'].includes(outcome) ? requestedFollowUp : null, completed_at:closedAt };
+    task.closure_attempts = [...(task.closure_attempts || []), closureAttempt].slice(-20);
+    task.closure = closureAttempt;
     task.resolution = `${gate.outcome_label}：${resolutionNote}`;
     if (outcome === 'unresolved' || outcome === 'master_data_issue') {
-      task.status = 'pending_store_submission'; task.assigned_to = outcome === 'master_data_issue' ? '总部主数据治理' : `${task.store_code} 店长`; task.reopened_at = closedAt;
-      task.activity_log = [...(task.activity_log || []), { id:id('LOG'), type:'reopened', note:`闭环检查结果为“${gate.outcome_label}”，工单继续处理。最终原因：${finalCause}；下一步：${resolutionNote}`, operator, created_at:closedAt, source:'manual_closure' }];
-      if (outcome === 'master_data_issue' && !value.governanceTasks.some((item) => item.source_operation_task_id === task.id && item.status !== 'closed')) {
+      const followUp = outcome === 'master_data_issue' ? 'escalate_governance' : requestedFollowUp;
+      const escalated = followUp !== 'reopen_store';
+      const followUpLabel = followUp === 'escalate_governance' ? '升级至主数据治理' : followUp === 'escalate_hq' ? '升级至总部库存运营' : '重新交由门店处理';
+      task.status = escalated ? 'pending_hq_review' : 'pending_store_submission';
+      task.assigned_to = followUp === 'escalate_governance' ? '总部主数据治理' : followUp === 'escalate_hq' ? '总部库存运营' : `${task.store_code} 店长`;
+      task.reopened_at = closedAt; task.reopen_count = Number(task.reopen_count || 0) + 1;
+      if (escalated) { task.escalated_at = closedAt; task.escalation_count = Number(task.escalation_count || 0) + 1; task.escalation_level = followUp; }
+      closureAttempt.follow_up_action = followUp;
+      task.activity_log = [...(task.activity_log || []), { id:id('LOG'), type:escalated ? 'escalated' : 'reopened', note:`闭环检查结果为“${gate.outcome_label}”，${followUpLabel}。最终原因：${finalCause}；下一步：${resolutionNote}`, operator, created_at:closedAt, source:'manual_closure' }];
+      if (followUp === 'escalate_governance' && !value.governanceTasks.some((item) => item.source_operation_task_id === task.id && item.status !== 'closed')) {
         value.governanceTasks.unshift({ id:id('GOV'), source_anomaly_id:task.source_anomaly_id || null, source_operation_task_id:task.id, title:`${task.title} · 主数据治理`, instruction:`${finalCause}；${resolutionNote}`, owner:'商品 / 数据治理', status:'pending', created_at:closedAt });
       }
-      r2Audit(value, operator, '闭环检查后继续处理', `${task.id} · ${gate.outcome_label} · ${resolutionNote}`, task.id);
+      r2Audit(value, operator, escalated ? '闭环检查后升级工单' : '闭环检查后重新打开', `${task.id} · ${gate.outcome_label} · ${followUpLabel} · ${resolutionNote}`, task.id);
       value.operationTask = task;
       return r2Result(await r2SaveDemoState(env, value, 'operation-reopen'));
     }

@@ -96,6 +96,7 @@ await check('store mobile header identifies the assistant', async () => {
 await check('follow-up work orders use a traceable full detail page', async () => {
   const [hqPage, hqScript, page, script] = await Promise.all([fetch(`${base}/`).then((r) => r.text()), fetch(`${base}/app.js`).then((r) => r.text()), fetch(`${base}/work-order/`).then((r) => r.text()), fetch(`${base}/work-order-page.js`).then((r) => r.text())]);
   for (const token of ['处理时间线', '新增处理记录', '当前操作人', '来源与判断记录', '关联单据与业务记录']) if (!`${page}\n${script}`.includes(token)) throw new Error(`missing work order detail token: ${token}`);
+  for (const token of ['首次与最新 V2 对比', '人工闭环确认', '升级至总部运营', 'follow_up_action']) if (!script.includes(token)) throw new Error(`missing work order closure token: ${token}`);
   if (/id="operation-drawer"/.test(hqPage)) throw new Error('work order side drawer must be removed from the HQ page');
   if (!/href="\/work-order\/\?id=/.test(hqScript) || !/\/api\/operation-tasks\/\$\{encodeURIComponent\(data\.task\.id\)\}\/notes/.test(script)) throw new Error('full detail navigation or progress note binding missing');
   if (!/class="note-form"/.test(script) || !/\.note-form\{display:grid;gap:13px\}/.test(page) || !/\.layout\{grid-template-columns:1fr\}/.test(page)) throw new Error('work order note form must have a responsive standalone layout');
@@ -228,7 +229,13 @@ if (mutationTests) {
     const closed = await json(`/api/operation-tasks/${task.id}/close`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ outcome:'resolved', final_cause:'QA 已确认凭证完整', resolution_note:'完成核对并保留审计记录', operator:'QA 总部运营', store_adopted:true, hq_confirmed:true }) });
     const closedTask = (closed.operationTasks || []).find((item) => item.id === task.id);
     if (closedTask?.status !== 'closed' || !closedTask.closed_at || closedTask.closure?.operator !== 'QA 总部运营') throw new Error(JSON.stringify(closedTask));
-    return { task_id:task.id, status:closedTask.status, proof_document_id:submittedTask.proof_document_id, timeline_entries:closedTask.activity_log?.length || 0, closure:closedTask.closure };
+    const retryCreated = await json('/api/operation-tasks', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ storeCode:'STORE001', title:'QA 未解决升级', instruction:'验证重新打开与升级', taskType:'qa_regression' }) });
+    const retryTask = retryCreated.operationTask;
+    await json(`/api/operation-tasks/${retryTask.id}/notes`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ operator:'QA 门店', note:'门店核查后仍未解决' }) });
+    const escalated = await json(`/api/operation-tasks/${retryTask.id}/close`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ outcome:'unresolved', follow_up_action:'escalate_hq', final_cause:'门店证据不足', resolution_note:'升级总部库存运营继续排查', operator:'QA 总部运营', store_adopted:false, hq_confirmed:true }) });
+    const escalatedTask = (escalated.operationTasks || []).find((item) => item.id === retryTask.id);
+    if (escalatedTask?.status !== 'pending_hq_review' || escalatedTask.assigned_to !== '总部库存运营' || escalatedTask.escalation_level !== 'escalate_hq' || escalatedTask.closure_attempts?.length !== 1) throw new Error(JSON.stringify(escalatedTask));
+    return { task_id:task.id, status:closedTask.status, proof_document_id:submittedTask.proof_document_id, timeline_entries:closedTask.activity_log?.length || 0, closure:closedTask.closure, escalation:{ task_id:retryTask.id, status:escalatedTask.status, assigned_to:escalatedTask.assigned_to } };
   });
 
   await check('inventory Knowhow can be saved and read from R2', async () => {
