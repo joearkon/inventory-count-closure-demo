@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "schema_name": "threshold_table",
+  "schema_description": "阈值速查表 — Codex 实现异常判定引擎时按 (物料类型, 规则类型) 索引阈值",
+  "schema_fields": [
+    {"name": "rule_id", "type": "string", "required": true, "format": "T-{NNN}", "description": "阈值唯一 ID"},
+    {"name": "material_category", "type": "string", "required": true, "enum": ["包装耗材", "易耗液体", "现制半成品", "自然损耗", "称重原料", "一般物料", "*"], "description": "物料类型；* 表示通用兜底"},
+    {"name": "rule_type", "type": "string", "required": true, "enum": ["D2", "D1", "S1", "T2"], "description": "规则类型（D2 负库存 / D1 理论与实盘差异 / S1 安全库存 / T2 销入比）"},
+    {"name": "threshold_expr", "type": "string", "required": true, "description": "阈值表达式，含运算符 + 单位"},
+    {"name": "severity", "type": "string", "required": true, "enum": ["warning", "critical", "info"], "description": "严重等级"},
+    {"name": "evidence_required", "type": "string", "required": true, "description": "判定时需要的证据字段"},
+    {"name": "false_positive_risk", "type": "string", "required": true, "enum": ["low", "medium", "high"], "description": "误报风险"},
+    {"name": "sla_hours", "type": "integer", "required": true, "description": "响应 SLA（小时）"},
+    {"name": "note", "type": "string", "required": false, "description": "备注 / 行业依据"}
+  ],
+  "thresholds": [
+    {"rule_id": "T-001", "material_category": "包装耗材", "rule_type": "S1", "threshold_expr": "期末 < 7 天销量", "severity": "critical", "evidence_required": "期末 + 7 日销量均值", "false_positive_risk": "low", "sla_hours": 4, "note": "杯盖/吸管/杯袋：缺货直接断货"},
+    {"rule_id": "T-002", "material_category": "易耗液体", "rule_type": "S1", "threshold_expr": "期末 < 3 天销量", "severity": "critical", "evidence_required": "期末 + 3 日销量均值", "false_positive_risk": "low", "sla_hours": 4, "note": "糖浆/果糖：液体大瓶耗得快"},
+    {"rule_id": "T-003", "material_category": "现制半成品", "rule_type": "S1", "threshold_expr": "期末 < 2 天销量", "severity": "warning", "evidence_required": "期末 + 2 日销量均值", "false_positive_risk": "medium", "sla_hours": 8, "note": "半成品奶茶：制作周期 4h，2 天是合理提前量"},
+    {"rule_id": "T-004", "material_category": "自然损耗", "rule_type": "S1", "threshold_expr": "期末 < 安全库存 × 0.5", "severity": "warning", "evidence_required": "期末 + 安全库存", "false_positive_risk": "medium", "sla_hours": 24, "note": "茶叶/鲜果：损耗率高，安全库存需冗余"},
+    {"rule_id": "T-005", "material_category": "称重原料", "rule_type": "S1", "threshold_expr": "期末 < 安全库存 × 0.8", "severity": "warning", "evidence_required": "期末 + 安全库存", "false_positive_risk": "low", "sla_hours": 24, "note": "黑糖珍珠/黑糖冻：按 g 计，包装 1Kg"},
+    {"rule_id": "T-006", "material_category": "一般物料", "rule_type": "S1", "threshold_expr": "期末 < 安全库存 × 0.5", "severity": "info", "evidence_required": "期末 + 安全库存", "false_positive_risk": "low", "sla_hours": 48, "note": "非关键物料：48h 内补货即可"},
+    {"rule_id": "T-007", "material_category": "*", "rule_type": "D2", "threshold_expr": "期末 < 0", "severity": "critical", "evidence_required": "期末库存 + 流水记录", "false_positive_risk": "low", "sla_hours": 1, "note": "负库存一定是数据或流程异常，立刻查"},
+    {"rule_id": "T-008", "material_category": "包装耗材", "rule_type": "D1", "threshold_expr": "ABS(理论-实盘) > 入库量 × 5%", "severity": "warning", "evidence_required": "理论期末 + 实盘 + 入库量", "false_positive_risk": "medium", "sla_hours": 24, "note": "杯盖/吸管等按个计，5% 是合理损耗"},
+    {"rule_id": "T-009", "material_category": "易耗液体", "rule_type": "D1", "threshold_expr": "ABS(理论-实盘) > 入库量 × 3%", "severity": "warning", "evidence_required": "理论期末 + 实盘 + 入库量", "false_positive_risk": "medium", "sla_hours": 12, "note": "液体 3% 偏紧，防偷盗/漏记"},
+    {"rule_id": "T-010", "material_category": "现制半成品", "rule_type": "D1", "threshold_expr": "ABS(理论-实盘) > 入库量 × 8%", "severity": "warning", "evidence_required": "理论期末 + 实盘 + 入库量", "false_positive_risk": "medium", "sla_hours": 24, "note": "半成品制作有残余，8% 是合理偏差"},
+    {"rule_id": "T-011", "material_category": "自然损耗", "rule_type": "D1", "threshold_expr": "ABS(理论-实盘) > 入库量 × 10%", "severity": "warning", "evidence_required": "理论期末 + 实盘 + 入库量", "false_positive_risk": "high", "sla_hours": 48, "note": "自然损耗物料本身就有高损耗，10% 才报警"},
+    {"rule_id": "T-012", "material_category": "称重原料", "rule_type": "D1", "threshold_expr": "ABS(理论-实盘) > 入库量 × 4%", "severity": "warning", "evidence_required": "理论期末 + 实盘 + 入库量", "false_positive_risk": "medium", "sla_hours": 24, "note": "按 g 计，4% 是合理偏差"},
+    {"rule_id": "T-013", "material_category": "一般物料", "rule_type": "D1", "threshold_expr": "ABS(理论-实盘) > 入库量 × 3%", "severity": "info", "evidence_required": "理论期末 + 实盘 + 入库量", "false_positive_risk": "low", "sla_hours": 48, "note": "一般物料偏差 3% 即可"},
+    {"rule_id": "T-014", "material_category": "*", "rule_type": "T2", "threshold_expr": "销入比 < 0.3", "severity": "warning", "evidence_required": "7 日销量 + 7 日入库量", "false_positive_risk": "high", "sla_hours": 48, "note": "可能是库存积压 / 销量骤降 / 入库过量，需多源验证"},
+    {"rule_id": "T-015", "material_category": "*", "rule_type": "T2", "threshold_expr": "销入比 > 2.5", "severity": "critical", "evidence_required": "7 日销量 + 7 日入库量", "false_positive_risk": "medium", "sla_hours": 24, "note": "可能是漏记入库 / 销量虚高"},
+    {"rule_id": "T-016", "material_category": "*", "rule_type": "T2", "threshold_expr": "7 日销量环比 < -40%", "severity": "warning", "evidence_required": "7 日销量 + 上一周销量", "false_positive_risk": "medium", "sla_hours": 24, "note": "环比暴跌需排查"},
+    {"rule_id": "T-017", "material_category": "*", "rule_type": "T2", "threshold_expr": "7 日销量环比 > 60%", "severity": "info", "evidence_required": "7 日销量 + 上一周销量", "false_positive_risk": "medium", "sla_hours": 48, "note": "环比暴增需复核是否数据异常"},
+    {"rule_id": "T-018", "material_category": "易耗液体", "rule_type": "T2", "threshold_expr": "销入比 > 3.0", "severity": "warning", "evidence_required": "7 日销量 + 7 日入库量", "false_positive_risk": "medium", "sla_hours": 24, "note": "液体物料易漏记入库"},
+    {"rule_id": "T-019", "material_category": "现制半成品", "rule_type": "T2", "threshold_expr": "销入比 > 1.5", "severity": "critical", "evidence_required": "7 日销量 + 7 日入库量", "false_positive_risk": "medium", "sla_hours": 12, "note": "半成品制作周期短，销入比不应过高"},
+    {"rule_id": "T-020", "material_category": "包装耗材", "rule_type": "T2", "threshold_expr": "销入比 < 0.5", "severity": "info", "evidence_required": "7 日销量 + 7 日入库量", "false_positive_risk": "low", "sla_hours": 48, "note": "杯盖/吸管积压不是大问题"},
+    {"rule_id": "T-021", "material_category": "*", "rule_type": "D2", "threshold_expr": "期末 = 0 AND 当日销量 > 0", "severity": "critical", "evidence_required": "期末 + 当日销量", "false_positive_risk": "low", "sla_hours": 1, "note": "卖出 0 库存必有数据异常"},
+    {"rule_id": "T-022", "material_category": "*", "rule_type": "D2", "threshold_expr": "期末 > 安全库存 × 10", "severity": "info", "evidence_required": "期末 + 安全库存", "false_positive_risk": "low", "sla_hours": 48, "note": "巨量库存 = 入库过量"},
+    {"rule_id": "T-023", "material_category": "*", "rule_type": "T2", "threshold_expr": "毛利率 < 50%", "severity": "warning", "evidence_required": "销售金额 + 销售成本", "false_positive_risk": "low", "sla_hours": 24, "note": "茶饮毛利率应 ≥ 55%"},
+    {"rule_id": "T-024", "material_category": "*", "rule_type": "T2", "threshold_expr": "物料消耗偏差率 > 20%", "severity": "warning", "evidence_required": "今日消耗 + 理论消耗", "false_positive_risk": "medium", "sla_hours": 24, "note": "实际消耗超理论 20% = 配方错或漏记"}
+  ],
+  "meta": {
+    "total": 24,
+    "by_rule": {"D2": 3, "D1": 7, "S1": 6, "T2": 8},
+    "by_material": {"包装耗材": 3, "易耗液体": 4, "现制半成品": 3, "自然损耗": 2, "称重原料": 2, "一般物料": 2, "*通用": 8},
+    "note": "MVP 第一版保守拍板，偏紧以保护加盟商；4 周真实数据后校准 v2"
+  }
+}

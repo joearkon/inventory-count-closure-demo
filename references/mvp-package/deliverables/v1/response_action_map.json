@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "schema_name": "response_action_map",
+  "schema_description": "响应动作映射 — Codex 实现 5 步闭环时按 (规则, 责任分组) 索引动作",
+  "schema_fields": [
+    {"name": "action_id", "type": "string", "required": true, "format": "A-{NNN}", "description": "动作 ID"},
+    {"name": "rule_type", "type": "string", "required": true, "enum": ["D2", "D1", "S1", "T2"], "description": "触发的规则"},
+    {"name": "verdict", "type": "string", "required": true, "enum": ["confirmed", "excluded", "suspect", "insufficient", "pending_count"], "description": "判定档"},
+    {"name": "owner_role", "type": "string", "required": true, "enum": ["加盟商", "督导", "总部", "系统"], "description": "执行方"},
+    {"name": "action_type", "type": "string", "required": true, "enum": ["推送", "复核", "补录", "盘点", "调拨", "采购", "培训", "归档"], "description": "动作类型"},
+    {"name": "channel", "type": "string", "required": true, "enum": ["飞书消息", "飞书卡片", "AI助手对话", "邮件", "系统自动"], "description": "触达渠道"},
+    {"name": "sla_hours", "type": "integer", "required": true, "description": "响应 SLA"},
+    {"name": "feedback_required", "type": "boolean", "required": true, "description": "是否需要反馈"},
+    {"name": "escalation_path", "type": "string", "required": false, "description": "升级路径：超时或拒绝后下一步"},
+    {"name": "description", "type": "string", "required": true, "description": "动作描述"}
+  ],
+  "actions": [
+    {"action_id": "A-001", "rule_type": "D2", "verdict": "confirmed", "owner_role": "系统", "action_type": "推送", "channel": "飞书卡片", "sla_hours": 1, "feedback_required": true, "escalation_path": "加盟商 1h 未响应 → 督导介入", "description": "D2 负库存确认：系统自动推送卡片到加盟商，要求 1h 内确认或补录"},
+    {"action_id": "A-002", "rule_type": "D2", "verdict": "confirmed", "owner_role": "加盟商", "action_type": "补录", "channel": "AI助手对话", "sla_hours": 2, "feedback_required": true, "escalation_path": "未补录 → 督导现场核查", "description": "D2 负库存：加盟商通过 AI 助手补录丢失流水或入库单"},
+    {"action_id": "A-003", "rule_type": "D2", "verdict": "suspect", "owner_role": "督导", "action_type": "复核", "channel": "飞书消息", "sla_hours": 4, "feedback_required": true, "escalation_path": "未复核 → 总部派单", "description": "D2 疑似：督导复核流水 + 单据号，4h 内给结论"},
+    {"action_id": "A-004", "rule_type": "D2", "verdict": "insufficient", "owner_role": "系统", "action_type": "推送", "channel": "飞书消息", "sla_hours": 0, "feedback_required": false, "escalation_path": "30 分钟后重跑 D2 判定", "description": "D2 证据不足：系统自动重跑，无需人工介入"},
+    {"action_id": "A-005", "rule_type": "D1", "verdict": "confirmed", "owner_role": "督导", "action_type": "复核", "channel": "飞书卡片", "sla_hours": 12, "feedback_required": true, "escalation_path": "复核不通过 → 加盟商现场盘点", "description": "D1 理论与实盘差异确认：督导派单现场复核"},
+    {"action_id": "A-006", "rule_type": "D1", "verdict": "confirmed", "owner_role": "加盟商", "action_type": "盘点", "channel": "AI助手对话", "sla_hours": 24, "feedback_required": true, "escalation_path": "未盘点 → 督导介入", "description": "D1 差异确认：加盟商做一次完整盘点并录入"},
+    {"action_id": "A-007", "rule_type": "D1", "verdict": "suspect", "owner_role": "督导", "action_type": "复核", "channel": "飞书消息", "sla_hours": 24, "feedback_required": true, "escalation_path": "未复核 → 列入下次巡检重点", "description": "D1 疑似：督导 24h 内复核差异来源"},
+    {"action_id": "A-008", "rule_type": "D1", "verdict": "excluded", "owner_role": "系统", "action_type": "归档", "channel": "系统自动", "sla_hours": 0, "feedback_required": false, "escalation_path": "无", "description": "D1 已排除：归档到已处理日志，无需人工"},
+    {"action_id": "A-009", "rule_type": "S1", "verdict": "confirmed", "owner_role": "系统", "action_type": "推送", "channel": "飞书卡片", "sla_hours": 0, "feedback_required": false, "escalation_path": "无（自动推送补货建议）", "description": "S1 安全库存预警：自动推送补货建议卡片（含建议补货量）"},
+    {"action_id": "A-010", "rule_type": "S1", "verdict": "confirmed", "owner_role": "加盟商", "action_type": "采购", "channel": "AI助手对话", "sla_hours": 4, "feedback_required": true, "escalation_path": "未采购 → 督导介入", "description": "S1 预警：加盟商通过 AI 助手发起采购单或调拨申请"},
+    {"action_id": "A-011", "rule_type": "S1", "verdict": "insufficient", "owner_role": "系统", "action_type": "推送", "channel": "飞书消息", "sla_hours": 0, "feedback_required": false, "escalation_path": "3 日后销量回升再判定", "description": "S1 证据不足（销量骤降）：系统推送提示，3 日后重跑"},
+    {"action_id": "A-012", "rule_type": "T2", "verdict": "confirmed", "owner_role": "加盟商", "action_type": "补录", "channel": "AI助手对话", "sla_hours": 12, "feedback_required": true, "escalation_path": "未补录 → 督导现场核查", "description": "T2 销入比异常：加盟商补录入库单（疑似漏记）"},
+    {"action_id": "A-013", "rule_type": "T2", "verdict": "suspect", "owner_role": "督导", "action_type": "复核", "channel": "飞书消息", "sla_hours": 24, "feedback_required": true, "escalation_path": "未复核 → 总部研判", "description": "T2 疑似：督导复核入库 / 销量数据"},
+    {"action_id": "A-014", "rule_type": "T2", "verdict": "insufficient", "owner_role": "总部", "action_type": "复核", "channel": "飞书消息", "sla_hours": 48, "feedback_required": true, "escalation_path": "未复核 → 列入下周复诊", "description": "T2 证据不足：总部 48h 内做多源数据交叉验证"},
+    {"action_id": "A-015", "rule_type": "T2", "verdict": "excluded", "owner_role": "系统", "action_type": "归档", "channel": "系统自动", "sla_hours": 0, "feedback_required": false, "escalation_path": "无", "description": "T2 已排除（促销/新品/季节）：归档到已处理日志"},
+    {"action_id": "A-016", "rule_type": "*", "verdict": "*suspect", "owner_role": "总部", "action_type": "培训", "channel": "飞书卡片", "sla_hours": 168, "feedback_required": false, "escalation_path": "无（培训资源定期投放）", "description": "所有疑似档：总部定期推送培训资源（操作规范 / 配方录入 / 盘点技巧）"}
+  ],
+  "feedback_loop": {
+    "name": "5 步反馈闭环",
+    "steps": [
+      {"step": 1, "name": "推送", "description": "系统根据判定档推送对应动作卡片到执行方"},
+      {"step": 2, "name": "接收", "description": "执行方（加盟商 / 督导 / 总部）通过飞书 / AI 助手接收并打开卡片"},
+      {"step": 3, "name": "执行", "description": "执行方在 SLA 内完成动作（补录 / 复核 / 盘点 / 采购）"},
+      {"step": 4, "name": "反馈", "description": "执行结果回传到系统（AI 助手对话结束 / 督导回复 / 加盟商确认）"},
+      {"step": 5, "name": "归档", "description": "系统记录到门店异常处理日志，更新判定模型"}
+    ],
+    "timeout_policy": "SLA 超时 → 升级路径触发（esclation_path）；连续 2 次超时 → 标记为高风险门店"
+  },
+  "meta": {
+    "total_actions": 16,
+    "by_owner": {"加盟商": 4, "督导": 4, "总部": 2, "系统": 6},
+    "by_rule": {"D2": 4, "D1": 4, "S1": 3, "T2": 4, "*通用": 1}
+  }
+}

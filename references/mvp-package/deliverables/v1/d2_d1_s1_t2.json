@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "schema_name": "decision_tree",
+  "schema_description": "异常判定决策树 — Codex 实现 5 档研判输出时按 (规则类型, 判定档) 路由",
+  "five_tier_definitions": {
+    "confirmed": {"label": "有证据", "zh_label": "已有确凿证据，可直接定责", "action_required": true, "auto_action": true},
+    "excluded": {"label": "已排除", "zh_label": "已检查所有可能源，未发现异常", "action_required": false, "auto_action": false},
+    "suspect": {"label": "疑似", "zh_label": "部分证据但不能定责，需人工核查", "action_required": true, "auto_action": false},
+    "insufficient": {"label": "证据不足", "zh_label": "缺关键数据（盘点 / 入库 / 配方），需补录", "action_required": true, "auto_action": false},
+    "pending_count": {"label": "待盘点", "zh_label": "判定需实盘数据，等待下次盘点", "action_required": false, "auto_action": false}
+  },
+  "trees": {
+    "D2": {
+      "rule_name": "负库存与异常方向",
+      "trigger_condition": "期末 < 0 OR 期末 = 0 AND 销量 > 0 OR 期末 > 安全库存 × 10",
+      "decision_steps": [
+        {"step": 1, "question": "期末库存 < 0？", "yes": {"verdict": "confirmed", "next_action": "查流水最后 5 条 + 反查单据号"}},
+        {"step": 2, "question": "期末 = 0 且当日销量 > 0？", "yes": {"verdict": "confirmed", "next_action": "查销售明细 + 反查是否漏减库存"}},
+        {"step": 3, "question": "期末 > 安全库存 × 10？", "yes": {"verdict": "confirmed", "next_action": "查入库单 + 复核是否录错数量"}},
+        {"step": 4, "question": "流水中是否有冲销/红冲记录？", "yes": {"verdict": "excluded", "next_action": "记录到已排除日志"}},
+        {"step": 5, "question": "数据同步延迟 < 30 分钟？", "yes": {"verdict": "insufficient", "next_action": "30 分钟后重跑"}}
+      ],
+      "fallback_verdict": "suspect"
+    },
+    "D1": {
+      "rule_name": "理论与实盘差异",
+      "trigger_condition": "ABS(理论 - 实盘) > 阈值 (T-008~T-013)",
+      "decision_steps": [
+        {"step": 1, "question": "理论期末 < 0？", "yes": {"verdict": "confirmed", "next_action": "查物耗公式 + 配方"}},
+        {"step": 2, "question": "实盘数据来源是周盘点？", "yes": {"verdict": "confirmed", "next_action": "复核盘点单 + 加盟商签字确认"}},
+        {"step": 3, "question": "差异 > 阈值的 2 倍？", "yes": {"verdict": "confirmed", "next_action": "现场核查（督导）"}},
+        {"step": 4, "question": "近 7 日有调拨记录？", "yes": {"verdict": "suspect", "next_action": "查调拨单 + 加盟商解释"}},
+        {"step": 5, "question": "近 7 日有报损单？", "yes": {"verdict": "excluded", "next_action": "报损已记录，差异可解释"}},
+        {"step": 6, "question": "配方最近 14 日改过？", "yes": {"verdict": "suspect", "next_action": "复核配方 + 通知总部"}}
+      ],
+      "fallback_verdict": "pending_count"
+    },
+    "S1": {
+      "rule_name": "安全库存预警",
+      "trigger_condition": "期末 < 安全库存相关阈值 (T-001~T-006)",
+      "decision_steps": [
+        {"step": 1, "question": "物料类型 = 包装耗材 OR 易耗液体？", "yes": {"verdict": "confirmed", "next_action": "critical 级别，立刻推送补货建议"}},
+        {"step": 2, "question": "今日是否有入库单待入库？", "yes": {"verdict": "excluded", "next_action": "待入库，差异可解释"}},
+        {"step": 3, "question": "近 3 日销量骤降 > 30%？", "yes": {"verdict": "insufficient", "next_action": "需销量回升后才能判定是否真实预警"}},
+        {"step": 4, "question": "是否处于季节性低销期？", "yes": {"verdict": "excluded", "next_action": "季节性可解释"}}
+      ],
+      "fallback_verdict": "suspect"
+    },
+    "T2": {
+      "rule_name": "销入比异常",
+      "trigger_condition": "销入比异常 (T-014~T-020)",
+      "decision_steps": [
+        {"step": 1, "question": "销入比 > 3.0？", "yes": {"verdict": "confirmed", "next_action": "查入库单（疑似漏记）"}},
+        {"step": 2, "question": "销入比 < 0.3？", "yes": {"verdict": "suspect", "next_action": "查积压 + 销量数据"}},
+        {"step": 3, "question": "近 14 日有新 SKU 上线？", "yes": {"verdict": "excluded", "next_action": "新品入库存正常"}},
+        {"step": 4, "question": "近 14 日有 SKU 下线？", "yes": {"verdict": "suspect", "next_action": "查下线 SKU 的库存清理"}},
+        {"step": 5, "question": "促销期间（节日 / 平台活动）？", "yes": {"verdict": "excluded", "next_action": "促销可解释"}}
+      ],
+      "fallback_verdict": "insufficient"
+    }
+  },
+  "meta": {
+    "tree_count": 4,
+    "total_decision_steps": 19,
+    "note": "MVP 第一版决策树，每棵树 4-6 个判定点；fallback_verdict 是所有 step 都未命中时的兜底档"
+  }
+}

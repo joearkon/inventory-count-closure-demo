@@ -1,0 +1,98 @@
+{
+  "schema_version": "1.0",
+  "schema_name": "material_taxonomy",
+  "schema_description": "物料 6 大分类法 — Codex 在阈值判定 / 配方校准 / 异常归因时按此分类索引",
+  "categories": [
+    {
+      "code": "PKG",
+      "name_zh": "包装耗材",
+      "name_en": "packaging_consumables",
+      "definition": "直接接触产品的包装物，按个/杯计",
+      "examples": ["杯盖", "吸管", "杯袋", "封口膜", "打包盒", "餐巾纸"],
+      "unit": "个/杯",
+      "loss_rate_baseline": "0.5%-2%",
+      "storage_method": "常温干燥",
+      "shelf_life_days": 365,
+      "critical": true,
+      "alert_sensitivity": "high"
+    },
+    {
+      "code": "LIQ",
+      "name_zh": "易耗液体",
+      "name_en": "easy_consume_liquid",
+      "definition": "消耗快、保质期长、按体积计的液体原料",
+      "examples": ["果糖", "糖浆", "黑糖成品", "调味液"],
+      "unit": "L/mL",
+      "loss_rate_baseline": "1%-3%",
+      "storage_method": "常温阴凉",
+      "shelf_life_days": 180,
+      "critical": true,
+      "alert_sensitivity": "high"
+    },
+    {
+      "code": "SEMI",
+      "name_zh": "现制半成品",
+      "name_en": "semi_finished",
+      "definition": "中央厨房或门店提前制作的半成品，需 4h 内使用",
+      "examples": ["半成品奶茶", "预制珍珠", "预制糖浆"],
+      "unit": "L/g",
+      "loss_rate_baseline": "3%-8%",
+      "storage_method": "冷藏",
+      "shelf_life_days": 1,
+      "critical": true,
+      "alert_sensitivity": "high"
+    },
+    {
+      "code": "WASTE",
+      "name_zh": "自然损耗",
+      "name_en": "natural_waste",
+      "definition": "高损耗率（≥ 10%）的鲜果 / 鲜料",
+      "examples": ["鲜果", "鲜茶叶", "鲜奶油", "鲜鸡蛋"],
+      "unit": "kg/个",
+      "loss_rate_baseline": "10%-20%",
+      "storage_method": "冷藏",
+      "shelf_life_days": 7,
+      "critical": false,
+      "alert_sensitivity": "medium"
+    },
+    {
+      "code": "WEIGHT",
+      "name_zh": "称重原料",
+      "name_en": "weighted_raw",
+      "definition": "按重量计的固体原料，包装规格化",
+      "examples": ["黑糖珍珠", "黑糖冻", "茶叶干", "咖啡豆", "可可粉"],
+      "unit": "g/kg",
+      "loss_rate_baseline": "0.5%-2%",
+      "storage_method": "常温干燥",
+      "shelf_life_days": 365,
+      "critical": true,
+      "alert_sensitivity": "medium"
+    },
+    {
+      "code": "GEN",
+      "name_zh": "一般物料",
+      "name_en": "general_material",
+      "definition": "非直接接触产品的辅助物料",
+      "examples": ["清洁剂", "消毒水", "标签纸", "收银纸"],
+      "unit": "瓶/卷/个",
+      "loss_rate_baseline": "0%",
+      "storage_method": "常温",
+      "shelf_life_days": 720,
+      "critical": false,
+      "alert_sensitivity": "low"
+    }
+  ],
+  "classification_rules": {
+    "rule_1": "接触产品 + 单杯计 → PKG 包装耗材",
+    "rule_2": "液体 + 消耗快 + 常温存储 → LIQ 易耗液体",
+    "rule_3": "门店加工 + 4h 内使用 → SEMI 现制半成品",
+    "rule_4": "鲜果 / 鲜料 + 损耗率 ≥ 10% → WASTE 自然损耗",
+    "rule_5": "固体 + 按重量计 + 包装规格化 → WEIGHT 称重原料",
+    "rule_6": "其他辅助物料 → GEN 一般物料"
+  },
+  "meta": {
+    "total_categories": 6,
+    "critical_count": 4,
+    "note": "MVP 第一版分类法，后续按真实物料表匹配；分类影响阈值（附录 C）+ 决策树分支（附录 D）"
+  }
+}
