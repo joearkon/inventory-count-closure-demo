@@ -4,12 +4,20 @@
 # 用法: GH_TOKEN=ghp_xxx ./sync-references-to-github.sh [commit-message]
 #
 # 二次复用：下次架构文档更新后，重新跑这个脚本即可
+#
+# 署名策略（option C）：
+#   - author = PAT 所有者（你本人）
+#   - 加 trailer: Co-authored-by: 陈子卓野的工作伙伴 <noreply@joearkon.com>
 
 set -e
 
 REPO="joearkon/inventory-count-closure-demo"
 BRANCH="main"
 COMMIT_MSG="${1:-feat(references): 同步架构 + 验收 + MVP package v1}"
+
+# AI 合作作者署名
+CO_AUTHOR_NAME="陈子卓野的工作伙伴"
+CO_AUTHOR_EMAIL="noreply@joearkon.com"
 
 if [ -z "$GH_TOKEN" ]; then
   echo "❌ 错误: 请设置 GH_TOKEN 环境变量"
@@ -23,6 +31,11 @@ if [ ! -d "$SRC_DIR" ]; then
   echo "❌ 错误: 找不到 references/ 目录 ($SRC_DIR)"
   exit 1
 fi
+
+# 完整 commit message（含 trailer）
+FULL_MSG="${COMMIT_MSG}
+
+Co-authored-by: ${CO_AUTHOR_NAME} <${CO_AUTHOR_EMAIL}>"
 
 # 找到 main 分支的最新 commit SHA
 echo "🔍 查询 $REPO@$BRANCH 最新 commit..."
@@ -41,17 +54,13 @@ echo "   Tree SHA: $TREE_SHA"
 echo "📦 上传文件到 references/ 子目录..."
 BLOBS_JSON="[]"
 for file_path in $(cd "$SRC_DIR" && find . -type f); do
-  # 去掉开头的 "./"
   rel_path="${file_path#./}"
-  # GitHub contents API path（关键：加 references/ 前缀，让文件落到子目录）
   gh_path="references/$rel_path"
   full_path="$SRC_DIR/$rel_path"
   echo "   - $gh_path"
 
-  # base64 编码文件内容
   content=$(base64 -w 0 "$full_path")
 
-  # 创建 blob
   blob_json=$(curl -sS -X POST \
     -H "Authorization: Bearer $GH_TOKEN" \
     -H "Content-Type: application/json" \
@@ -59,7 +68,6 @@ for file_path in $(cd "$SRC_DIR" && find . -type f); do
     -d "{\"content\":\"$content\",\"encoding\":\"base64\"}")
   blob_sha=$(echo "$blob_json" | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")
 
-  # 累积到 blobs 数组（path 必须带 references/ 前缀）
   BLOBS_JSON=$(echo "$BLOBS_JSON" | python3 -c "
 import sys, json
 arr = json.loads(sys.stdin.read())
@@ -77,12 +85,20 @@ TREE_RESPONSE=$(curl -sS -X POST \
 NEW_TREE_SHA=$(echo "$TREE_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")
 echo "   新 Tree SHA: $NEW_TREE_SHA"
 
-echo "📝 创建 commit..."
+echo "📝 创建 commit（带 AI Co-authored-by trailer）..."
 COMMIT_RESPONSE=$(curl -sS -X POST \
   -H "Authorization: Bearer $GH_TOKEN" \
   -H "Content-Type: application/json" \
   "https://api.github.com/repos/$REPO/git/commits" \
-  -d "{\"message\":\"$COMMIT_MSG\",\"tree\":\"$NEW_TREE_SHA\",\"parents\":[\"$SHA\"]}")
+  -d "$(python3 -c "
+import json
+msg = '''$FULL_MSG'''
+print(json.dumps({
+    'message': msg,
+    'tree': '$NEW_TREE_SHA',
+    'parents': ['$SHA']
+}))
+")")
 NEW_COMMIT_SHA=$(echo "$COMMIT_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")
 echo "   新 Commit SHA: $NEW_COMMIT_SHA"
 
@@ -96,3 +112,7 @@ echo "$PUSH_RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); pri
 
 echo ""
 echo "✨ 全部完成！访问 https://github.com/$REPO/tree/$BRANCH/references"
+echo "📝 Commit message:"
+echo "---"
+echo "$FULL_MSG"
+echo "---"
