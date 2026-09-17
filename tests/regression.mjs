@@ -86,6 +86,12 @@ await check('new pages are served', async () => {
   return paths;
 });
 
+await check('store mobile header identifies the assistant', async () => {
+  const page = await fetch(`${base}/store/?store=STORE001`).then((r) => r.text());
+  if (!/id="store-header-title"> · 门店助手</.test(page)) throw new Error('store header must identify the page as 门店助手');
+  return { header:'STORE001 · 门店助手' };
+});
+
 await check('follow-up work orders have a traceable detail workspace', async () => {
   const [page, script] = await Promise.all([fetch(`${base}/`).then((r) => r.text()), fetch(`${base}/app.js`).then((r) => r.text())]);
   for (const token of ['operation-drawer', '处理时间线', '新增处理记录', '当前操作人', '来源与判断记录']) if (!`${page}\n${script}`.includes(token)) throw new Error(`missing work order detail token: ${token}`);
