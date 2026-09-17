@@ -225,10 +225,10 @@ if (mutationTests) {
     const submitted = await json(`/api/operation-tasks/${task.id}/submit`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ filename:'qa-proof.png', previewData:'data:image/png;base64,iVBORw0KGgo=' }) });
     const submittedTask = (submitted.operationTasks || []).find((item) => item.id === task.id);
     if (submittedTask?.status !== 'pending_hq_review' || !submittedTask.proof_document_id) throw new Error(JSON.stringify(submittedTask));
-    const closed = await json(`/api/operation-tasks/${task.id}/close`, { method:'POST' });
+    const closed = await json(`/api/operation-tasks/${task.id}/close`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ outcome:'resolved', final_cause:'QA 已确认凭证完整', resolution_note:'完成核对并保留审计记录', operator:'QA 总部运营', store_adopted:true, hq_confirmed:true }) });
     const closedTask = (closed.operationTasks || []).find((item) => item.id === task.id);
-    if (closedTask?.status !== 'closed' || !closedTask.closed_at) throw new Error(JSON.stringify(closedTask));
-    return { task_id:task.id, status:closedTask.status, proof_document_id:submittedTask.proof_document_id, timeline_entries:closedTask.activity_log?.length || 0 };
+    if (closedTask?.status !== 'closed' || !closedTask.closed_at || closedTask.closure?.operator !== 'QA 总部运营') throw new Error(JSON.stringify(closedTask));
+    return { task_id:task.id, status:closedTask.status, proof_document_id:submittedTask.proof_document_id, timeline_entries:closedTask.activity_log?.length || 0, closure:closedTask.closure };
   });
 
   await check('inventory Knowhow can be saved and read from R2', async () => {

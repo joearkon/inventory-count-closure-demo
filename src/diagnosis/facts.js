@@ -54,7 +54,7 @@ function windowSummary(signal, context, days) {
   totals.receipt += number(current.receipt_qty); totals.transfer_in += number(current.transfer_in_qty);
   totals.transfer_out += number(current.transfer_out_qty); totals.scrap += number(current.scrap_qty);
   totals.bom_consumption += number(current.bom_consumption_qty);
-  const eventIds = (context.materialEvents || []).filter((event) => event.status === 'active' && event.store_code === signal.store_code && event.business_date >= from && event.business_date <= to && sameMaterial(event.material_name, signal.material_name) && event.unit === unit).map((event) => event.id);
+  const eventIds = [...new Set((context.materialEvents || []).filter((event) => event.status === 'active' && event.store_code === signal.store_code && event.business_date >= from && event.business_date <= to && sameMaterial(event.material_name, signal.material_name) && event.unit === unit).map((event) => event.id).filter(Boolean))];
   return { from, to, status: historicalDays >= days - 1 ? 'confirmed' : days === 1 ? 'confirmed' : 'partial', historical_days: historicalDays, totals, evidence_refs: eventIds };
 }
 
@@ -92,7 +92,10 @@ export function buildFactPacket(signal, context = {}) {
     },
     data_availability: {
       ...procurement,
-      destination_acceptance: destinationAcceptanceAvailability(signal, context)
+      destination_acceptance: destinationAcceptanceAvailability(signal, context),
+      query_health: context.queryFailure
+        ? { status:'unavailable', note:String(context.queryFailure).slice(0, 240) }
+        : { status:'confirmed', note:'本次规则所需数据查询已完成' }
     },
     count_policy: context.countPolicy || 'unknown',
     windows: {

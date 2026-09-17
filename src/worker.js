@@ -1,4 +1,5 @@
 import { buildDiagnosisShadowReport } from './diagnosis/shadow.js';
+import { evaluateClosureGate } from './diagnosis/closure.js';
 
 const STORE_CODE = 'STORE001';
 // 门店主档在系统侧维护。即使某店当天尚无销售，也要有零基线物料台账，
@@ -497,9 +498,12 @@ async function r2CreateInitialCount(env, body) {
     if (!lines.length) return bad('该每日盘点计划未包含物料明细，请由总部重新生成计划。', 409);
     const recognitionLabel = body.recognition_note === 'ark_vision' ? 'LLM 图片识别后由门店确认' : body.recognition_note ? '照片识别结果由门店确认' : '门店手工确认';
     const document = r2AddDocument(value, 'daily-plan', body.filename || '每日物料盘点单.jpg', lines, `${recognitionLabel}：已提交 ${lines.length} 项计划物料，理论库存快照保留在盘点单中。`, 'inventory_count', validPreviewData(body.previewData), { store_code: dailyPlan.store_code, business_date: dailyPlan.business_date, count_plan_no: dailyPlan.plan_no });
-    r2LinkOperationDocument(value, String(body.operationTaskId || body.operation_task_id || ''), document.id, '关联盘点单');
-    if (value.feishuImport?.sales?.length) r2ReconcileAllMaterialSignalsAndCases(value, value.feishuImport.latest_business_date, document.received_at);
+    const sourceWorkOrderId = String(body.operationTaskId || body.operation_task_id || dailyPlan.source_work_order_id || '').trim();
+    r2LinkOperationDocument(value, sourceWorkOrderId, document.id, '关联盘点单');
     const submittedPlan = r2MarkCountPlanSubmission(value, STORE_CODE, document, dailyPlan.plan_no);
+    if (value.feishuImport?.sales?.length) r2ReconcileAllMaterialSignalsAndCases(value, value.feishuImport.latest_business_date, document.received_at);
+    const sourceTask = sourceWorkOrderId ? (value.operationTasks || []).find((item) => item.id === sourceWorkOrderId) : null;
+    if (sourceTask) r2AppendDiagnosisRun(value, sourceTask, 'count_completed', { reconcile:false });
     r2Audit(value, '门店', '完成每日盘点任务', `${submittedPlan.plan_no} 已提交全量 ${submittedPlan.submitted_material_count}/${submittedPlan.material_count} 项；总部状态已更新为待复核。`, submittedPlan.id);
     return r2Result(await r2SaveDemoState(env, value, 'daily-plan-count'), 201);
   }
@@ -694,8 +698,13 @@ async function r2AddOperationTaskNote(env, taskId, body) {
 function r2CurrentTaskDiagnosisV2(value, task) {
   if (!task?.source_anomaly_id || !value.feishuImport?.sales) return null;
   const calculated = r2ImportedFeishuState(value);
+  const sourceSignal = (calculated.materialAnomalies || []).find((item) => item.id === task.source_anomaly_id);
+  if (!sourceSignal) return null;
   const report = buildDiagnosisShadowReport({
     ...calculated,
+    // 工单必须能在异常恢复后继续保存“处理后”快照，因此只对本工单关联信号
+    // 临时恢复为可评估状态；不会改写持久化异常状态。
+    materialAnomalies:(calculated.materialAnomalies || []).map((item) => item.id === task.source_anomaly_id ? { ...item, status:'open' } : item),
     purchaseOrders:value.purchaseOrders || [],
     receiptOrders:value.receiptOrders || [],
     storeTransferRequests:value.storeTransferRequests || []
@@ -707,17 +716,41 @@ function r2CurrentTaskDiagnosisV2(value, task) {
 function r2DiagnosisRunSnapshot(current, trigger = 'manual') {
   if (!current?.comparison) return null;
   const comparison = current.comparison;
+  const packet = comparison.fact_packet;
+  const quantities = packet.quantities || {};
+  const evidenceRefs = [...new Set([
+    ...Object.values(quantities).flatMap((item) => item?.evidence_refs || []),
+    ...(packet.physical_count?.evidence_refs || []),
+    ...Object.values(packet.windows || {}).flatMap((item) => item?.evidence_refs || [])
+  ])];
+  const formula = `${quantities.opening?.value ?? 0} + ${quantities.receipt?.value ?? 0} + ${quantities.transfer_in?.value ?? 0} - ${quantities.transfer_out?.value ?? 0} - ${quantities.scrap?.value ?? 0} - ${quantities.bom_consumption?.value ?? 0} = ${quantities.theoretical_closing?.value ?? 0} ${comparison.unit}`;
   return {
     id:id('RUN'), trigger, created_at:current.generated_at || now(), ruleset_id:comparison.v2.ruleset_id,
     rule_code:comparison.v2.rule_code, rule_version:comparison.v2.rule_version,
     anomaly_status:comparison.v2.anomaly_status, cause_evidence_status:comparison.v2.cause_evidence_status,
     physical_status:comparison.v2.physical_status, primary_location:comparison.v2.primary_location,
     primary_hypothesis:comparison.v2.primary_hypothesis, evidence_gaps:comparison.v2.evidence_gaps || [],
-    recommended_action_ids:comparison.v2.recommended_action_ids || [], fact_packet_id:comparison.fact_packet.fact_packet_id,
-    theoretical_closing:comparison.fact_packet.quantities.theoretical_closing,
-    physical_count:comparison.fact_packet.physical_count,
+    recommended_action_ids:comparison.v2.recommended_action_ids || [], recommended_actions:comparison.v2.actions || [],
+    fact_packet_id:packet.fact_packet_id, source_signal:{ id:comparison.signal_id, store_code:comparison.store_code, business_date:comparison.business_date, material_name:comparison.material_name, unit:comparison.unit, v1_rule_code:comparison.v1?.rule_code || null, v1_evidence:comparison.v1?.evidence || null },
+    calculation:{ formula, quantities }, evidence_refs:evidenceRefs,
+    data_availability:packet.data_availability || {}, windows:packet.windows || {}, count_policy:packet.count_policy,
+    theoretical_closing:quantities.theoretical_closing,
+    physical_count:packet.physical_count,
     decision_trace:comparison.v2.decision_trace || []
   };
+}
+
+function r2AppendDiagnosisRun(value, task, trigger, { reconcile = true } = {}) {
+  if (!task?.source_anomaly_id) return null;
+  if (reconcile && value.feishuImport?.sales?.length) r2ReconcileAllMaterialSignalsAndCases(value, value.feishuImport.latest_business_date, now());
+  const current = r2CurrentTaskDiagnosisV2(value, task);
+  if (!current) return null;
+  const run = r2DiagnosisRunSnapshot(current, trigger);
+  task.diagnosis_runs = [...(task.diagnosis_runs || []), run].slice(-20);
+  task.latest_diagnosis_run_id = run.id; task.updated_at = run.created_at;
+  task.activity_log = [...(task.activity_log || []), { id:id('LOG'), type:'diagnosis_reassess', note:`V2 自动重算（${trigger}）：${run.anomaly_status === 'triggered' ? '异常仍触发' : run.anomaly_status === 'not_triggered' ? '异常已恢复' : '规则需要补充数据'}；首要位置：${run.primary_location || '待判断'}。`, operator:'系统规则引擎', created_at:run.created_at, source:'diagnosis_v2' }];
+  r2Audit(value, '系统规则引擎', 'V2 重新研判', `${task.id} · ${run.rule_code} · ${run.anomaly_status} · ${run.primary_location || '待判断'}`, task.id);
+  return run;
 }
 
 async function r2ReassessOperationTask(env, taskId) {
@@ -725,13 +758,9 @@ async function r2ReassessOperationTask(env, taskId) {
   const task = (value.operationTasks || []).find((item) => item.id === taskId);
   if (!task) return bad('跟进工单不存在。', 404);
   if (!task.source_anomaly_id) return bad('该工单未关联库存研判，不能运行 V2。', 409);
+  const run = r2AppendDiagnosisRun(value, task, 'manual_reassess');
+  if (!run) return bad('当前关联研判已关闭或缺少可计算事实，无法重新研判。', 409);
   const current = r2CurrentTaskDiagnosisV2(value, task);
-  if (!current) return bad('当前关联研判已关闭或缺少可计算事实，无法重新研判。', 409);
-  const run = r2DiagnosisRunSnapshot(current, 'manual_reassess');
-  task.diagnosis_runs = [...(task.diagnosis_runs || []), run].slice(-20);
-  task.latest_diagnosis_run_id = run.id; task.updated_at = run.created_at;
-  task.activity_log = [...(task.activity_log || []), { id:id('LOG'), type:'diagnosis_reassess', note:`V2 重新研判：${run.anomaly_status === 'triggered' ? '异常仍触发' : '异常已恢复'}；首要位置：${run.primary_location}。`, operator:'系统规则引擎', created_at:run.created_at, source:'diagnosis_v2' }];
-  r2Audit(value, '系统规则引擎', 'V2 重新研判', `${task.id} · ${run.rule_code} · ${run.anomaly_status} · ${run.primary_location}`, task.id);
   value.operationTask = task;
   await r2SaveDemoState(env, value, 'operation-diagnosis-reassess');
   return json({ task, diagnosis_v2:current, diagnosis_runs:task.diagnosis_runs, storage:value.storage });
@@ -750,7 +779,8 @@ async function r2OperationTaskDetail(env, taskId) {
     documents: [
       ...(value.documents || []).filter((item) => documentIds.has(item.id)),
       ...(value.purchaseOrders || []).filter((item) => documentIds.has(item.id)).map((item) => ({ ...item, document_type:'purchase_order', document_no:item.order_no })),
-      ...(value.receiptOrders || []).filter((item) => documentIds.has(item.id)).map((item) => ({ ...item, document_type:'receipt_order', document_no:item.receipt_no }))
+      ...(value.receiptOrders || []).filter((item) => documentIds.has(item.id)).map((item) => ({ ...item, document_type:'receipt_order', document_no:item.receipt_no })),
+      ...(value.transferOrders || []).filter((item) => documentIds.has(item.id)).map((item) => ({ ...item, document_type:'transfer_order', document_no:item.order_no }))
     ],
     events: (value.materialEvents || []).filter((item) => eventIds.has(item.id)),
     audits: (value.audits || []).filter((item) => item.task_id === task.id),
@@ -811,9 +841,29 @@ async function r2OperationTransition(env, taskId, body, action) {
     r2LinkOperationDocument(value, task.id, document.id, '关联门店提交凭证');
     r2Audit(value, '', '门店提交工单凭证', `${task.proof_filename} · 等待总部确认`, task.id);
   } else {
-    if (task.status !== 'pending_hq_review') return bad('该任务尚未收到门店凭证，暂不能关闭。', 409);
-    task.status = 'closed'; task.closed_at = now(); task.resolution = `总部已验收：${task.title}的门店凭证已提交，本次任务完成。`;
-    r2Audit(value, '', '验收并关闭工单', task.resolution, task.id);
+    if (!['pending_store_submission', 'pending_hq_review'].includes(task.status)) return bad('该任务当前不能闭环。', 409);
+    const outcome = String(body.outcome || '').trim();
+    const finalCause = String(body.final_cause || '').trim().slice(0, 500);
+    const resolutionNote = String(body.resolution_note || '').trim().slice(0, 800);
+    const operator = String(body.operator || '').trim().slice(0, 80);
+    const latestRun = r2AppendDiagnosisRun(value, task, 'closure_verification') || (task.diagnosis_runs || []).at(-1) || null;
+    const gate = evaluateClosureGate({ outcome, finalCause, resolutionNote, operator, storeAdopted:body.store_adopted, hqConfirmed:body.hq_confirmed, latestRun, requireReassessment:!!task.source_anomaly_id, evidenceCount:(task.linked_document_ids || []).length + (task.linked_event_ids || []).length, noteCount:(task.activity_log || []).filter((item) => item.type === 'progress_note').length });
+    if (!gate.ok) return bad(gate.errors.join('；'), 409);
+    const closedAt = now();
+    task.closure = { outcome, outcome_label:gate.outcome_label, final_cause:finalCause, resolution_note:resolutionNote, operator, store_adopted:body.store_adopted, hq_confirmed:true, diagnosis_run_id:latestRun?.id || null, completed_at:closedAt };
+    task.resolution = `${gate.outcome_label}：${resolutionNote}`;
+    if (outcome === 'unresolved' || outcome === 'master_data_issue') {
+      task.status = 'pending_store_submission'; task.assigned_to = outcome === 'master_data_issue' ? '总部主数据治理' : `${task.store_code} 店长`; task.reopened_at = closedAt;
+      task.activity_log = [...(task.activity_log || []), { id:id('LOG'), type:'reopened', note:`闭环检查结果为“${gate.outcome_label}”，工单继续处理。最终原因：${finalCause}；下一步：${resolutionNote}`, operator, created_at:closedAt, source:'manual_closure' }];
+      if (outcome === 'master_data_issue' && !value.governanceTasks.some((item) => item.source_operation_task_id === task.id && item.status !== 'closed')) {
+        value.governanceTasks.unshift({ id:id('GOV'), source_anomaly_id:task.source_anomaly_id || null, source_operation_task_id:task.id, title:`${task.title} · 主数据治理`, instruction:`${finalCause}；${resolutionNote}`, owner:'商品 / 数据治理', status:'pending', created_at:closedAt });
+      }
+      r2Audit(value, operator, '闭环检查后继续处理', `${task.id} · ${gate.outcome_label} · ${resolutionNote}`, task.id);
+      value.operationTask = task;
+      return r2Result(await r2SaveDemoState(env, value, 'operation-reopen'));
+    }
+    task.status = 'closed'; task.closed_at = closedAt;
+    r2Audit(value, operator, '人工确认并关闭工单', `${task.resolution}；门店${body.store_adopted ? '已采纳' : '未采纳'}；总部已确认。`, task.id);
     const sourceCase = (value.diagnosisCases || []).find((item) => item.id === task.source_case_id);
     if (sourceCase && task.task_type === 'receipt_evidence') {
       const names = new Set((task.material_names || []).map(normalizedKey));
@@ -955,6 +1005,7 @@ async function r2CreateMaterialEvent(env, body) {
   if (value.feishuImport?.sales?.length) {
     r2ReconcileAllMaterialSignalsAndCases(value, businessDate, now());
   }
+  if (task) r2AppendDiagnosisRun(value, task, `${type}_confirmed`, { reconcile:false });
   return r2Result(await r2SaveDemoState(env, value, `material-event-${type}`), 201);
 }
 
@@ -1030,10 +1081,12 @@ async function r2CreateTransferOrder(env, body) {
     if (available < totalQty) return bad(`调出门店可调余量不足：当前最多可调 ${available}${unit}。`, 409);
   }
   const orderNo = `TR-${businessDate.replaceAll('-', '')}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`, createdAt = now();
-  const order = { id: id('TRF'), order_no: orderNo, business_date: businessDate, from_type: fromType, from_party: fromParty, material_name: materialName, unit, total_qty: totalQty, destinations: destinations.map((item, index) => ({ id: id('TRD'), line_no: index + 1, store_code: item.store_code, requested_qty: item.qty, received_qty: null, status: 'pending_receipt' })), status: 'pending_receipt', created_at: createdAt, source: 'hq_console' };
+  const sourceWorkOrderId = String(body.source_work_order_id || body.operation_task_id || '').trim().slice(0, 120) || null;
+  const order = { id: id('TRF'), order_no: orderNo, business_date: businessDate, from_type: fromType, from_party: fromParty, material_name: materialName, unit, total_qty: totalQty, destinations: destinations.map((item, index) => ({ id: id('TRD'), line_no: index + 1, store_code: item.store_code, requested_qty: item.qty, received_qty: null, status: 'pending_receipt' })), status: 'pending_receipt', created_at: createdAt, source: 'hq_console', source_work_order_id:sourceWorkOrderId };
   const outbound = fromType === 'store' ? { id: id('EVT'), document_no: orderNo, store_code: fromParty, business_date: businessDate, material_name: materialName, unit, qty: totalQty, type: 'transfer_out', status: 'active', demo: true, transfer_order_id: order.id, source: 'transfer_outbound', reference: `调拨至 ${destinations.map((item) => item.store_code).join('、')}`, created_at: createdAt } : null;
-  const requests = order.destinations.map((destination) => ({ id: id('TRQ'), request_no: `${orderNo}-${String(destination.line_no).padStart(2, '0')}`, parent_order_id: order.id, order_no: orderNo, from_store_code: fromParty, from_type: fromType, to_store_code: destination.store_code, business_date: businessDate, material_name: materialName, unit, qty: destination.requested_qty, actual_received_qty: null, note: null, status: 'pending_receipt', source: 'hq_console', created_at: createdAt, outbound_event_id: outbound?.id || null }));
+  const requests = order.destinations.map((destination) => ({ id: id('TRQ'), request_no: `${orderNo}-${String(destination.line_no).padStart(2, '0')}`, parent_order_id: order.id, order_no: orderNo, from_store_code: fromParty, from_type: fromType, to_store_code: destination.store_code, business_date: businessDate, material_name: materialName, unit, qty: destination.requested_qty, actual_received_qty: null, note: null, status: 'pending_receipt', source: 'hq_console', created_at: createdAt, outbound_event_id: outbound?.id || null, source_work_order_id:sourceWorkOrderId }));
   value.transferOrders.unshift(order); value.storeTransferRequests.unshift(...requests); if (outbound) value.materialEvents.unshift(outbound);
+  r2LinkOperationDocument(value, sourceWorkOrderId, order.id, '关联调拨单');
   if (outbound) value.transferArchives.unshift(r2TransferArchive(outbound, { order, requestedQty: totalQty, status: '调出已登记' }));
   r2Audit(value, '总部运营', '创建调拨主单', `${orderNo} · ${fromParty} → ${destinations.map((item) => `${item.store_code} ${item.qty}${unit}`).join('、')} · ${materialName}；等待各调入门店按实际收货确认。`, order.id);
   r2ReconcileAllMaterialSignalsAndCases(value, businessDate, createdAt);
@@ -1266,6 +1319,8 @@ async function r2ReceiptOrderAction(env, receiptId, action, body = {}) {
       }
     }
     if (value.feishuImport?.sales?.length) r2ReconcileAllMaterialSignalsAndCases(value, value.feishuImport.latest_business_date, confirmedAt);
+    const sourceTask = receipt.source_work_order_id ? (value.operationTasks || []).find((item) => item.id === receipt.source_work_order_id) : null;
+    if (sourceTask) r2AppendDiagnosisRun(value, sourceTask, 'receipt_confirmed', { reconcile:false });
     r2Audit(value, receipt.confirmed_by, '确认收货并生成库存流水', `${receipt.receipt_no} · ${events.length} 项已入库${receipt.order_no ? ` · 订货单 ${receipt.order_no} 更新为 ${purchase.status}` : ''}。`, receipt.id);
   }
   const state = await r2SaveDemoState(env, value, `receipt-order-${action}`);
@@ -1299,7 +1354,7 @@ async function r2ReceiveStoreTransferRequest(env, requestId, body = {}) {
     material_name: request.material_name, unit: request.unit, qty: actualQty,
     type: 'transfer_in', status: 'active', demo: true, source: 'store_html_receipt', transfer_request_id: request.id,
     reference: `门店调拨自 ${request.from_store_code}${request.note ? ` · ${request.note}` : ''}`,
-    created_at: now()
+    created_at: now(), source_work_order_id:request.source_work_order_id || null
   };
   value.materialEvents.unshift(event);
   request.status = 'received'; request.actual_received_qty = actualQty; request.received_at = now(); request.received_by = receiver; request.inbound_event_id = event.id;
@@ -1314,6 +1369,12 @@ async function r2ReceiveStoreTransferRequest(env, requestId, body = {}) {
   value.transferArchives.unshift(r2TransferArchive(event, { order, request, requestedQty: request.qty, actualQty, status: actualQty === request.qty ? '收货已确认' : '收货差异已记录' }));
   if (value.feishuImport?.sales?.length) {
     r2ReconcileAllMaterialSignalsAndCases(value, value.feishuImport.latest_business_date, now());
+  }
+  const sourceTask = request.source_work_order_id ? (value.operationTasks || []).find((item) => item.id === request.source_work_order_id) : null;
+  if (sourceTask) {
+    sourceTask.linked_document_ids = [...new Set([...(sourceTask.linked_document_ids || []), order?.id || request.id])];
+    sourceTask.linked_event_ids = [...new Set([...(sourceTask.linked_event_ids || []), event.id])];
+    r2AppendDiagnosisRun(value, sourceTask, 'transfer_received', { reconcile:false });
   }
   r2Audit(value, '调入门店', '确认调拨收货', `${request.request_no} · ${receiver} 计划 ${request.qty}${request.unit}，实际收货 ${actualQty}${request.unit}，已生成调入流水 ${event.id}${order ? `；主单 ${order.order_no} 当前为${order.status}` : ''}。`, request.id);
   return json({ request, order, event, state: await r2SaveDemoState(env, value, 'store-transfer-receive') });
@@ -4333,7 +4394,7 @@ export default {
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/notes')) return r2AddOperationTaskNote(env, url.pathname.split('/')[3], await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/reassess')) return r2ReassessOperationTask(env, url.pathname.split('/')[3]);
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/submit')) return r2OperationTransition(env, url.pathname.split('/')[3], await request.json().catch(() => ({})), 'submit');
-    if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close')) return r2OperationTransition(env, url.pathname.split('/')[3], {}, 'close');
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close')) return r2OperationTransition(env, url.pathname.split('/')[3], await request.json().catch(() => ({})), 'close');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/governance-tasks') return r2Governance(env, null, await request.json().catch(() => ({})), 'create');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/governance-tasks/') && url.pathname.endsWith('/close')) return r2Governance(env, url.pathname.split('/')[3], {}, 'close');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/anomalies/') && url.pathname.endsWith('/work-order')) return r2CreateDiagnosisWorkOrder(env, url.pathname.split('/')[3]);

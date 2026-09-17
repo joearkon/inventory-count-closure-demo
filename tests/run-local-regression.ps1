@@ -34,6 +34,9 @@ try {
   & node (Join-Path $projectRoot 'tests\diagnosis-v2-other-rules.mjs')
   if ($LASTEXITCODE -ne 0) { throw "D1/S1/T2 V2 engine tests failed with exit code $LASTEXITCODE" }
 
+  & node (Join-Path $projectRoot 'tests\diagnosis-closure-boundaries.mjs')
+  if ($LASTEXITCODE -ne 0) { throw "Diagnosis closure boundary tests failed with exit code $LASTEXITCODE" }
+
   & npx.cmd wrangler d1 migrations apply inventory-count-closure-demo-db --local --persist-to $persistPath
   if ($LASTEXITCODE -ne 0) { throw "D1 migrations failed with exit code $LASTEXITCODE" }
 

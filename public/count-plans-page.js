@@ -53,6 +53,14 @@
   async function load() {
     state = await api('/api/state?view=count-plans', { cache: 'no-store' }); currentPage = 1;
     renderPlans(); renderMaterials(); renderSelectors();
+    const query = new URLSearchParams(location.search), workOrder = query.get('source_work_order_id') || query.get('work_order');
+    if (workOrder) {
+      switchTab('manual'); by('manual-source').value = 'work_order'; by('work-order-wrap').hidden = false; by('manual-work-order').value = workOrder;
+      if (query.get('store') && [...by('manual-store').options].some((option) => option.value === query.get('store'))) by('manual-store').value = query.get('store');
+      if (query.get('date')) by('manual-date').value = query.get('date');
+      const material = query.get('material');
+      if (material) document.querySelectorAll('#manual-materials input').forEach((input) => { input.checked = input.value === material; });
+    }
   }
   by('generate').onclick = async () => {
     const button = by('generate'); button.disabled = true; button.textContent = '生成中…';
@@ -75,6 +83,6 @@
     } catch (error) { show(error.message, 'error'); }
     finally { button.disabled = false; }
   };
-  switchTab(location.hash.slice(1) || 'plans', false);
+  switchTab(location.hash.slice(1) || (new URLSearchParams(location.search).get('work_order') ? 'manual' : 'plans'), false);
   load().catch((error) => { show(error.message, 'error'); by('rows').innerHTML = `<tr><td colspan="6" class="empty">${esc(error.message)}</td></tr>`; });
 })();
