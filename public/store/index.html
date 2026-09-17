@@ -279,8 +279,9 @@
   .agent-input-area { position:fixed; z-index:110; left:50%; bottom:calc(61px + env(safe-area-inset-bottom)); transform:translateX(-50%); display:flex; gap:8px; align-items:flex-end; width:100%; max-width:414px; padding:10px 12px 12px; border-top:1px solid #f0f1f3; background:rgba(255,255,255,.98); box-shadow:0 -5px 18px rgba(31,35,41,.08); backdrop-filter:blur(12px); }
   .agent-input { flex:1; min-height:38px; max-height:80px; padding:8px 12px; resize:none; border:1px solid #dcdfe5; border-radius:18px; background:#f5f6f7; color:#1f2329; font:14px inherit; line-height:1.5; outline:none; }
   .agent-input:focus { border-color:#3370ff; background:#fff; box-shadow:0 0 0 3px rgba(51,112,255,.1); }
-  .agent-icon-btn { width:38px; height:38px; flex:0 0 38px; border:0; border-radius:50%; background:#fff; color:#3370ff; font-size:17px; cursor:pointer; }
-  .agent-icon-btn.send { background:#3370ff; color:#fff; }
+  .agent-icon-btn { width:38px; height:38px; flex:0 0 38px; display:grid; place-items:center; border:0; border-radius:50%; background:#3370ff; color:#fff; cursor:pointer; box-shadow:0 3px 10px rgba(51,112,255,.22); }
+  .agent-icon-btn svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .agent-icon-btn:active { transform:scale(.94); }
   .agent-icon-btn.recording { background:#d4380d; color:#fff; animation:agentPulse 1s ease-in-out infinite; }
   .agent-helper { padding:0 14px 10px; color:#8f959e; font-size:11px; }
   .agent-voice-note { padding:8px 12px; margin:0 12px 10px; border-radius:8px; background:#fff5e6; color:#9c6800; font-size:12px; display:none; }
@@ -412,8 +413,8 @@
     <div class="agent-voice-note" id="store-agent-voice-note">正在录音…松开后转写</div>
     <div class="agent-input-area">
       <textarea id="store-agent-input" class="agent-input" rows="1" maxlength="600" placeholder="直接说：调 2kg 黑糖珍珠去 STORE002"></textarea>
-      <button type="button" id="store-agent-mic" class="agent-icon-btn" aria-label="点击开始语音输入">🎙️</button>
-      <button type="button" id="store-agent-send" class="agent-icon-btn send" aria-label="发送">➤</button>
+      <button type="button" id="store-agent-mic" class="agent-icon-btn" aria-label="点击开始语音输入"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"></path></svg></button>
+      <button type="button" id="store-agent-send" class="agent-icon-btn send" aria-label="发送"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 17 8-17 8 3-8-3-8Z"></path><path d="M7 12h14"></path></svg></button>
     </div>
     <div class="agent-voice-overlay" id="store-agent-voice-overlay" aria-live="polite" role="dialog" aria-modal="true"><div class="agent-voice-orb">🎙️</div><strong id="store-agent-voice-overlay-title">正在聆听</strong><span id="store-agent-voice-overlay-text">请对着麦克风说话，完成后点击下方按钮</span><div class="agent-voice-actions"><button class="agent-voice-cancel" id="store-agent-voice-cancel" type="button">取消</button><button class="agent-voice-finish" id="store-agent-voice-finish" type="button">完成录音</button></div></div>
     <div class="agent-helper">AI 会先识别并预填表单；库存与单据仍需由门店确认提交。</div>

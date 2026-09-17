@@ -181,7 +181,9 @@
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || '语音转写失败');
       const transcript = String(data.transcript || '').trim(); if (!transcript) throw new Error('没有识别到有效语音');
-      input.value = transcript; resizeInput(); await ask(transcript);
+      input.value = transcript; resizeInput();
+      speaking = false; voicePermissionPending = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); releaseVoiceStream();
+      await ask(transcript);
     } catch (error) { addMessage(error.name === 'AbortError' ? '语音转写超时，请重试或直接输入文字。' : `${voiceErrorText(error.message.includes('有效语音') ? 'no-speech' : 'unavailable')}（${error.message}）`); }
     finally { clearTimeout(timeoutId); speaking = false; voicePermissionPending = false; discardVoice = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); releaseVoiceStream(); }
   }

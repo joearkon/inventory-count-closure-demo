@@ -99,7 +99,9 @@ await check('dense operation pages use focused tabs and voice has an immersive o
   if (!/store-agent-voice-cancel/.test(store) || !/store-agent-voice-finish/.test(store)) throw new Error('voice overlay needs explicit cancel and finish actions');
   if (!/voicePermissionPending/.test(storeScript) || /stopVoiceRequested/.test(storeScript)) throw new Error('voice permission flow can stop recording prematurely');
   if (/mic\.addEventListener\('pointerdown'/.test(storeScript)) throw new Error('voice recording should not rely on press-and-release timing');
-  return { count_tabs:3, transfer_tabs:2, transfer_archive_removed:true, immersive_voice:true, mobile_input_fixed:true, permission_flow_guarded:true };
+  if ((store.match(/class="agent-icon-btn/g) || []).length < 2 || (store.match(/class="agent-icon-btn[^>]*>[\s\S]*?<svg/g) || []).length < 2) throw new Error('voice and send controls must share the same icon system');
+  if (!/voiceOverlay\?\.classList\.remove\('show','recording'\); releaseVoiceStream\(\);\s*await ask\(transcript\)/s.test(storeScript)) throw new Error('voice overlay must close before waiting for the assistant response');
+  return { count_tabs:3, transfer_tabs:2, transfer_archive_removed:true, immersive_voice:true, mobile_input_fixed:true, permission_flow_guarded:true, consistent_input_icons:true, prompt_overlay_dismissal:true };
 });
 
 await check('growing lists use pagination and lightweight API views', async () => {
