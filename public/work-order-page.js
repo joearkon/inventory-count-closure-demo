@@ -32,11 +32,26 @@
   };
   const evidenceStatus = (value) => ({ confirmed:'已确认', suspect:'疑似', insufficient:'证据不足', pending_count:'待盘点', unknown:'未知', partial:'部分数据', unlinked:'未关联', triggered:'仍触发', not_triggered:'已恢复' }[value] || value || '未知');
   const triggerText = (value) => ({ work_order_created:'建立工单', manual_reassess:'人工重算', closure_verification:'闭环校验', receipt_confirmed:'收货确认', transfer_received:'调拨签收', count_completed:'盘点完成' }[value] || String(value || '系统重算').replace(/_confirmed$/, '确认后重算'));
-  const runCard = (run, label) => {
-    if (!run) return `<div class="compare-card empty"><b>${esc(label)}</b><span>尚无已保存的 V2 快照</span></div>`;
+  const runRow = (run, sequence, total) => {
     const theoretical = run.theoretical_closing?.value;
     const physical = run.physical_count?.value;
-    return `<div class="compare-card"><div class="compare-title"><b>${esc(label)}</b><span>${formatDate(run.created_at)}</span></div><div class="compare-status ${run.anomaly_status === 'not_triggered' ? 'recovered' : ''}">${esc(evidenceStatus(run.anomaly_status))}</div><h3>${esc(run.primary_location || '待判断')}</h3><p>${esc(run.primary_hypothesis || '—')}</p><dl><div><dt>触发方式</dt><dd>${esc(triggerText(run.trigger))}</dd></div><div><dt>规则版本</dt><dd>${esc(run.rule_version || '—')}</dd></div><div><dt>理论库存</dt><dd>${theoretical == null ? '—' : `${esc(theoretical)} ${esc(run.source_signal?.unit || '')}`}</dd></div><div><dt>实盘库存</dt><dd>${physical == null ? '未取得' : `${esc(physical)} ${esc(run.source_signal?.unit || '')}`}</dd></div><div><dt>缺失证据</dt><dd>${(run.evidence_gaps || []).length} 项</dd></div></dl><small>${esc(run.calculation?.formula || '')}</small></div>`;
+    const unit = run.source_signal?.unit || '';
+    const gaps = run.evidence_gaps || [];
+    const refs = run.evidence_refs || [];
+    const trace = run.decision_trace || [];
+    const labels = [sequence === 1 ? '首次' : '', sequence === total ? '最新' : ''].filter(Boolean);
+    return `<details class="run-row" data-run-index="${total - sequence}"><summary><div class="run-sequence"><b>第 ${sequence} 次</b>${labels.map((label) => `<em>${label}</em>`).join('')}</div><time>${formatDate(run.created_at)}</time><span>${esc(triggerText(run.trigger))}</span><span class="run-status ${run.anomaly_status === 'not_triggered' ? 'recovered' : ''}">${esc(evidenceStatus(run.anomaly_status))}</span><strong>${esc(run.primary_location || '待判断')}</strong><small>查看详情</small></summary><div class="run-detail"><div class="run-hypothesis"><span>本次判断</span><b>${esc(run.primary_location || '待判断')}</b><p>${esc(run.primary_hypothesis || '—')}</p></div><dl><div><dt>规则版本</dt><dd>${esc(run.rule_version || '—')}</dd></div><div><dt>触发方式</dt><dd>${esc(triggerText(run.trigger))}</dd></div><div><dt>理论库存</dt><dd>${theoretical == null ? '—' : `${esc(theoretical)} ${esc(unit)}`}</dd></div><div><dt>实盘库存</dt><dd>${physical == null ? '未取得' : `${esc(physical)} ${esc(unit)}`}</dd></div><div><dt>证据引用</dt><dd>${refs.length} 项</dd></div><div><dt>缺失证据</dt><dd>${gaps.length} 项</dd></div></dl>${run.calculation?.formula ? `<div class="run-formula"><span>库存重建</span><code>${esc(run.calculation.formula)}</code></div>` : ''}${gaps.length ? `<div class="run-section"><h5>缺失证据</h5><ul>${gaps.map((item) => `<li><b>${esc(item.label || item.code || '待补证据')}</b>${item.explanation ? `：${esc(item.explanation)}` : ''}</li>`).join('')}</ul></div>` : '<div class="run-complete">本次没有待补充的关键证据</div>'}${trace.length ? `<div class="run-section"><h5>决策轨迹</h5><ol>${trace.map((item) => `<li><b>${esc(item.node_id || '')}</b> ${esc(item.message || '')}</li>`).join('')}</ol></div>` : ''}${refs.length ? `<div class="run-refs"><span>证据编号</span>${refs.map((ref) => `<code>${esc(ref)}</code>`).join('')}</div>` : ''}</div></details>`;
+  };
+  const runHistoryHtml = (runs) => {
+    if (!runs.length) return '<div class="run-history-empty"><b>当前为动态预览</b><span>点击重新研判后保存第一份工单快照。</span></div>';
+    const first = runs[0], latest = runs.at(-1), firstValue = first.theoretical_closing?.value, latestValue = latest.theoretical_closing?.value;
+    const change = firstValue != null && latestValue != null ? Number(latestValue) - Number(firstValue) : null;
+    const summary = first.id === latest.id
+      ? '当前仅有首次快照；完成业务动作或手动重算后，将在列表中追加记录。'
+      : `异常状态：${evidenceStatus(first.anomaly_status)} → ${evidenceStatus(latest.anomaly_status)}；首要位置：${first.primary_location || '待判断'} → ${latest.primary_location || '待判断'}${change == null ? '' : `；理论库存变化 ${change > 0 ? '+' : ''}${change} ${latest.source_signal?.unit || ''}`}。`;
+    const rows = runs.map((run, index) => ({ run, sequence:index + 1 })).reverse();
+    const pages = Math.ceil(rows.length / 10);
+    return `<div class="run-history-head"><div><h4>V2 重算记录</h4><p>${esc(summary)}</p></div><span>共 ${runs.length} 次</span></div><div class="run-list">${rows.map(({ run, sequence }, index) => runRow(run, sequence, runs.length).replace('data-run-index="', `${index >= 10 ? 'hidden ' : ''}data-run-index="`)).join('')}</div>${pages > 1 ? `<nav class="run-pager" aria-label="V2 重算记录分页"><span>每页 10 条</span><div>${Array.from({ length:pages }, (_, index) => `<button type="button" class="run-page ${index === 0 ? 'active' : ''}" data-run-page="${index}">${index + 1}</button>`).join('')}</div></nav>` : ''}`;
   };
   const actionUrl = (route, task, material, date) => {
     if (!route) return '';
@@ -100,11 +115,8 @@
     const trace = (result.decision_trace || []).map((item) => `<li><b>${esc(item.node_id)}</b> ${esc(item.message)}</li>`).join('');
     const latestSavedRun = runs.at(-1), q = packet.quantities, three = packet.windows?.three_days;
     const formula = latestSavedRun?.calculation?.formula || `${q.opening.value} + ${q.receipt.value} + ${q.transfer_in.value} - ${q.transfer_out.value} - ${q.scrap.value} - ${q.bom_consumption.value} = ${q.theoretical_closing.value} ${comparison.unit}`;
-    const first = runs[0], latest = runs.at(-1);
-    const delta = first && latest ? `<div class="compare-summary">${first.id === latest.id ? '当前仅有首次快照；完成收货、调拨签收、盘点或手动重算后，这里将显示变化。' : `已保存 ${runs.length} 次快照：${evidenceStatus(first.anomaly_status)} → ${evidenceStatus(latest.anomaly_status)}；首要位置：${esc(first.primary_location || '待判断')} → ${esc(latest.primary_location || '待判断')}。`}</div>` : '';
-    const comparisonCards = runs.length ? `<h4>首次与最新 V2 对比</h4><div class="run-compare">${runCard(first, '首次 V2')}${runCard(latest, '最新 V2')}</div>${delta}${runs.length > 2 ? `<details class="run-history"><summary>查看全部 ${runs.length} 次重算</summary>${runs.map((run, index) => `<span>${index + 1}. ${formatDate(run.created_at)} · ${esc(triggerText(run.trigger))} · ${esc(evidenceStatus(run.anomaly_status))} · ${esc(run.primary_location || '待判断')}</span>`).join('')}</details>` : ''}` : '<div class="run-history"><b>当前为动态预览</b><span>点击重新研判后保存第一份工单快照。</span></div>';
     const recentEvidence = three ? `近 3 日：收货 ${three.totals.receipt}、调拨入 ${three.totals.transfer_in}、调拨出 ${three.totals.transfer_out}、报损 ${three.totals.scrap}、销售 BOM 消耗 ${three.totals.bom_consumption} ${comparison.unit}。` : '近 3 日数据尚未形成完整窗口。';
-    return `<div class="diagnosis-flow"><article><i>1</i><div><span>异常触发</span><h3>${esc(result.rule_code)} · ${esc(evidenceStatus(result.anomaly_status))}</h3><p>理论期末 ${esc(packet.quantities.theoretical_closing.value)} ${esc(comparison.unit)}，系统进入库存异常核查。</p></div></article><article><i>2</i><div><span>库存重建</span><h3>${esc(formula)}</h3><p>实盘 ${packet.physical_count.value == null ? '未取得' : `${esc(packet.physical_count.value)} ${esc(comparison.unit)}`}，实盘状态为“${esc(evidenceStatus(result.physical_status))}”。</p></div></article><article><i>3</i><div><span>数据回溯</span><h3>检查今日与近 3 日业务流水</h3><p>${esc(recentEvidence)}数据完整度：${esc(evidenceStatus(three?.status))}。</p></div></article><article class="primary"><i>4</i><div><span>首要判断</span><h3>${esc(result.primary_location)}</h3><p>${esc(result.primary_hypothesis)}</p></div></article><article><i>5</i><div><span>证据缺口</span><h3>${(result.evidence_gaps || []).length ? `仍有 ${(result.evidence_gaps || []).length} 项需要补充` : '关键证据已齐备'}</h3>${gaps}</div></article></div>${comparisonCards}<details class="technical-detail"><summary>查看规则版本、证据状态和决策轨迹</summary><div class="v2-head"><div><span class="v2-label">规则 V2 · ${esc(result.rule_version)}</span><h3>${esc(result.primary_location)}</h3></div><div class="v2-states"><span>${esc(evidenceStatus(result.anomaly_status))}</span><span>${esc(evidenceStatus(result.cause_evidence_status))}</span><span>${esc(evidenceStatus(result.physical_status))}</span></div></div><ol class="trace">${trace}</ol></details>`;
+    return `<div class="diagnosis-flow"><article><i>1</i><div><span>异常触发</span><h3>${esc(result.rule_code)} · ${esc(evidenceStatus(result.anomaly_status))}</h3><p>理论期末 ${esc(packet.quantities.theoretical_closing.value)} ${esc(comparison.unit)}，系统进入库存异常核查。</p></div></article><article><i>2</i><div><span>库存重建</span><h3>${esc(formula)}</h3><p>实盘 ${packet.physical_count.value == null ? '未取得' : `${esc(packet.physical_count.value)} ${esc(comparison.unit)}`}，实盘状态为“${esc(evidenceStatus(result.physical_status))}”。</p></div></article><article><i>3</i><div><span>数据回溯</span><h3>检查今日与近 3 日业务流水</h3><p>${esc(recentEvidence)}数据完整度：${esc(evidenceStatus(three?.status))}。</p></div></article><article class="primary"><i>4</i><div><span>首要判断</span><h3>${esc(result.primary_location)}</h3><p>${esc(result.primary_hypothesis)}</p></div></article><article><i>5</i><div><span>证据缺口</span><h3>${(result.evidence_gaps || []).length ? `仍有 ${(result.evidence_gaps || []).length} 项需要补充` : '关键证据已齐备'}</h3>${gaps}</div></article></div>${runHistoryHtml(runs)}<details class="technical-detail"><summary>查看当前规则版本、证据状态和决策轨迹</summary><div class="v2-head"><div><span class="v2-label">规则 V2 · ${esc(result.rule_version)}</span><h3>${esc(result.primary_location)}</h3></div><div class="v2-states"><span>${esc(evidenceStatus(result.anomaly_status))}</span><span>${esc(evidenceStatus(result.cause_evidence_status))}</span><span>${esc(evidenceStatus(result.physical_status))}</span></div></div><ol class="trace">${trace}</ol></details>`;
   };
   const render = (data) => {
     const { task, documents = [], events = [] } = data;
@@ -138,6 +150,11 @@
     render(data);
   };
   const bind = (data) => {
+    document.querySelectorAll('[data-run-page]').forEach((button) => button.addEventListener('click', () => {
+      const page = Number(button.dataset.runPage || 0);
+      document.querySelectorAll('.run-row').forEach((row) => { row.hidden = Math.floor(Number(row.dataset.runIndex || 0) / 10) !== page; });
+      document.querySelectorAll('[data-run-page]').forEach((item) => item.classList.toggle('active', item === button));
+    }));
     document.getElementById('note-form')?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = event.currentTarget, button = form.querySelector('button'), result = document.getElementById('note-result'), restore = setLoading(button, '正在保存…');
