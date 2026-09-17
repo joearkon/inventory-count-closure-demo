@@ -684,6 +684,22 @@ async function r2AddOperationTaskNote(env, taskId, body) {
   return r2Result(await r2SaveDemoState(env, value, 'operation-note'));
 }
 
+async function r2OperationTaskDetail(env, taskId) {
+  const value = await r2DemoState(env);
+  const task = (value.operationTasks || []).find((item) => item.id === taskId);
+  if (!task) return bad('跟进工单不存在。', 404);
+  const documentIds = new Set([...(task.linked_document_ids || []), task.proof_document_id].filter(Boolean));
+  const eventIds = new Set(task.linked_event_ids || []);
+  return json({
+    task,
+    anomaly: (value.materialAnomalies || []).find((item) => item.id === task.source_anomaly_id) || null,
+    documents: (value.documents || []).filter((item) => documentIds.has(item.id)),
+    events: (value.materialEvents || []).filter((item) => eventIds.has(item.id)),
+    audits: (value.audits || []).filter((item) => item.task_id === task.id),
+    storage: value.storage
+  });
+}
+
 function r2LinkOperationDocument(value, operationTaskId, documentId, action = '关联处理单据') {
   if (!operationTaskId || !documentId) return null;
   const task = (value.operationTasks || []).find((item) => item.id === operationTaskId);
@@ -3947,6 +3963,7 @@ export default {
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/tasks/') && url.pathname.endsWith('/close')) return r2TaskTransition(env, url.pathname.split('/')[3], 'close');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/tasks/') && url.pathname.endsWith('/request-recount')) return r2TaskTransition(env, url.pathname.split('/')[3], 'request-recount');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/tasks/') && url.pathname.endsWith('/end-audit')) return r2TaskTransition(env, url.pathname.split('/')[3], 'end-audit');
+    if (env.DEMO_STATE && request.method === 'GET' && /^\/api\/operation-tasks\/[^/]+$/.test(url.pathname)) return r2OperationTaskDetail(env, decodeURIComponent(url.pathname.split('/')[3]));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/operation-tasks') return r2CreateOperationTask(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/notes')) return r2AddOperationTaskNote(env, url.pathname.split('/')[3], await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/submit')) return r2OperationTransition(env, url.pathname.split('/')[3], await request.json().catch(() => ({})), 'submit');

@@ -78,7 +78,7 @@ await check('master data quality gate distinguishes core readiness from brand pr
 });
 
 await check('new pages are served', async () => {
-  const paths = ['/count-plans/', '/documents/', '/flows/', '/voice-qa/?store=STORE001', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001'];
+  const paths = ['/count-plans/', '/documents/', '/flows/', '/voice-qa/?store=STORE001', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001', '/work-order/'];
   for (const path of paths) {
     const response = await fetch(`${base}${path}`);
     if (!response.ok) throw new Error(`${path}: ${response.status}`);
@@ -92,11 +92,13 @@ await check('store mobile header identifies the assistant', async () => {
   return { header:'STORE001 · 门店助手' };
 });
 
-await check('follow-up work orders have a traceable detail workspace', async () => {
-  const [page, script] = await Promise.all([fetch(`${base}/`).then((r) => r.text()), fetch(`${base}/app.js`).then((r) => r.text())]);
-  for (const token of ['operation-drawer', '处理时间线', '新增处理记录', '当前操作人', '来源与判断记录']) if (!`${page}\n${script}`.includes(token)) throw new Error(`missing work order detail token: ${token}`);
-  if (!/openOperationDrawer/.test(script) || !/\/api\/operation-tasks\/\$\{task\.id\}\/notes/.test(script)) throw new Error('work order detail or progress note binding missing');
-  return { detail_drawer:true, timeline:true, optional_operator:true, progress_notes:true, linked_documents:true };
+await check('follow-up work orders use a traceable full detail page', async () => {
+  const [hqPage, hqScript, page, script] = await Promise.all([fetch(`${base}/`).then((r) => r.text()), fetch(`${base}/app.js`).then((r) => r.text()), fetch(`${base}/work-order/`).then((r) => r.text()), fetch(`${base}/work-order-page.js`).then((r) => r.text())]);
+  for (const token of ['处理时间线', '新增处理记录', '当前操作人', '来源与判断记录', '关联单据与业务记录']) if (!`${page}\n${script}`.includes(token)) throw new Error(`missing work order detail token: ${token}`);
+  if (/id="operation-drawer"/.test(hqPage)) throw new Error('work order side drawer must be removed from the HQ page');
+  if (!/href="\/work-order\/\?id=/.test(hqScript) || !/\/api\/operation-tasks\/\$\{encodeURIComponent\(data\.task\.id\)\}\/notes/.test(script)) throw new Error('full detail navigation or progress note binding missing');
+  if (!/class="note-form"/.test(script) || !/\.note-form\{display:grid;gap:13px\}/.test(page) || !/\.layout\{grid-template-columns:1fr\}/.test(page)) throw new Error('work order note form must have a responsive standalone layout');
+  return { full_page:true, side_drawer_removed:true, timeline:true, optional_operator:true, progress_notes:true, linked_documents:true };
 });
 
 await check('dense operation pages use focused tabs and voice has an immersive overlay', async () => {
@@ -203,6 +205,8 @@ if (mutationTests) {
     const noted = await json(`/api/operation-tasks/${task.id}/notes`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ operator:'', note:'QA 已核对当日收货与盘点记录' }) });
     const notedTask = (noted.operationTasks || []).find((item) => item.id === task.id);
     if (notedTask?.activity_log?.[0]?.note !== 'QA 已核对当日收货与盘点记录' || notedTask.activity_log[0].operator !== null) throw new Error(JSON.stringify(notedTask));
+    const detail = await json(`/api/operation-tasks/${task.id}`);
+    if (detail.task?.id !== task.id || !(detail.audits || []).some((item) => item.action === '更新工单进展')) throw new Error(`work order detail mismatch: ${JSON.stringify(detail)}`);
     const submitted = await json(`/api/operation-tasks/${task.id}/submit`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ filename:'qa-proof.png', previewData:'data:image/png;base64,iVBORw0KGgo=' }) });
     const submittedTask = (submitted.operationTasks || []).find((item) => item.id === task.id);
     if (submittedTask?.status !== 'pending_hq_review' || !submittedTask.proof_document_id) throw new Error(JSON.stringify(submittedTask));
