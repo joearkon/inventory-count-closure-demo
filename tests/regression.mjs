@@ -87,8 +87,9 @@ await check('new pages are served', async () => {
 });
 
 await check('store mobile header identifies the assistant', async () => {
-  const page = await fetch(`${base}/store/?store=STORE001`).then((r) => r.text());
+  const [page, transferScript] = await Promise.all([fetch(`${base}/store/?store=STORE001`).then((r) => r.text()), fetch(`${base}/store-transfer-request.js`).then((r) => r.text())]);
   if (!/id="store-header-title"> · 门店助手</.test(page)) throw new Error('store header must identify the page as 门店助手');
+  if (/\.header h1[^\n]+今日任务/.test(transferScript) || !/headerTitle\.textContent = ' · 门店助手'/.test(transferScript)) throw new Error('store runtime scripts must not overwrite 门店助手 with 今日任务');
   return { header:'STORE001 · 门店助手' };
 });
 
