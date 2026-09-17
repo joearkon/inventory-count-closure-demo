@@ -96,7 +96,7 @@ await check('store mobile header identifies the assistant', async () => {
 await check('follow-up work orders use a traceable full detail page', async () => {
   const [hqPage, hqScript, page, script] = await Promise.all([fetch(`${base}/`).then((r) => r.text()), fetch(`${base}/app.js`).then((r) => r.text()), fetch(`${base}/work-order/`).then((r) => r.text()), fetch(`${base}/work-order-page.js`).then((r) => r.text())]);
   for (const token of ['处理时间线', '新增处理记录', '当前操作人', '工单基础信息与判断来源', '关联单据与业务记录']) if (!`${page}\n${script}`.includes(token)) throw new Error(`missing work order detail token: ${token}`);
-  for (const token of ['本次任务', '建议动作与执行', '系统研判过程', '处理目标', '完成标准', 'V2 重算记录', 'data-run-page', '人工闭环确认', '升级至总部运营', 'follow_up_action']) if (!script.includes(token)) throw new Error(`missing work order workflow token: ${token}`);
+  for (const token of ['本次任务', '建议动作与执行', '系统研判过程', '处理目标', '完成标准', 'V2 重算记录', 'data-run-page', 'D1 · 理论与实盘差异', 'S1 · 安全库存预警', 'T2 · 销入比失衡', '人工闭环确认', '升级至总部运营', 'follow_up_action']) if (!script.includes(token)) throw new Error(`missing work order workflow token: ${token}`);
   if (/id="operation-drawer"/.test(hqPage)) throw new Error('work order side drawer must be removed from the HQ page');
   if (!/href="\/work-order\/\?id=/.test(hqScript) || !/\/api\/operation-tasks\/\$\{encodeURIComponent\(data\.task\.id\)\}\/notes/.test(script)) throw new Error('full detail navigation or progress note binding missing');
   if (!/class="note-form"/.test(script) || !/\.note-form\{display:grid;gap:13px\}/.test(page) || !/\.layout\{grid-template-columns:1fr\}/.test(page)) throw new Error('work order note form must have a responsive standalone layout');
