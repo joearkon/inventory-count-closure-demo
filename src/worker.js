@@ -664,7 +664,24 @@ async function r2CreateOperationTask(env, body) {
   const linkedDocumentIds = Array.isArray(body.linkedDocumentIds) ? body.linkedDocumentIds.map((item) => String(item).slice(0, 80)).filter(Boolean).slice(0, 20) : [];
   const task = { id: id('OPT'), store_code: storeCode, task_type: String(body.taskType || 'custom').slice(0, 40), title, instruction, status: 'pending_store_submission', assigned_to: `${storeCode} 店长`, created_at: now(), source_anomaly_id: sourceAnomalyId || null, source_rule_code: String(body.sourceRuleCode || '').slice(0, 40) || null, linked_document_ids: [...new Set(linkedDocumentIds)], linked_event_ids: [] };
   value.operationTasks.unshift(task); value.operationTask = task;
+  r2Audit(value, '', '创建跟进工单', `${task.id} · ${task.title}`, task.id);
   return r2Result(await r2SaveDemoState(env, value, 'operation-create'), 201);
+}
+
+async function r2AddOperationTaskNote(env, taskId, body) {
+  const value = await r2DemoState(env);
+  const task = (value.operationTasks || []).find((item) => item.id === taskId);
+  if (!task) return bad('跟进工单不存在。', 404);
+  const note = String(body.note || '').trim().slice(0, 500);
+  const operator = String(body.operator || '').trim().slice(0, 80);
+  if (!note) return bad('请填写处理记录。');
+  const entry = { id: id('LOG'), type: 'progress_note', note, operator: operator || null, created_at: now(), source: 'manual' };
+  task.activity_log = [...(task.activity_log || []), entry];
+  task.updated_at = entry.created_at;
+  task.last_operator = operator || null;
+  r2Audit(value, operator, '更新工单进展', note, task.id);
+  value.operationTask = task;
+  return r2Result(await r2SaveDemoState(env, value, 'operation-note'));
 }
 
 function r2LinkOperationDocument(value, operationTaskId, documentId, action = '关联处理单据') {
@@ -714,9 +731,11 @@ async function r2OperationTransition(env, taskId, body, action) {
     const document = r2AddDocument(value, 'initial', body.filename || '门店巡检凭证.jpg', [], '演示 OCR：已归档门店主动任务凭证，等待总部验收。', 'operation_proof', validPreviewData(body.previewData));
     task.status = 'pending_hq_review'; task.proof_filename = body.filename || '冷藏温度巡检照片.jpg'; task.proof_document_id = document.id; task.submitted_at = now();
     r2LinkOperationDocument(value, task.id, document.id, '关联门店提交凭证');
+    r2Audit(value, '', '门店提交工单凭证', `${task.proof_filename} · 等待总部确认`, task.id);
   } else {
     if (task.status !== 'pending_hq_review') return bad('该任务尚未收到门店凭证，暂不能关闭。', 409);
     task.status = 'closed'; task.closed_at = now(); task.resolution = `总部已验收：${task.title}的门店凭证已提交，本次任务完成。`;
+    r2Audit(value, '', '验收并关闭工单', task.resolution, task.id);
     const sourceCase = (value.diagnosisCases || []).find((item) => item.id === task.source_case_id);
     if (sourceCase && task.task_type === 'receipt_evidence') {
       const names = new Set((task.material_names || []).map(normalizedKey));
@@ -3900,6 +3919,7 @@ export default {
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/tasks/') && url.pathname.endsWith('/request-recount')) return r2TaskTransition(env, url.pathname.split('/')[3], 'request-recount');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/tasks/') && url.pathname.endsWith('/end-audit')) return r2TaskTransition(env, url.pathname.split('/')[3], 'end-audit');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/operation-tasks') return r2CreateOperationTask(env, await request.json().catch(() => ({})));
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/notes')) return r2AddOperationTaskNote(env, url.pathname.split('/')[3], await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/submit')) return r2OperationTransition(env, url.pathname.split('/')[3], await request.json().catch(() => ({})), 'submit');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close')) return r2OperationTransition(env, url.pathname.split('/')[3], {}, 'close');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/governance-tasks') return r2Governance(env, null, await request.json().catch(() => ({})), 'create');

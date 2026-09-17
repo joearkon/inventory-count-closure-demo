@@ -223,6 +223,9 @@
   .anomaly-drawer.open { display: flex; justify-content: flex-end; }
   .document-drawer { position: fixed; inset: 0; display: none; z-index: 30; background: rgba(31,35,41,.32); }
   .document-drawer.open { display: flex; justify-content: flex-end; }
+  .operation-drawer { position: fixed; inset: 0; display: none; z-index: 40; background: rgba(31,35,41,.42); }
+  .operation-drawer.open { display: flex; justify-content: flex-end; }
+  .operation-drawer .drawer-panel { width: min(720px, 96vw); }
   .document-preview { margin-top: 10px; overflow: hidden; border: 1px solid #edf0f5; border-radius: 8px; background: #fafbfc; }
   .document-preview img { display: block; width: 100%; max-height: 380px; object-fit: contain; background: #f5f6f7; }
   .document-no-preview { padding: 24px 18px; color: #8f959e; font-size: 13px; text-align: center; }
@@ -239,11 +242,19 @@
   .timeline { border-left: 2px solid #d9e7ff; padding-left: 15px; }
   .timeline-item { position: relative; margin: 0 0 14px; font-size: 13px; color: #4e5969; }
   .timeline-item::before { content: ''; position: absolute; left: -20px; top: 4px; width: 8px; height: 8px; border-radius: 50%; background: #3370ff; }
+  .timeline-item p { margin: 4px 0 0; color: #646a73; line-height: 1.55; }
+  .timeline-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; color: #8f959e; font-size: 12px; }
+  .work-order-source { padding: 12px; border: 1px solid #d9e7ff; border-radius: 8px; background: #f5f8ff; color: #4e5969; font-size: 13px; line-height: 1.65; }
+  .work-order-source b { display: block; margin-bottom: 3px; color: #245bdb; }
+  .work-order-note-form { display: grid; grid-template-columns: 160px 1fr auto; gap: 8px; align-items: end; }
+  .work-order-note-form label { display: grid; gap: 5px; color: #646a73; font-size: 12px; }
+  .work-order-note-form input,.work-order-note-form textarea { width: 100%; padding: 9px 10px; border: 1px solid #dcdfe5; border-radius: 6px; font: inherit; color: #1f2329; }
+  .work-order-note-form textarea { min-height: 58px; resize: vertical; }
   .btn.is-loading { cursor: wait; opacity: .8; }
   .spinner { display: inline-block; width: 11px; height: 11px; margin-right: 5px; border: 2px solid rgba(255,255,255,.55); border-top-color: #fff; border-radius: 50%; vertical-align: -1px; animation: rotate .75s linear infinite; }
   .btn:not(.btn-primary) .spinner { border-color: #c9cdd4; border-top-color: #646a73; }
   @keyframes rotate { to { transform: rotate(360deg); } }
-  @media (max-width: 760px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } .live-task-panel { align-items: flex-start; flex-direction: column; } .operation-fields { grid-template-columns: 1fr; } .section { overflow-x: auto; } table { min-width: 940px; } .anomaly-compact { min-width:760px; } .operation-list table { min-width: 720px; } }
+  @media (max-width: 760px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } .live-task-panel { align-items: flex-start; flex-direction: column; } .operation-fields,.work-order-note-form { grid-template-columns: 1fr; } .section { overflow-x: auto; } table { min-width: 940px; } .anomaly-compact { min-width:760px; } .operation-list table { min-width: 720px; } .drawer-grid { grid-template-columns:1fr; } }
 </style>
 <script src="/loading.js"></script>
 <script src="/app-shell.js"></script>
@@ -419,6 +430,7 @@
     真实数据：9/10 异常研判 16 条 · 闭环率 19%
   </div>
   <div class="anomaly-drawer" id="anomaly-drawer" aria-hidden="true"><aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title"><div id="anomaly-drawer-content"></div></aside></div>
+  <div class="operation-drawer" id="operation-drawer" aria-hidden="true"><aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="operation-drawer-title"><div id="operation-drawer-content"></div></aside></div>
   <div class="document-drawer" id="governance-drawer" aria-hidden="true"><aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="governance-drawer-title"><div id="governance-drawer-content"></div></aside></div>
   <div class="document-drawer" id="document-drawer" aria-hidden="true"><aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="document-drawer-title"><div id="document-drawer-content"></div></aside></div>
   <div class="demo-controls"><button class="btn demo-reset" type="button" data-reset-demo>重置演示数据</button></div>

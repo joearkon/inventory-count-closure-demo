@@ -86,6 +86,13 @@ await check('new pages are served', async () => {
   return paths;
 });
 
+await check('follow-up work orders have a traceable detail workspace', async () => {
+  const [page, script] = await Promise.all([fetch(`${base}/`).then((r) => r.text()), fetch(`${base}/app.js`).then((r) => r.text())]);
+  for (const token of ['operation-drawer', '处理时间线', '新增处理记录', '当前操作人', '来源与判断记录']) if (!`${page}\n${script}`.includes(token)) throw new Error(`missing work order detail token: ${token}`);
+  if (!/openOperationDrawer/.test(script) || !/\/api\/operation-tasks\/\$\{task\.id\}\/notes/.test(script)) throw new Error('work order detail or progress note binding missing');
+  return { detail_drawer:true, timeline:true, optional_operator:true, progress_notes:true, linked_documents:true };
+});
+
 await check('dense operation pages use focused tabs and voice has an immersive overlay', async () => {
   const [counts, transfers, transferScript, store, storeScript] = await Promise.all([
     fetch(`${base}/count-plans/`).then((r) => r.text()), fetch(`${base}/transfers/`).then((r) => r.text()), fetch(`${base}/transfers-page.js`).then((r) => r.text()), fetch(`${base}/store/?store=STORE001`).then((r) => r.text()), fetch(`${base}/store-agent.js`).then((r) => r.text())
@@ -187,13 +194,16 @@ if (mutationTests) {
     const created = await json('/api/operation-tasks', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ storeCode:'STORE001', title:'QA 库存核查', instruction:'核对收货与盘点凭证', taskType:'qa_regression' }) });
     const task = created.operationTask;
     if (!task?.id || task.status !== 'pending_store_submission') throw new Error(JSON.stringify(task));
+    const noted = await json(`/api/operation-tasks/${task.id}/notes`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ operator:'', note:'QA 已核对当日收货与盘点记录' }) });
+    const notedTask = (noted.operationTasks || []).find((item) => item.id === task.id);
+    if (notedTask?.activity_log?.[0]?.note !== 'QA 已核对当日收货与盘点记录' || notedTask.activity_log[0].operator !== null) throw new Error(JSON.stringify(notedTask));
     const submitted = await json(`/api/operation-tasks/${task.id}/submit`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ filename:'qa-proof.png', previewData:'data:image/png;base64,iVBORw0KGgo=' }) });
     const submittedTask = (submitted.operationTasks || []).find((item) => item.id === task.id);
     if (submittedTask?.status !== 'pending_hq_review' || !submittedTask.proof_document_id) throw new Error(JSON.stringify(submittedTask));
     const closed = await json(`/api/operation-tasks/${task.id}/close`, { method:'POST' });
     const closedTask = (closed.operationTasks || []).find((item) => item.id === task.id);
     if (closedTask?.status !== 'closed' || !closedTask.closed_at) throw new Error(JSON.stringify(closedTask));
-    return { task_id:task.id, status:closedTask.status, proof_document_id:submittedTask.proof_document_id };
+    return { task_id:task.id, status:closedTask.status, proof_document_id:submittedTask.proof_document_id, timeline_entries:closedTask.activity_log?.length || 0 };
   });
 
   await check('inventory Knowhow can be saved and read from R2', async () => {

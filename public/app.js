@@ -343,8 +343,8 @@
     });
     document.querySelectorAll('[data-show-operation-detail]').forEach((button) => button.addEventListener('click', () => {
       selectedOperationTaskId = button.dataset.showOperationDetail;
-      renderHq(latestHqState);
-      document.querySelector('#operation-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const task = (latestHqState?.operationTasks || []).find((item) => item.id === selectedOperationTaskId);
+      if (task) openOperationDrawer(task, latestHqState);
     }));
     document.querySelectorAll('[data-show-task-detail]').forEach((button) => button.addEventListener('click', () => {
       const detail = document.querySelector('#task-document-details');
@@ -680,6 +680,56 @@
     document.querySelector('#operation-task-panel').innerHTML = `<div class="operation-workspace">${metrics}${filters}${detail}${table}</div>`;
   }
 
+  function operationTypeText(type) {
+    return ({ custom:'主动运营任务', diagnosis_negative_inventory:'负库存核查', diagnosis_count_variance:'盘点差异复核', diagnosis_safety_stock:'安全库存跟进', diagnosis_sell_in_ratio:'销入比核查', receipt_evidence:'收货凭证核查', sku_inventory_check:'SKU 库存核查', inventory_receipt_check:'收货与库存核查', qa_regression:'测试工单' }[type] || '跟进工单');
+  }
+
+  function operationTimeline(task, state) {
+    const events = [{ title:'工单已创建', detail:task.instruction, actor:'', time:task.created_at, order:0 }];
+    (state.audits || []).filter((item) => item.task_id === task.id).forEach((item) => events.push({ title:item.action, detail:item.detail, actor:item.actor_role || '', time:item.created_at, order:1 }));
+    if (task.submitted_at && !events.some((item) => item.time === task.submitted_at)) events.push({ title:'门店已提交处理凭证', detail:task.proof_filename || '凭证已归档', actor:'', time:task.submitted_at, order:2 });
+    if (task.closed_at && !events.some((item) => item.time === task.closed_at)) events.push({ title:'工单已闭环', detail:task.resolution || '处理完成', actor:'', time:task.closed_at, order:3 });
+    return events.sort((a, b) => new Date(a.time || 0) - new Date(b.time || 0) || a.order - b.order);
+  }
+
+  function closeOperationDrawer() {
+    const drawer = document.querySelector('#operation-drawer');
+    drawer?.classList.remove('open'); drawer?.setAttribute('aria-hidden', 'true');
+  }
+
+  function openOperationDrawer(task, state) {
+    if (!task) return;
+    selectedOperationTaskId = task.id;
+    const group = task.status === 'closed' ? '已闭环' : task.status === 'pending_hq_review' ? '待总部确认' : task.status === 'pending_store_submission' ? '门店处理中' : '待处理';
+    const anomaly = (state.materialAnomalies || []).find((item) => item.id === task.source_anomaly_id);
+    const linkedDocuments = (task.linked_document_ids || []).map((id) => (state.documents || []).find((item) => item.id === id)).filter(Boolean);
+    const linkedEvents = (task.linked_event_ids || []).map((id) => (state.materialEvents || []).find((item) => item.id === id)).filter(Boolean);
+    const timeline = operationTimeline(task, state);
+    const material = anomaly?.material_name || task.material_names?.[0] || '';
+    const sourceDetail = anomaly
+      ? `<b>当前判断来源：规则引擎 · ${esc(task.source_rule_code || anomaly.rule_code || '未标注规则')}</b>${esc(anomaly.material_name || '')}${anomaly.unit ? `（${esc(anomaly.unit)}）` : ''} · ${esc(anomaly.primary_location?.title || anomaly.primary_attribution || '待验证位置')}<br>关联研判：${esc(anomaly.judgment_task_no || anomaly.id)}`
+      : `<b>当前判断来源：人工创建</b>暂未关联库存研判。后续 LLM 建议会作为独立时间线记录追加，不覆盖原始工单与人工处理记录。`;
+    const documentButtons = linkedDocuments.length
+      ? linkedDocuments.map((item) => `<button class="btn" data-open-operation-document="${esc(item.id)}">${esc(item.original_filename || item.id)}</button>`).join('')
+      : '<span style="color:#8f959e;font-size:13px">暂无关联单据</span>';
+    const eventList = linkedEvents.length ? `<ul class="document-detail-lines">${linkedEvents.map((item) => `<li>${esc(item.document_no || item.id)} · ${esc(item.material_name)} ${esc(item.qty)}${esc(item.unit)}</li>`).join('')}</ul>` : '';
+    document.querySelector('#operation-drawer-content').innerHTML = `<div class="drawer-head"><div><div class="live-eyebrow">跟进工单 · ${group}</div><h2 id="operation-drawer-title">${esc(task.title)}</h2></div><button class="drawer-close" data-close-operation-drawer aria-label="关闭工单详情">×</button></div>
+      <div class="drawer-block"><div class="drawer-grid"><div class="drawer-field"><span>工单编号</span>${esc(task.id)}</div><div class="drawer-field"><span>当前状态</span><span class="status-tag ${task.status === 'closed' ? 'closed' : task.status === 'pending_hq_review' ? 'assigned' : 'pending'}">${group}</span></div><div class="drawer-field"><span>工单类型</span>${esc(operationTypeText(task.task_type))}</div><div class="drawer-field"><span>门店 / 主体</span>${esc(task.store_code || '—')}</div><div class="drawer-field"><span>责任角色</span>${esc(task.assigned_to || '—')}</div><div class="drawer-field"><span>当前操作人</span>${esc(task.last_operator || '—')}</div><div class="drawer-field"><span>创建时间</span>${esc(formatDate(task.created_at))}</div><div class="drawer-field"><span>最近更新</span>${esc(formatDate(task.updated_at || task.submitted_at || task.created_at))}</div></div></div>
+      <div class="drawer-block"><h3>任务详情</h3><p style="font-size:14px;color:#4e5969;line-height:1.7">${esc(task.instruction)}</p></div>
+      <div class="drawer-block"><h3>来源与判断记录</h3><div class="work-order-source">${sourceDetail}</div></div>
+      <div class="drawer-block"><h3>关联单据与业务记录</h3><div class="btn-row">${documentButtons}</div>${eventList}</div>
+      <div class="drawer-block"><h3>处理时间线</h3><div class="timeline">${timeline.map((item) => `<div class="timeline-item"><b>${esc(item.title)}</b>${item.detail ? `<p>${esc(item.detail)}</p>` : ''}<div class="timeline-meta"><span>${esc(formatDate(item.time))}</span><span>操作人：${esc(item.actor || '—')}</span></div></div>`).join('')}</div></div>
+      ${task.resolution ? `<div class="drawer-block"><h3>闭环结论</h3><div class="work-order-source"><b>处理完成</b>${esc(task.resolution)}</div></div>` : ''}
+      <div class="drawer-block"><h3>新增处理记录</h3><form class="work-order-note-form" data-operation-note="${esc(task.id)}"><label>操作人（可不填）<input name="operator" maxlength="80" placeholder="—"></label><label>处理记录<textarea name="note" maxlength="500" required placeholder="记录已核对事项、待办或判断依据"></textarea></label><button class="btn btn-primary" type="submit">添加记录</button></form></div>
+      <div class="drawer-block"><h3>工单操作</h3><div class="live-task-actions">${operationTaskAction(task)}${task.proof_filename ? `<button class="btn" data-open-operation-proof="${esc(task.id)}">查看门店凭证</button>` : ''}<a class="btn" href="/flows/?store=${encodeURIComponent(task.store_code || '')}${material ? `&material=${encodeURIComponent(material)}` : ''}">查看库存流水</a><a class="btn" href="/count-plans/?source=work_order&work_order=${encodeURIComponent(task.id)}">下发关联盘点</a></div></div>`;
+    const drawer = document.querySelector('#operation-drawer'); drawer.classList.add('open'); drawer.setAttribute('aria-hidden', 'false');
+    drawer.querySelector('[data-close-operation-drawer]').onclick = closeOperationDrawer;
+    drawer.querySelectorAll('[data-open-operation-document]').forEach((button) => button.onclick = () => { const item = (state.documents || []).find((document) => document.id === button.dataset.openOperationDocument); if (item) openDocumentDrawer(item); });
+    drawer.querySelectorAll('[data-open-operation-proof]').forEach((button) => button.onclick = () => openOperationProofDrawer(task, state));
+    drawer.querySelectorAll('[data-close-operation]').forEach((button) => button.onclick = async () => { const restore = setButtonLoading(button, '正在验收…'); try { const next = await api(`/api/operation-tasks/${task.id}/close`, { method:'POST' }); renderHq(next); openOperationDrawer((next.operationTasks || []).find((item) => item.id === task.id), next); } catch (error) { alert(error.message); restore(); } });
+    drawer.querySelector('[data-operation-note]')?.addEventListener('submit', async (event) => { event.preventDefault(); const button = event.currentTarget.querySelector('[type="submit"]'); const restore = setButtonLoading(button, '正在保存…'); try { const next = await api(`/api/operation-tasks/${task.id}/notes`, { method:'POST', body:JSON.stringify({ operator:event.currentTarget.operator.value, note:event.currentTarget.note.value }) }); renderHq(next); openOperationDrawer((next.operationTasks || []).find((item) => item.id === task.id), next); } catch (error) { alert(error.message); restore(); } });
+  }
+
   function governanceStatusText(status) { return status === 'closed' ? '已完成' : '待总部治理'; }
 
   function openGovernanceDrawer(task) {
@@ -760,7 +810,7 @@
       } catch (error) { alert(error.message); restore(); }
     });
     scope.querySelectorAll('[data-open-governance-create]').forEach((button) => button.onclick = () => { window.location.href = `/governance-task-create/?anomaly=${encodeURIComponent(button.dataset.openGovernanceCreate)}`; });
-    scope.querySelectorAll('[data-show-operation-detail]').forEach((button) => button.onclick = () => { closeAnomalyDrawer(); selectedOperationTaskId = button.dataset.showOperationDetail; renderHq(latestHqState); document.querySelector('#operation-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+    scope.querySelectorAll('[data-show-operation-detail]').forEach((button) => button.onclick = () => { closeAnomalyDrawer(); selectedOperationTaskId = button.dataset.showOperationDetail; const task = (latestHqState?.operationTasks || []).find((item) => item.id === selectedOperationTaskId); if (task) openOperationDrawer(task, latestHqState); });
     scope.querySelectorAll('[data-open-governance-detail]').forEach((button) => button.onclick = () => { const task = (latestHqState?.governanceTasks || []).find((item) => item.id === button.dataset.openGovernanceDetail); if (task) { closeAnomalyDrawer(); openGovernanceDrawer(task); } });
   }
 
@@ -776,7 +826,7 @@
   function renderHq(state) {
     latestHqState = state; renderOperationTasks(state); renderDailyPlans(state); renderGovernanceTasks(state);
     document.querySelectorAll('[data-open-task-create]').forEach((button) => button.onclick = () => { window.location.href = '/task-create/'; });
-    document.querySelectorAll('[data-show-operation-detail]').forEach((button) => button.onclick = () => { selectedOperationTaskId = button.dataset.showOperationDetail; renderHq(latestHqState); document.querySelector('#operation-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+    document.querySelectorAll('[data-show-operation-detail]').forEach((button) => button.onclick = () => { selectedOperationTaskId = button.dataset.showOperationDetail; const task = (latestHqState?.operationTasks || []).find((item) => item.id === selectedOperationTaskId); if (task) openOperationDrawer(task, latestHqState); });
     document.querySelectorAll('[data-operation-filter]').forEach((button) => button.onclick = () => { selectedOperationStatus = button.dataset.operationFilter; renderHq(latestHqState); });
     document.querySelectorAll('[data-close-operation]').forEach((button) => button.onclick = async () => { const restore = setButtonLoading(button, '正在验收…'); try { renderHq(await api(`/api/operation-tasks/${button.dataset.closeOperation}/close`, { method: 'POST' })); } catch (error) { alert(error.message); restore(); } });
     document.querySelectorAll('[data-open-governance-detail]').forEach((button) => button.onclick = () => { const task = (state.governanceTasks || []).find((item) => item.id === button.dataset.openGovernanceDetail); if (task) openGovernanceDrawer(task); });
@@ -848,7 +898,7 @@
         if (anomaly) openAnomalyDrawer(anomaly, state);
       }
       if (view === 'hq' && params.get('focus') === 'operation') {
-        selectedOperationTaskId = params.get('task'); renderHq(state); document.querySelector('#operation-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        selectedOperationTaskId = params.get('task'); renderHq(state); const task = (state.operationTasks || []).find((item) => item.id === selectedOperationTaskId); if (task) openOperationDrawer(task, state);
       }
       if (view === 'hq' && params.get('focus') === 'governance') {
         selectedGovernanceTaskId = params.get('task'); renderHq(state); document.querySelector('#governance-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
