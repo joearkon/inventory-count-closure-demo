@@ -65,6 +65,9 @@ try {
     $env:MUTATION_TESTS = '1'
     & node (Join-Path $projectRoot 'tests\regression.mjs')
     if ($LASTEXITCODE -ne 0) { throw "Regression suite failed with exit code $LASTEXITCODE" }
+
+    & node (Join-Path $projectRoot 'tests\procurement-orders.mjs')
+    if ($LASTEXITCODE -ne 0) { throw "Procurement and receipt scenario failed with exit code $LASTEXITCODE" }
   } finally {
     $env:BASE_URL = $previousBaseUrl
     $env:MUTATION_TESTS = $previousMutationTests

@@ -166,6 +166,8 @@ function r2DemoInitialState() {
     transferOrders: [],
     storeTransferRequests: [],
     restockRequests: [],
+    purchaseOrders: [],
+    receiptOrders: [],
     storeAgentSessions: [],
     transferArchives: [],
     countPlans: [],
@@ -293,6 +295,8 @@ function normalizeR2DemoState(value) {
     transferOrders: Array.isArray(source.transferOrders) ? source.transferOrders : [],
     storeTransferRequests: Array.isArray(source.storeTransferRequests) ? source.storeTransferRequests : [],
     restockRequests: Array.isArray(source.restockRequests) ? source.restockRequests : [],
+    purchaseOrders: Array.isArray(source.purchaseOrders) ? source.purchaseOrders : [],
+    receiptOrders: Array.isArray(source.receiptOrders) ? source.receiptOrders : [],
     storeAgentSessions: Array.isArray(source.storeAgentSessions) ? source.storeAgentSessions.slice(0, 80) : [],
     transferArchives: Array.isArray(source.transferArchives) ? source.transferArchives : [],
     countPlans: Array.isArray(source.countPlans) ? source.countPlans : [],
@@ -391,7 +395,8 @@ function r2StateView(value, view = '') {
     latest_records: value.feishuImport.latest_records, latest_sales_qty: value.feishuImport.latest_sales_qty
   } : null;
   if (view === 'count-plans') return { countPlans: value.countPlans || [], materialCatalog: value.materialCatalog || [], storeMasters: value.storeMasters || [], feishuImport: importSummary, storage: value.storage };
-  if (view === 'documents') return { storeMasters: value.storeMasters || [], materialEvents: value.materialEvents || [], transferOrders: value.transferOrders || [], storage: value.storage };
+  if (view === 'documents') return { storeMasters: value.storeMasters || [], materialEvents: value.materialEvents || [], transferOrders: value.transferOrders || [], purchaseOrders: value.purchaseOrders || [], receiptOrders: value.receiptOrders || [], storage: value.storage };
+  if (view === 'procurement') return { storeMasters: value.storeMasters || [], materialCatalog: value.materialCatalog || [], purchaseOrders: value.purchaseOrders || [], receiptOrders: value.receiptOrders || [], storage: value.storage };
   if (view === 'materials-evidence') return { countPlans: value.countPlans || [], documents: (value.documents || []).map(({ preview_data, ...item }) => item), storage: value.storage };
   return {
     ...value,
@@ -695,7 +700,11 @@ async function r2OperationTaskDetail(env, taskId) {
   return json({
     task,
     anomaly: (value.materialAnomalies || []).find((item) => item.id === task.source_anomaly_id) || null,
-    documents: (value.documents || []).filter((item) => documentIds.has(item.id)),
+    documents: [
+      ...(value.documents || []).filter((item) => documentIds.has(item.id)),
+      ...(value.purchaseOrders || []).filter((item) => documentIds.has(item.id)).map((item) => ({ ...item, document_type:'purchase_order', document_no:item.order_no })),
+      ...(value.receiptOrders || []).filter((item) => documentIds.has(item.id)).map((item) => ({ ...item, document_type:'receipt_order', document_no:item.receipt_no }))
+    ],
     events: (value.materialEvents || []).filter((item) => eventIds.has(item.id)),
     audits: (value.audits || []).filter((item) => item.task_id === task.id),
     storage: value.storage
@@ -1027,6 +1036,204 @@ async function r2CreateStoreRestockRequest(env, body) {
   return json({ request }, 201);
 }
 
+const PROCUREMENT_URGENCY = new Set(['normal', 'urgent', 'critical']);
+const PROCUREMENT_SOURCE_TYPES = new Set(['manual', 'work_order', 'restock_request', 'ai_suggestion']);
+
+function r2ProcurementSource(body = {}) {
+  const sourceType = PROCUREMENT_SOURCE_TYPES.has(body.source_type) ? body.source_type : 'manual';
+  return {
+    source_type: sourceType,
+    source_work_order_id: String(body.source_work_order_id || body.operation_task_id || '').trim().slice(0, 120) || null,
+    urgency: PROCUREMENT_URGENCY.has(body.urgency) ? body.urgency : 'normal'
+  };
+}
+
+function r2ProcurementLines(value, rawLines, { allowZero = false } = {}) {
+  if (!Array.isArray(rawLines) || !rawLines.length) return { error: '请至少添加一项物料明细。' };
+  if (rawLines.length > 80) return { error: '单据物料不能超过 80 项。' };
+  const catalog = value.materialCatalog?.length ? value.materialCatalog : r2DefaultMaterialCatalog();
+  const seen = new Set();
+  const lines = [];
+  for (const [index, raw] of rawLines.entries()) {
+    const materialName = String(raw.material_name || '').trim().slice(0, 80);
+    const master = catalog.find((item) => item.status !== 'inactive' && normalizedKey(item.material_name) === normalizedKey(materialName));
+    const unit = String(raw.unit || master?.base_unit || '').trim().slice(0, 16);
+    const qty = r2Round(Number(raw.qty ?? raw.ordered_qty ?? raw.received_qty));
+    if (!master || !unit || !Number.isFinite(qty) || (allowZero ? qty < 0 : qty <= 0)) return { error: `第 ${index + 1} 项物料、单位或数量无效。` };
+    if (unit !== master.base_unit) return { error: `${master.material_name} 必须使用库存基础单位 ${master.base_unit}。` };
+    const key = `${normalizedKey(master.material_name)}|${unit}`;
+    if (seen.has(key)) return { error: `${master.material_name} 重复，请合并为一行。` };
+    seen.add(key);
+    lines.push({ id: id('LIN'), line_no: index + 1, material_name: master.material_name, unit, qty });
+  }
+  return { lines };
+}
+
+function r2FindProcurementRecord(value, kind, recordId) {
+  const list = kind === 'purchase' ? value.purchaseOrders : value.receiptOrders;
+  return (list || []).find((item) => item.id === recordId || item.order_no === recordId || item.receipt_no === recordId);
+}
+
+function r2PurchaseStatus(order) {
+  const lines = order.lines || [];
+  if (!lines.length || order.status === 'draft' || order.status === 'cancelled') return order.status;
+  const ordered = lines.reduce((sum, line) => sum + Number(line.ordered_qty || 0), 0);
+  const received = lines.reduce((sum, line) => sum + Number(line.received_qty || 0), 0);
+  if (received <= 0) return 'pending_receipt';
+  if (received + 0.000001 < ordered) return 'partially_received';
+  return 'received';
+}
+
+async function r2CreatePurchaseOrder(env, body = {}) {
+  const value = await r2DemoState(env);
+  const storeCode = String(body.store_code || STORE_CODE).trim().slice(0, 64);
+  const store = (value.storeMasters || []).find((item) => item.store_code === storeCode && item.status !== '停用');
+  if (!store) return bad('请选择有效门店。');
+  const parsed = r2ProcurementLines(value, body.lines);
+  if (parsed.error) return bad(parsed.error);
+  const businessDate = String(body.business_date || chinaBusinessDate()).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) return bad('订货日期格式不正确。');
+  const source = r2ProcurementSource(body), createdAt = now();
+  const order = {
+    id: id('PO'), order_no: `PO-${businessDate.replaceAll('-', '')}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`,
+    store_code: storeCode, supplier_name: String(body.supplier_name || '待确认供应商').trim().slice(0, 100),
+    business_date: businessDate, expected_arrival_date: String(body.expected_arrival_date || '').slice(0, 10) || null,
+    status: 'draft', ...source, note: String(body.note || '').trim().slice(0, 300) || null,
+    lines: parsed.lines.map((line) => ({ ...line, ordered_qty: line.qty, received_qty: 0, status: 'pending' })),
+    created_at: createdAt, updated_at: createdAt, created_by: String(body.operator || '总部运营').trim().slice(0, 80) || null
+  };
+  value.purchaseOrders.unshift(order);
+  r2LinkOperationDocument(value, order.source_work_order_id, order.id, '关联订货草稿');
+  r2Audit(value, order.created_by, '建立订货草稿', `${order.order_no} · ${storeCode} · ${order.lines.length} 项${source.urgency !== 'normal' ? ' · 紧急补货' : ''}`, order.id);
+  const state = await r2SaveDemoState(env, value, 'purchase-order-draft');
+  return json({ order, storage: state.storage }, 201);
+}
+
+async function r2PurchaseOrderAction(env, orderId, action) {
+  const value = await r2DemoState(env);
+  const order = r2FindProcurementRecord(value, 'purchase', orderId);
+  if (!order) return bad('订货单不存在。', 404);
+  if (action === 'submit') {
+    if (order.status !== 'draft') return bad('只有草稿订货单可以确认提交。', 409);
+    order.status = 'pending_receipt'; order.submitted_at = now(); order.updated_at = order.submitted_at;
+    r2Audit(value, '总部运营', '确认提交订货单', `${order.order_no} 已提交，等待收货；本动作不增加库存。`, order.id);
+  } else if (action === 'cancel') {
+    if (!['draft', 'pending_receipt'].includes(order.status)) return bad('该订货单当前不能取消。', 409);
+    if ((order.lines || []).some((line) => Number(line.received_qty || 0) > 0)) return bad('已有收货记录的订货单不能取消。', 409);
+    order.status = 'cancelled'; order.cancelled_at = now(); order.updated_at = order.cancelled_at;
+    r2Audit(value, '总部运营', '取消订货单', `${order.order_no} 已取消；未改动库存。`, order.id);
+  }
+  const state = await r2SaveDemoState(env, value, `purchase-order-${action}`);
+  return json({ order, storage: state.storage });
+}
+
+async function r2CreateReceiptOrder(env, body = {}) {
+  const value = await r2DemoState(env);
+  const purchaseOrderId = String(body.order_id || body.purchase_order_id || '').trim();
+  const purchase = purchaseOrderId ? r2FindProcurementRecord(value, 'purchase', purchaseOrderId) : null;
+  if (purchaseOrderId && !purchase) return bad('关联订货单不存在。', 404);
+  if (purchase && !['pending_receipt', 'partially_received'].includes(purchase.status)) return bad('该订货单当前不能创建收货草稿。', 409);
+  const storeCode = String(body.store_code || purchase?.store_code || STORE_CODE).trim().slice(0, 64);
+  const store = (value.storeMasters || []).find((item) => item.store_code === storeCode && item.status !== '停用');
+  if (!store) return bad('请选择有效门店。');
+  if (purchase && storeCode !== purchase.store_code) return bad('收货门店必须与订货单一致。');
+  const rawLines = Array.isArray(body.lines) && body.lines.length ? body.lines : (purchase?.lines || []).filter((line) => Number(line.ordered_qty || 0) > Number(line.received_qty || 0)).map((line) => ({ material_name: line.material_name, unit: line.unit, qty: r2Round(Number(line.ordered_qty || 0) - Number(line.received_qty || 0)) }));
+  const parsed = r2ProcurementLines(value, rawLines);
+  if (parsed.error) return bad(parsed.error);
+  if (purchase) {
+    for (const line of parsed.lines) {
+      const orderedLine = purchase.lines.find((item) => normalizedKey(item.material_name) === normalizedKey(line.material_name) && item.unit === line.unit);
+      const remaining = r2Round(Number(orderedLine?.ordered_qty || 0) - Number(orderedLine?.received_qty || 0));
+      if (!orderedLine || line.qty > remaining + 0.000001) return bad(`${line.material_name} 收货数量超过订货未收数量 ${remaining}${line.unit}。`, 409);
+    }
+  }
+  const businessDate = String(body.business_date || chinaBusinessDate()).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) return bad('收货日期格式不正确。');
+  const source = r2ProcurementSource({ ...body, source_work_order_id: body.source_work_order_id || purchase?.source_work_order_id, source_type: body.source_type || purchase?.source_type, urgency: body.urgency || purchase?.urgency });
+  const createdAt = now();
+  const receipt = {
+    id: id('RCV'), receipt_no: `RCV-${businessDate.replaceAll('-', '')}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`,
+    order_id: purchase?.id || null, order_no: purchase?.order_no || null, store_code: storeCode,
+    supplier_name: String(body.supplier_name || purchase?.supplier_name || '未关联供应商').trim().slice(0, 100),
+    business_date: businessDate, status: 'draft', ...source,
+    note: String(body.note || '').trim().slice(0, 300) || null,
+    lines: parsed.lines.map((line) => ({ ...line, received_qty: line.qty })),
+    created_at: createdAt, updated_at: createdAt, created_by: String(body.operator || '门店').trim().slice(0, 80) || null,
+    confirmed_at: null, event_ids: []
+  };
+  value.receiptOrders.unshift(receipt);
+  r2LinkOperationDocument(value, receipt.source_work_order_id, receipt.id, '关联收货草稿');
+  r2Audit(value, receipt.created_by, '建立收货草稿', `${receipt.receipt_no} · ${storeCode} · ${receipt.lines.length} 项${receipt.order_no ? ` · 关联 ${receipt.order_no}` : ' · 独立收货'}`, receipt.id);
+  const state = await r2SaveDemoState(env, value, 'receipt-order-draft');
+  return json({ receipt, storage: state.storage }, 201);
+}
+
+async function r2ReceiptOrderAction(env, receiptId, action, body = {}) {
+  const value = await r2DemoState(env);
+  const receipt = r2FindProcurementRecord(value, 'receipt', receiptId);
+  if (!receipt) return bad('收货单不存在。', 404);
+  if (action === 'cancel') {
+    if (receipt.status !== 'draft') return bad('只有草稿收货单可以取消。', 409);
+    receipt.status = 'cancelled'; receipt.cancelled_at = now(); receipt.updated_at = receipt.cancelled_at;
+    r2Audit(value, String(body.operator || '门店').slice(0, 80), '取消收货草稿', `${receipt.receipt_no} 已取消；未生成库存流水。`, receipt.id);
+  } else if (action === 'confirm') {
+    if (receipt.status !== 'draft') return bad('该收货单已确认或已取消，不能重复确认。', 409);
+    const purchase = receipt.order_id ? r2FindProcurementRecord(value, 'purchase', receipt.order_id) : null;
+    if (receipt.order_id && (!purchase || !['pending_receipt', 'partially_received'].includes(purchase.status))) return bad('关联订货单状态已变化，请刷新后重试。', 409);
+    if (purchase) {
+      for (const line of receipt.lines || []) {
+        const orderedLine = purchase.lines.find((item) => normalizedKey(item.material_name) === normalizedKey(line.material_name) && item.unit === line.unit);
+        const remaining = r2Round(Number(orderedLine?.ordered_qty || 0) - Number(orderedLine?.received_qty || 0));
+        if (!orderedLine || Number(line.received_qty || 0) > remaining + 0.000001) return bad(`${line.material_name} 的可收数量已经变化，请重新创建收货草稿。`, 409);
+      }
+    }
+    const confirmedAt = now(), events = [];
+    for (const line of receipt.lines || []) {
+      const event = {
+        id: id('EVT'), document_no: receipt.receipt_no, store_code: receipt.store_code, business_date: receipt.business_date,
+        material_name: line.material_name, unit: line.unit, type: 'receipt', qty: r2Round(line.received_qty),
+        reference: receipt.order_no ? `订货单 ${receipt.order_no} 收货` : (receipt.note || '独立收货'),
+        created_at: confirmedAt, status: 'active', demo: true, source: 'receipt_order',
+        receipt_order_id: receipt.id, purchase_order_id: receipt.order_id, source_work_order_id: receipt.source_work_order_id
+      };
+      value.materialEvents.unshift(event); events.push(event);
+      if (purchase) {
+        const orderedLine = purchase.lines.find((item) => normalizedKey(item.material_name) === normalizedKey(line.material_name) && item.unit === line.unit);
+        orderedLine.received_qty = r2Round(Number(orderedLine.received_qty || 0) + Number(line.received_qty || 0));
+        orderedLine.status = orderedLine.received_qty + 0.000001 >= orderedLine.ordered_qty ? 'received' : 'partially_received';
+      }
+    }
+    receipt.status = 'received'; receipt.confirmed_at = confirmedAt; receipt.updated_at = confirmedAt;
+    receipt.confirmed_by = String(body.operator || '门店').trim().slice(0, 80) || null; receipt.event_ids = events.map((item) => item.id);
+    if (purchase) { purchase.status = r2PurchaseStatus(purchase); purchase.updated_at = confirmedAt; if (purchase.status === 'received') purchase.received_at = confirmedAt; }
+    if (receipt.source_work_order_id) {
+      const task = (value.operationTasks || []).find((item) => item.id === receipt.source_work_order_id);
+      if (task) {
+        task.linked_document_ids = [...new Set([...(task.linked_document_ids || []), receipt.id])];
+        task.linked_event_ids = [...new Set([...(task.linked_event_ids || []), ...events.map((item) => item.id)])];
+        task.updated_at = confirmedAt;
+      }
+    }
+    if (value.feishuImport?.sales?.length) r2ReconcileAllMaterialSignalsAndCases(value, value.feishuImport.latest_business_date, confirmedAt);
+    r2Audit(value, receipt.confirmed_by, '确认收货并生成库存流水', `${receipt.receipt_no} · ${events.length} 项已入库${receipt.order_no ? ` · 订货单 ${receipt.order_no} 更新为 ${purchase.status}` : ''}。`, receipt.id);
+  }
+  const state = await r2SaveDemoState(env, value, `receipt-order-${action}`);
+  return json({ receipt, purchase_order: receipt.order_id ? r2FindProcurementRecord(state, 'purchase', receipt.order_id) : null, events: action === 'confirm' ? state.materialEvents.filter((item) => receipt.event_ids.includes(item.id)) : [], storage: state.storage });
+}
+
+async function r2ProcurementDetail(env, kind, recordId) {
+  const value = await r2DemoState(env);
+  const record = r2FindProcurementRecord(value, kind, recordId);
+  if (!record) return bad(kind === 'purchase' ? '订货单不存在。' : '收货单不存在。', 404);
+  const purchase = kind === 'purchase' ? record : (record.order_id ? r2FindProcurementRecord(value, 'purchase', record.order_id) : null);
+  return json({
+    record, purchase_order: purchase,
+    receipts: kind === 'purchase' ? (value.receiptOrders || []).filter((item) => item.order_id === record.id) : [],
+    events: kind === 'receipt' ? (value.materialEvents || []).filter((item) => (record.event_ids || []).includes(item.id)) : [],
+    audits: (value.audits || []).filter((item) => [record.id, purchase?.id].includes(item.task_id)), storage: value.storage
+  });
+}
+
 async function r2ReceiveStoreTransferRequest(env, requestId, body = {}) {
   const value = await r2DemoState(env);
   const request = value.storeTransferRequests.find((item) => item.id === requestId);
@@ -1080,6 +1287,8 @@ async function r2ResetStoreBusinessDay(env, body = {}) {
     events: (value.materialEvents || []).filter((item) => item.store_code === storeCode && item.business_date === businessDate).length,
     plans: scopedPlans.length,
     documents: (value.documents || []).filter((item) => item.store_code === storeCode).length,
+    purchase_orders: (value.purchaseOrders || []).filter((item) => item.store_code === storeCode && item.business_date === businessDate).length,
+    receipt_orders: (value.receiptOrders || []).filter((item) => item.store_code === storeCode && item.business_date === businessDate).length,
     anomalies: (value.materialAnomalies || []).filter((item) => item.store_code === storeCode && item.business_date === businessDate).length,
     diagnosis_cases: scopedCases.length
   };
@@ -1088,6 +1297,8 @@ async function r2ResetStoreBusinessDay(env, body = {}) {
   // STORE001 被明确作为“干净门店”重建：历史演示盘点凭证没有可靠的
   // 营业日字段，若保留会在溯源界面制造假历史，因此一并移除该门店凭证。
   value.documents = (value.documents || []).filter((item) => item.store_code !== storeCode);
+  value.purchaseOrders = (value.purchaseOrders || []).filter((item) => !(item.store_code === storeCode && item.business_date === businessDate));
+  value.receiptOrders = (value.receiptOrders || []).filter((item) => !(item.store_code === storeCode && item.business_date === businessDate));
   value.materialAnomalies = (value.materialAnomalies || []).filter((item) => !(item.store_code === storeCode && item.business_date === businessDate));
   value.diagnosisCases = (value.diagnosisCases || []).filter((item) => !caseIds.has(item.id));
   value.operationTasks = (value.operationTasks || []).filter((item) => !caseIds.has(item.source_case_id));
@@ -1096,7 +1307,7 @@ async function r2ResetStoreBusinessDay(env, body = {}) {
   value.countPlanGateResults = (value.countPlanGateResults || []).filter((item) => !(item.store_code === storeCode && item.business_date === businessDate));
   value.demoDaySessions = (value.demoDaySessions || []).filter((item) => !(item.store_code === storeCode && item.business_date === businessDate));
   if (value.task?.store_code === storeCode && String(value.task.created_at || '').slice(0, 10) === businessDate) value.task = null;
-  r2Audit(value, '总部演示控制台', '清理门店营业日演示状态', `${storeCode} · ${businessDate} · 仅清理演示库存动作、盘点、异常与研判工单；飞书原始导入和历史知识保留。`, `${storeCode}-${businessDate}`);
+  r2Audit(value, '总部演示控制台', '清理门店营业日演示状态', `${storeCode} · ${businessDate} · 仅清理演示库存动作、订货/收货、盘点、异常与研判工单；飞书原始导入和历史知识保留。`, `${storeCode}-${businessDate}`);
   return json({ store_code: storeCode, business_date: businessDate, removed, state: await r2SaveDemoState(env, value, 'store-business-day-reset') });
 }
 
@@ -4012,6 +4223,14 @@ export default {
     }
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/material-events') return r2CreateMaterialEvent(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/store-restock-requests') return r2CreateStoreRestockRequest(env, await request.json().catch(() => ({})));
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/purchase-orders') return r2CreatePurchaseOrder(env, await request.json().catch(() => ({})));
+    if (env.DEMO_STATE && request.method === 'GET' && /^\/api\/purchase-orders\/[^/]+$/.test(url.pathname)) return r2ProcurementDetail(env, 'purchase', decodeURIComponent(url.pathname.split('/')[3]));
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/purchase-orders/') && url.pathname.endsWith('/submit')) return r2PurchaseOrderAction(env, decodeURIComponent(url.pathname.split('/')[3]), 'submit');
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/purchase-orders/') && url.pathname.endsWith('/cancel')) return r2PurchaseOrderAction(env, decodeURIComponent(url.pathname.split('/')[3]), 'cancel');
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/receipt-orders') return r2CreateReceiptOrder(env, await request.json().catch(() => ({})));
+    if (env.DEMO_STATE && request.method === 'GET' && /^\/api\/receipt-orders\/[^/]+$/.test(url.pathname)) return r2ProcurementDetail(env, 'receipt', decodeURIComponent(url.pathname.split('/')[3]));
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/receipt-orders/') && url.pathname.endsWith('/confirm')) return r2ReceiptOrderAction(env, decodeURIComponent(url.pathname.split('/')[3]), 'confirm', await request.json().catch(() => ({})));
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/receipt-orders/') && url.pathname.endsWith('/cancel')) return r2ReceiptOrderAction(env, decodeURIComponent(url.pathname.split('/')[3]), 'cancel', await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/material-transfers') return r2CreateMaterialTransfer(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/transfer-orders') return r2CreateTransferOrder(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/store-transfer-requests') return r2CreateStoreTransferRequest(env, await request.json().catch(() => ({})));
