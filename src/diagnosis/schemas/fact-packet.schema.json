@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "inventory-diagnosis/fact-packet/1.0",
+  "title": "Inventory diagnosis fact packet",
+  "type": "object",
+  "required": ["schema_version", "fact_packet_id", "store_code", "business_date", "material_name", "unit", "as_of", "quantities", "physical_count", "windows"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "fact_packet_id": { "type": "string", "minLength": 1 },
+    "store_code": { "type": "string", "minLength": 1 },
+    "business_date": { "type": "string", "format": "date" },
+    "material_name": { "type": "string", "minLength": 1 },
+    "unit": { "type": "string", "minLength": 1 },
+    "as_of": { "type": "string", "format": "date-time" },
+    "quantities": {
+      "type": "object",
+      "required": ["opening", "receipt", "transfer_in", "transfer_out", "scrap", "count_adjustment", "bom_consumption", "theoretical_closing"],
+      "additionalProperties": { "$ref": "#/$defs/fact" }
+    },
+    "physical_count": { "$ref": "#/$defs/fact" },
+    "windows": {
+      "type": "object",
+      "required": ["today", "three_days", "seven_days"],
+      "properties": {
+        "today": { "$ref": "#/$defs/window" },
+        "three_days": { "$ref": "#/$defs/window" },
+        "seven_days": { "$ref": "#/$defs/window" }
+      }
+    }
+  },
+  "$defs": {
+    "fact": {
+      "type": "object",
+      "required": ["value", "status", "source", "evidence_refs"],
+      "properties": {
+        "value": { "type": ["number", "null"] },
+        "status": { "enum": ["confirmed", "not_integrated", "unknown", "not_applicable"] },
+        "source": { "type": "string" },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "window": {
+      "type": "object",
+      "required": ["from", "to", "status"],
+      "properties": {
+        "from": { "type": "string", "format": "date" },
+        "to": { "type": "string", "format": "date" },
+        "status": { "enum": ["confirmed", "partial", "not_integrated", "unknown"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "inventory-diagnosis/ai-review/1.0",
+  "title": "Manual AI diagnosis review",
+  "type": "object",
+  "required": ["review_id", "case_id", "agreement", "hypotheses", "missing_evidence", "suggested_action_ids", "evidence_snapshot_hash"],
+  "properties": {
+    "review_id": { "type": "string", "minLength": 1 },
+    "case_id": { "type": "string", "minLength": 1 },
+    "agreement": { "enum": ["agree", "partially_agree", "disagree", "insufficient"] },
+    "hypotheses": { "type": "array" },
+    "missing_evidence": { "type": "array" },
+    "suggested_action_ids": { "type": "array", "items": { "type": "string" } },
+    "evidence_snapshot_hash": { "type": "string", "minLength": 1 }
+  }
+}

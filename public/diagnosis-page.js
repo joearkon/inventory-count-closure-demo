@@ -5,7 +5,7 @@
     BELOW_SAFETY_STOCK: { rank: 3, code: 'S1', title: '安全库存预警', action: '确认补货或调拨', link: '/flows/', note: '理论期末低于安全库存；结合销售消耗与在途补货处理。' },
     SELL_IN_IMBALANCE: { rank: 4, code: 'T2', title: '销入比失衡', action: '核对补货节奏', link: '/flows/', note: '销售消耗与入库量比例超过 MVP 阈值。' }
   };
-  let payload = null, view = 'store';
+  let payload = null, shadowPayload = null, view = 'store';
   let currentPage = 1;
   const filters = { store: 'all', rule: 'all', attribution: 'all' };
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[c]));
@@ -94,7 +94,8 @@
     const taskButton = task
       ? `<a class="button secondary" href="/?focus=operation&task=${encodeURIComponent(task.id)}">查看跟进工单</a>`
       : `<button class="button" data-create-work-order="${esc(signal.id)}">建立跟进工单</button>`;
-    return `<article class="issue"><div class="issue-head"><div><div class="issue-title"><span class="rule ${rule.code === 'D2' ? '' : 'mid'}">${rule.code}</span><h3>${esc(signal.material_name)}（${esc(signal.unit)}）</h3><span class="rule-note" title="${esc(rule.note)}">规则说明</span></div><p class="subline">${esc(signal.store_code)} · ${esc(signal.business_date || '')} · 首要归因：${attributionLabel(attribution(signal))}</p></div><span class="status ${task ? '' : (signal.status === 'no_issue' ? 'no-issue' : '')}">${task ? `工单 · ${taskLabel(task)}` : (signal.status === 'no_issue' ? '排查无异常' : '待处理')}</span></div><div class="finding"><span class="label">首要排查</span><b>${esc(location.title)}</b><p>${esc(location.text)}</p></div><div class="evidence"><h4>直接证据</h4><ul>${evidence(signal).map((line) => `<li>${esc(line)}</li>`).join('')}</ul></div><div class="next"><h4>下一步</h4><p>${esc(rule.action)}</p></div><div class="actions"><a class="button secondary" href="${rule.link}?${extra}">查看相关流水</a>${taskButton}<button class="button ghost" data-no-issue="${esc(signal.id)}">排查无异常</button></div><div class="meta">研判编号：${esc(signal.id)} · 规则更新时间：${esc(signal.updated_at || signal.created_at || '—')}</div></article>`;
+    const previewButton = signal.rule_code === 'NEGATIVE_THEORETICAL' ? `<button class="button secondary" data-v2-preview="${esc(signal.id)}">查看 V2 推演</button>` : '';
+    return `<article class="issue"><div class="issue-head"><div><div class="issue-title"><span class="rule ${rule.code === 'D2' ? '' : 'mid'}">${rule.code}</span><h3>${esc(signal.material_name)}（${esc(signal.unit)}）</h3><span class="rule-note" title="${esc(rule.note)}">规则说明</span></div><p class="subline">${esc(signal.store_code)} · ${esc(signal.business_date || '')} · 首要归因：${attributionLabel(attribution(signal))}</p></div><span class="status ${task ? '' : (signal.status === 'no_issue' ? 'no-issue' : '')}">${task ? `工单 · ${taskLabel(task)}` : (signal.status === 'no_issue' ? '排查无异常' : '待处理')}</span></div><div class="finding"><span class="label">首要排查</span><b>${esc(location.title)}</b><p>${esc(location.text)}</p></div><div class="evidence"><h4>直接证据</h4><ul>${evidence(signal).map((line) => `<li>${esc(line)}</li>`).join('')}</ul></div><div class="next"><h4>下一步</h4><p>${esc(rule.action)}</p></div><div class="actions"><a class="button secondary" href="${rule.link}?${extra}">查看相关流水</a>${previewButton}${taskButton}<button class="button ghost" data-no-issue="${esc(signal.id)}">排查无异常</button></div><div class="meta">研判编号：${esc(signal.id)} · 规则更新时间：${esc(signal.updated_at || signal.created_at || '—')}</div></article>`;
   }
   function renderList() {
     const root = document.querySelector('#diagnosis-list'), items = filtered();
@@ -117,6 +118,24 @@
   function bindActions() {
     document.querySelectorAll('[data-create-work-order]').forEach((button) => button.onclick = async () => { button.disabled = true; try { await mutate(button.dataset.createWorkOrder, 'work-order'); } catch (error) { alert(error.message); button.disabled = false; } });
     document.querySelectorAll('[data-no-issue]').forEach((button) => button.onclick = async () => { button.disabled = true; try { await mutate(button.dataset.noIssue, 'mvp-action'); } catch (error) { alert(error.message); button.disabled = false; } });
+    document.querySelectorAll('[data-v2-preview]').forEach((button) => button.onclick = () => showShadow(button.dataset.v2Preview));
+  }
+  function shadowCard(item) {
+    const packet = item.fact_packet, result = item.v2, q = packet.quantities;
+    const formula = `${qty(q.opening.value)} + ${qty(q.receipt.value)} + ${qty(q.transfer_in.value)} − ${qty(q.transfer_out.value)} − ${qty(q.scrap.value)} − ${qty(q.bom_consumption.value)} = ${qty(q.theoretical_closing.value)} ${item.unit}`;
+    return `<article class="shadow-card" data-shadow-signal="${esc(item.signal_id)}"><h3>${esc(item.store_code)} · ${esc(item.material_name)}（${esc(item.unit)}）</h3><div class="shadow-grid"><div class="shadow-side"><h4>当前正式规则 V1</h4><p><b>${esc(item.v1.rule_code)}</b></p><p>${esc(item.v1.evidence || '当前规则证据待补充')}</p><p>处理策略：${esc(item.v1.strategy || '待验证')}</p></div><div class="shadow-side v2"><h4>决策树 V2 · 影子结果</h4><p><b>${esc(result.primary_location)}</b></p><p>${esc(result.primary_hypothesis)}</p><p>库存重建：${esc(formula)}</p><p>原因证据：${esc(result.cause_evidence_status)} · 实物状态：${esc(result.physical_status)}</p>${result.missing_evidence.length ? `<p>缺失证据：${result.missing_evidence.map(esc).join('、')}</p>` : ''}<div>${result.actions.map((action) => `<span class="action-chip">${esc(action.label)}</span>`).join('')}</div></div></div><ol class="trace">${result.decision_trace.map((step) => `<li><b>${esc(step.node_id)}</b>：${esc(step.message)}</li>`).join('')}</ol></article>`;
+  }
+  async function showShadow(signalId = '') {
+    const panel = document.querySelector('#v2-shadow-panel'), trigger = document.querySelector('#v2-preview-toggle');
+    panel.hidden = false; panel.innerHTML = '<div class="empty">正在运行只读 V2 影子研判…</div>'; trigger.disabled = true;
+    try {
+      if (!shadowPayload) { const response = await fetch('/api/diagnosis-v2/shadow'); shadowPayload = await response.json(); if (!response.ok) throw new Error(shadowPayload.error || '无法运行 V2 影子研判。'); }
+      const items = signalId ? shadowPayload.comparisons.filter((item) => item.signal_id === signalId) : shadowPayload.comparisons;
+      panel.innerHTML = `<div class="shadow-head"><div><h2>规则 V2 对照·预览</h2><p>${esc(shadowPayload.ruleset.ruleset_id)} · ${esc(shadowPayload.ruleset.rule_version)} · ${items.length} 项 D2 对照</p></div><button class="close-shadow" id="v2-preview-close">收起</button></div><div class="shadow-banner">影子研判仅用于规则验证：不建立工单、不改变库存、不替换当前 V1 结论。</div>${items.length ? items.map(shadowCard).join('') : '<div class="empty">当前没有可对照的 D2 负库存案例。</div>'}`;
+      document.querySelector('#v2-preview-close').onclick = () => { panel.hidden = true; };
+      panel.scrollIntoView({ behavior:'smooth', block:'start' });
+    } catch (error) { panel.innerHTML = `<div class="error">${esc(error.message)}</div>`; }
+    finally { trigger.disabled = false; }
   }
   async function load() {
     try { const response = await fetch('/api/feishu-sync/state?view=diagnosis'); payload = await response.json(); if (!response.ok) throw new Error(payload.error || '无法读取库存研判数据。'); render(); }
@@ -126,5 +145,6 @@
   document.querySelector('#store-filter').onchange = (event) => { filters.store = event.target.value; currentPage = 1; render(); };
   document.querySelector('#rule-filter').onchange = (event) => { filters.rule = event.target.value; currentPage = 1; render(); };
   document.querySelector('#attribution-filter').onchange = (event) => { filters.attribution = event.target.value; currentPage = 1; render(); };
+  document.querySelector('#v2-preview-toggle').onclick = () => showShadow();
   load();
 })();

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "inventory-diagnosis/case/1.0",
+  "title": "Inventory diagnosis case",
+  "type": "object",
+  "required": ["case_id", "ruleset_id", "rule_code", "rule_version", "fact_packet_id", "anomaly_status", "cause_evidence_status", "physical_status", "decision_trace", "recommended_action_ids"],
+  "properties": {
+    "case_id": { "type": "string", "minLength": 1 },
+    "ruleset_id": { "type": "string", "minLength": 1 },
+    "rule_code": { "type": "string", "minLength": 1 },
+    "rule_version": { "type": "string", "minLength": 1 },
+    "fact_packet_id": { "type": "string", "minLength": 1 },
+    "anomaly_status": { "enum": ["triggered", "not_triggered", "rule_error"] },
+    "cause_evidence_status": { "enum": ["confirmed", "excluded", "suspect", "insufficient", "pending_count"] },
+    "physical_status": { "enum": ["confirmed", "excluded", "suspect", "insufficient", "pending_count"] },
+    "decision_trace": { "type": "array" },
+    "recommended_action_ids": { "type": "array", "items": { "type": "string" } }
+  }
+}

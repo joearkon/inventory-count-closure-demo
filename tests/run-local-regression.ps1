@@ -22,6 +22,15 @@ New-Item -ItemType Directory -Path $persistPath | Out-Null
 try {
   Push-Location $projectRoot
 
+  & node (Join-Path $projectRoot 'tests\diagnosis-v1-characterization.mjs')
+  if ($LASTEXITCODE -ne 0) { throw "V1 diagnosis characterization failed with exit code $LASTEXITCODE" }
+
+  & node (Join-Path $projectRoot 'tests\diagnosis-contracts.mjs')
+  if ($LASTEXITCODE -ne 0) { throw "Diagnosis contract tests failed with exit code $LASTEXITCODE" }
+
+  & node (Join-Path $projectRoot 'tests\diagnosis-v2-d2.mjs')
+  if ($LASTEXITCODE -ne 0) { throw "D2 V2 engine tests failed with exit code $LASTEXITCODE" }
+
   & npx.cmd wrangler d1 migrations apply inventory-count-closure-demo-db --local --persist-to $persistPath
   if ($LASTEXITCODE -ne 0) { throw "D1 migrations failed with exit code $LASTEXITCODE" }
 
@@ -35,9 +44,10 @@ try {
 
   $baseUrl = "http://127.0.0.1:$Port"
   $ready = $false
-  # Cold Wrangler startup on Windows can take more than 10 seconds after all
-  # migrations are applied. Allow up to 30 seconds without hiding real exits.
-  for ($attempt = 0; $attempt -lt 120; $attempt += 1) {
+  # Cold Wrangler startup on Windows can exceed 30 seconds after all migrations
+  # are applied and the Worker bundle grows. Allow up to 60 seconds without
+  # hiding real exits.
+  for ($attempt = 0; $attempt -lt 240; $attempt += 1) {
     if ($workerProcess.HasExited) { throw "Wrangler exited before becoming ready. See $stderrPath" }
     try {
       $response = Invoke-WebRequest -Uri "$baseUrl/api/system/storage-health" -TimeoutSec 2

@@ -1,3 +1,5 @@
+import { buildD2ShadowReport } from './diagnosis/shadow.js';
+
 const STORE_CODE = 'STORE001';
 // 门店主档在系统侧维护。即使某店当天尚无销售，也要有零基线物料台账，
 // 才能作为调拨调入方接收库存并形成独立流水。
@@ -3944,6 +3946,11 @@ export default {
       const value = env.DEMO_STATE ? await r2FeishuSyncState(env) : await feishuSyncState(env.DB);
       return json(env.DEMO_STATE ? r2FeishuStateView(value, url.searchParams.get('view') || '') : value);
     }
+    if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/diagnosis-v2/shadow') {
+      const state = await r2DemoState(env);
+      const calculated = await r2FeishuSyncState(env);
+      return json(buildD2ShadowReport(calculated, state.materialCatalog || []));
+    }
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/store-masters') {
       const value = await r2DemoState(env);
       return json({ store_masters: value.storeMasters || r2DefaultStoreMasters() });
@@ -4110,3 +4117,8 @@ export default {
     ctx.waitUntil(syncFeishuSales(env.DB, env));
   }
 };
+
+// Named exports are intentionally limited to deterministic diagnosis helpers.
+// They let characterization tests lock the existing V1 behavior before the
+// V2 decision engine is introduced, without exposing new HTTP capabilities.
+export { r2DiagnosisWorkOrderCopy, r2ReconcileMaterialDiagnosis };

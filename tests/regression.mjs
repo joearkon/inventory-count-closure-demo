@@ -102,6 +102,19 @@ await check('follow-up work orders use a traceable full detail page', async () =
   return { full_page:true, side_drawer_removed:true, timeline:true, optional_operator:true, progress_notes:true, linked_documents:true };
 });
 
+await check('D2 V2 preview is a read-only shadow comparison', async () => {
+  const [page, script, shadow] = await Promise.all([
+    fetch(`${base}/diagnosis/`).then((r) => r.text()),
+    fetch(`${base}/diagnosis-page.js`).then((r) => r.text()),
+    json('/api/diagnosis-v2/shadow')
+  ]);
+  if (!page.includes('规则 V2 对照·预览') || !page.includes('v2-shadow-panel')) throw new Error('V2 preview entry is missing');
+  if (!script.includes('查看 V2 推演') || !script.includes('/api/diagnosis-v2/shadow')) throw new Error('per-case V2 preview binding is missing');
+  if (shadow.mode !== 'shadow' || shadow.writable !== false || shadow.creates_work_orders !== false) throw new Error(`unsafe shadow flags: ${JSON.stringify(shadow)}`);
+  if (!Array.isArray(shadow.comparisons) || shadow.ruleset?.status !== 'shadow') throw new Error('shadow response contract is incomplete');
+  return { mode:shadow.mode, writable:shadow.writable, creates_work_orders:shadow.creates_work_orders, comparisons:shadow.comparison_count };
+});
+
 await check('dense operation pages use focused tabs and voice has an immersive overlay', async () => {
   const [counts, transfers, transferScript, store, storeScript] = await Promise.all([
     fetch(`${base}/count-plans/`).then((r) => r.text()), fetch(`${base}/transfers/`).then((r) => r.text()), fetch(`${base}/transfers-page.js`).then((r) => r.text()), fetch(`${base}/store/?store=STORE001`).then((r) => r.text()), fetch(`${base}/store-agent.js`).then((r) => r.text())
