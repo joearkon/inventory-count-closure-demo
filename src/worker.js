@@ -2804,6 +2804,7 @@ async function r2CountEvidence(env, planNo, documentId = '') {
 function r2ReconcileMaterialDiagnosis(value, ledger, businessDate, storeCode, sourceBatchId, updatedAt) {
   const prior = Array.isArray(value.materialAnomalies) ? value.materialAnomalies : [];
   const candidates = new Map();
+  const currentFacts = new Map();
   for (const row of ledger) {
     const safetyQty = row.safety_qty ?? null;
     const negativeTolerance = R2_NEGATIVE_TOLERANCE_BY_UNIT[row.unit] ?? 0;
@@ -2836,6 +2837,7 @@ function r2ReconcileMaterialDiagnosis(value, ledger, businessDate, storeCode, so
       actual_count_document_id: row.actual_inventory_document_id || null,
       actual_counted_at: row.actual_inventory_at || null
     };
+    currentFacts.set(`${normalizedKey(row.material_name)}|${row.unit}`, { theoretical_closing_qty:theoreticalQty, safety_qty:safetyQty, source_batch_id:sourceBatchId, evidence_detail:evidence });
     let candidate = null;
     // MVP 只保留四类可追溯规则。优先级：D2 负库存 > D1 实盘差异 > S1 安全库存 > T2 销入比。
     // 规则只输出“最优待验证位置”，不自动定责、推送、建工单或写库存。
@@ -2854,9 +2856,12 @@ function r2ReconcileMaterialDiagnosis(value, ledger, businessDate, storeCode, so
     candidates.set(key, { ...existing, ...candidate, id: existing?.id || id('MAT'), judgment_task_no: existing?.judgment_task_no || id('JDG'), store_code: storeCode, business_date: businessDate, material_name: row.material_name, unit: row.unit, theoretical_closing_qty: theoreticalQty, safety_qty: safetyQty, source_batch_id: sourceBatchId, evidence_detail: evidence, industry_assessment: null, mvp_action: existing?.mvp_action || null, created_at: existing?.created_at || updatedAt, updated_at: updatedAt, closed_at: null, closure_reason: null, reopened_at: null });
   }
   const retained = prior.map((item) => {
-    if (item.store_code !== storeCode || item.business_date !== businessDate || ['closed', 'auto_closed'].includes(item.status)) return item;
+    if (item.store_code !== storeCode || item.business_date !== businessDate || item.status === 'closed') return item;
+    const refreshedFacts = currentFacts.get(`${normalizedKey(item.material_name)}|${item.unit}`);
+    const refreshed = refreshedFacts ? { ...item, ...refreshedFacts, updated_at:updatedAt } : item;
+    if (item.status === 'auto_closed') return refreshed;
     const key = `${item.store_code}|${item.business_date}|${normalizedKey(item.material_name)}|${item.rule_code}`;
-    return candidates.has(key) ? null : { ...item, status: 'auto_closed', closed_at: updatedAt, closure_reason: '重新回算后该库存规则不再触发。', updated_at: updatedAt };
+    return candidates.has(key) ? null : { ...refreshed, status: 'auto_closed', closed_at: updatedAt, closure_reason: '重新回算后该库存规则不再触发。', updated_at: updatedAt };
   }).filter(Boolean);
   value.materialAnomalies = [...Array.from(candidates.values()), ...retained.filter((item) => !candidates.has(`${item.store_code}|${item.business_date}|${normalizedKey(item.material_name)}|${item.rule_code}`))]
     .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
