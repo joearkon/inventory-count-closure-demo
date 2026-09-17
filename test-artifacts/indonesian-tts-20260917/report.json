@@ -1,0 +1,37 @@
+{
+  "generated_at": "2026-09-17",
+  "test_type": "synthetic_indonesian_tts_to_asr_to_intent",
+  "tts_language": "id-ID",
+  "asr_engine": "@cf/openai/whisper-large-v3-turbo",
+  "store_code": "STORE001",
+  "passed": 3,
+  "total": 3,
+  "human_acceptance_replaced": false,
+  "cases": [
+    {
+      "id": 7,
+      "audio": "case-7.mp3",
+      "transcript": "Pindahkan 2 kg mutiara gula merah ke STORE002.",
+      "expected": "open_transfer",
+      "actual": "open_transfer",
+      "passed": true
+    },
+    {
+      "id": 8,
+      "audio": "case-8.mp3",
+      "transcript": "Tampilkan stok susu.",
+      "expected": "show_inventory",
+      "actual": "show_inventory",
+      "passed": true
+    },
+    {
+      "id": 9,
+      "audio": "case-9.mp3",
+      "transcript": "Catat susu kedalu warsa 2 liter sebagai kerusakan.",
+      "expected": "open_scrap",
+      "actual": "open_scrap",
+      "passed": true
+    }
+  ],
+  "conclusion": "标准印尼语音频的转写与意图链路通过；该结果验证系统链路，但不替代真人口音验收。"
+}
