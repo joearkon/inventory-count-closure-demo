@@ -14,6 +14,13 @@
     return result;
   }
   function show(message, type = '') { by('count-message').textContent = message; by('count-message').className = `message ${type}`; }
+  function switchTab(name, updateHash = true) {
+    const target = ['plans','materials','manual'].includes(name) ? name : 'plans';
+    document.querySelectorAll('[data-count-tab]').forEach((button) => button.classList.toggle('active', button.dataset.countTab === target));
+    document.querySelectorAll('[data-count-panel]').forEach((panel) => { panel.hidden = panel.dataset.countPanel !== target; });
+    by('generate').hidden = target !== 'plans';
+    if (updateHash) history.replaceState(null, '', `#${target}`);
+  }
   function renderPlans(plans = state?.countPlans || []) {
     const rows = plans.slice().sort((left, right) => `${right.business_date}${right.created_at}`.localeCompare(`${left.business_date}${left.created_at}`));
     const page = window.ListPager.slice(rows, currentPage, 10); currentPage = page.page;
@@ -54,6 +61,7 @@
     finally { button.disabled = false; button.textContent = '生成今日每日计划'; }
   };
   by('manual-source').onchange = () => by('work-order-wrap').hidden = by('manual-source').value !== 'work_order';
+  document.querySelectorAll('[data-count-tab]').forEach((button) => button.onclick = () => switchTab(button.dataset.countTab));
   by('manual-form').onsubmit = async (event) => {
     event.preventDefault();
     const names = [...document.querySelectorAll('#manual-materials input:checked')].map((input) => input.value);
@@ -63,9 +71,10 @@
       const result = await api('/api/count-plans/manual', { method: 'POST', body: JSON.stringify({ store_code: by('manual-store').value, business_date: by('manual-date').value, material_names: names, source_type: by('manual-source').value, source_work_order_id: by('manual-work-order').value, instruction: by('manual-instruction').value }) });
       state.countPlans = result.countPlans; currentPage = 1; renderPlans();
       document.querySelectorAll('#manual-materials input:checked').forEach((input) => input.checked = false);
-      show(`已下发 ${result.plan.plan_no}，共 ${result.plan.material_count} 项物料。`, 'ok');
+      show(`已下发 ${result.plan.plan_no}，共 ${result.plan.material_count} 项物料。`, 'ok'); switchTab('plans');
     } catch (error) { show(error.message, 'error'); }
     finally { button.disabled = false; }
   };
+  switchTab(location.hash.slice(1) || 'plans', false);
   load().catch((error) => { show(error.message, 'error'); by('rows').innerHTML = `<tr><td colspan="6" class="empty">${esc(error.message)}</td></tr>`; });
 })();

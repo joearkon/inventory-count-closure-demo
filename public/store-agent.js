@@ -6,7 +6,7 @@
   const sessionKey = `store-agent-session:${storeCode}`;
   const sessionId = sessionStorage.getItem(sessionKey) || (() => { const value = `web-${crypto.randomUUID()}`; sessionStorage.setItem(sessionKey, value); return value; })();
   const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
-  const chat = by('store-agent-chat'), input = by('store-agent-input'), send = by('store-agent-send'), mic = by('store-agent-mic'), voiceNote = by('store-agent-voice-note'), language = by('store-agent-language'), voiceQa = by('store-agent-voice-qa');
+  const chat = by('store-agent-chat'), input = by('store-agent-input'), send = by('store-agent-send'), mic = by('store-agent-mic'), voiceNote = by('store-agent-voice-note'), voiceOverlay = by('store-agent-voice-overlay'), voiceOverlayTitle = by('store-agent-voice-overlay-title'), voiceOverlayText = by('store-agent-voice-overlay-text'), language = by('store-agent-language'), voiceQa = by('store-agent-voice-qa');
   if (voiceQa) voiceQa.href = `/voice-qa/?store=${encodeURIComponent(storeCode)}`;
   const sheet = by('agent-sheet'), sheetTitle = by('agent-sheet-title'), sheetForm = by('agent-sheet-form'), sheetStatus = by('agent-sheet-status'), sheetSubmit = by('agent-sheet-submit');
   let welcomed = false, busy = false, speaking = false, mediaRecorder = null, activeVoiceStream = null, voiceChunks = [], stopVoiceRequested = false, ledger = [], draft = null, latestStoreState = null;
@@ -173,7 +173,7 @@
   }
   function releaseVoiceStream() { activeVoiceStream?.getTracks().forEach((track) => track.stop()); activeVoiceStream = null; mediaRecorder = null; voiceChunks = []; }
   async function transcribeVoice(blob) {
-    voiceNote.textContent = '正在转写并理解…'; mic.classList.remove('recording');
+    voiceNote.textContent = '正在转写并理解…'; mic.classList.remove('recording'); voiceOverlay?.classList.remove('recording'); if (voiceOverlayTitle) voiceOverlayTitle.textContent = '正在识别'; if (voiceOverlayText) voiceOverlayText.textContent = '请稍候，正在转写并理解你的操作';
     const controller = new AbortController(), timeoutId = setTimeout(() => controller.abort(), 45000);
     try {
       const lang = language?.value || 'zh-CN';
@@ -183,21 +183,21 @@
       const transcript = String(data.transcript || '').trim(); if (!transcript) throw new Error('没有识别到有效语音');
       input.value = transcript; resizeInput(); await ask(transcript);
     } catch (error) { addMessage(error.name === 'AbortError' ? '语音转写超时，请重试或直接输入文字。' : `${voiceErrorText(error.message.includes('有效语音') ? 'no-speech' : 'unavailable')}（${error.message}）`); }
-    finally { clearTimeout(timeoutId); speaking = false; stopVoiceRequested = false; voiceNote.classList.remove('show'); releaseVoiceStream(); }
+    finally { clearTimeout(timeoutId); speaking = false; stopVoiceRequested = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); releaseVoiceStream(); }
   }
   async function startVoice() {
     if (speaking || busy) return;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { addMessage(voiceErrorText('unsupported')); return; }
-    speaking = true; stopVoiceRequested = false; mic.classList.add('recording'); voiceNote.classList.add('show'); voiceNote.textContent = `正在录音（${language?.selectedOptions?.[0]?.textContent || language?.value || 'zh-CN'}）…松开后转写`;
+    speaking = true; stopVoiceRequested = false; mic.classList.add('recording'); voiceNote.classList.add('show'); voiceOverlay?.classList.add('show','recording'); if (voiceOverlayTitle) voiceOverlayTitle.textContent = '正在聆听'; if (voiceOverlayText) voiceOverlayText.textContent = `请说${language?.selectedOptions?.[0]?.textContent || language?.value || '中文'}，松开后自动转写`; voiceNote.textContent = `正在录音（${language?.selectedOptions?.[0]?.textContent || language?.value || 'zh-CN'}）…松开后转写`;
     try {
       activeVoiceStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
       const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
       mediaRecorder = new MediaRecorder(activeVoiceStream, mimeType ? { mimeType } : undefined); voiceChunks = [];
       mediaRecorder.ondataavailable = (event) => { if (event.data?.size) voiceChunks.push(event.data); };
-      mediaRecorder.onerror = (event) => { addMessage(`录音错误：${event.error?.message || 'unknown'}`); speaking = false; voiceNote.classList.remove('show'); mic.classList.remove('recording'); releaseVoiceStream(); };
+      mediaRecorder.onerror = (event) => { addMessage(`录音错误：${event.error?.message || 'unknown'}`); speaking = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); };
       mediaRecorder.onstop = () => { const blob = new Blob(voiceChunks, { type:mediaRecorder?.mimeType || mimeType || 'audio/webm' }); if (blob.size < 512) { speaking = false; voiceNote.classList.remove('show'); mic.classList.remove('recording'); releaseVoiceStream(); return addMessage(voiceErrorText('no-speech')); } transcribeVoice(blob); };
       mediaRecorder.start(250); if (stopVoiceRequested) mediaRecorder.stop();
-    } catch (error) { speaking = false; voiceNote.classList.remove('show'); mic.classList.remove('recording'); releaseVoiceStream(); addMessage(voiceErrorText(error.name === 'NotAllowedError' ? 'not-allowed' : 'unavailable')); }
+    } catch (error) { speaking = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); addMessage(voiceErrorText(error.name === 'NotAllowedError' ? 'not-allowed' : 'unavailable')); }
   }
   function stopVoice() { if (!speaking) return; stopVoiceRequested = true; if (mediaRecorder?.state === 'recording') mediaRecorder.stop(); }
 

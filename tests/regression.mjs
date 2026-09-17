@@ -86,6 +86,17 @@ await check('new pages are served', async () => {
   return paths;
 });
 
+await check('dense operation pages use focused tabs and voice has an immersive overlay', async () => {
+  const [counts, transfers, transferScript, store, storeScript] = await Promise.all([
+    fetch(`${base}/count-plans/`).then((r) => r.text()), fetch(`${base}/transfers/`).then((r) => r.text()), fetch(`${base}/transfers-page.js`).then((r) => r.text()), fetch(`${base}/store/?store=STORE001`).then((r) => r.text()), fetch(`${base}/store-agent.js`).then((r) => r.text())
+  ]);
+  if ((counts.match(/data-count-tab=/g) || []).length !== 3 || !/data-count-panel="plans"/.test(counts)) throw new Error('count plans must use three focused tabs');
+  if ((transfers.match(/data-transfer-tab=/g) || []).length !== 2 || !/data-transfer-source="demo"/.test(transfers)) throw new Error('transfer management tabs or source filter missing');
+  if (/门店库存流水档案/.test(`${transfers}\n${transferScript}`) || /archive-rows/.test(transferScript)) throw new Error('duplicate transfer flow archive must be removed');
+  if (!/agent-voice-overlay/.test(store) || !/voiceOverlay.*classList\.add\('show','recording'\)/s.test(storeScript)) throw new Error('store voice input needs an immersive recording overlay');
+  return { count_tabs:3, transfer_tabs:2, transfer_archive_removed:true, immersive_voice:true };
+});
+
 await check('growing lists use pagination and lightweight API views', async () => {
   const [shell, flowsPage, documentsPage, plansPage, diagnosisPage, simulatorPage, transfersPage] = await Promise.all([
     fetch(`${base}/app-shell.js`).then((r) => r.text()), fetch(`${base}/flows/`).then((r) => r.text()),
