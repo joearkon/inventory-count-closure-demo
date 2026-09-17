@@ -100,7 +100,7 @@ await check('dense operation pages use focused tabs and voice has an immersive o
   if (!/voicePermissionPending/.test(storeScript) || /stopVoiceRequested/.test(storeScript)) throw new Error('voice permission flow can stop recording prematurely');
   if (/mic\.addEventListener\('pointerdown'/.test(storeScript)) throw new Error('voice recording should not rely on press-and-release timing');
   if ((store.match(/class="agent-icon-btn/g) || []).length < 2 || (store.match(/class="agent-icon-btn[^>]*>[\s\S]*?<svg/g) || []).length < 2) throw new Error('voice and send controls must share the same icon system');
-  if (!/voiceOverlay\?\.classList\.remove\('show','recording'\); releaseVoiceStream\(\);\s*await ask\(transcript\)/s.test(storeScript)) throw new Error('voice overlay must close before waiting for the assistant response');
+  if (!/voiceOverlay\?\.classList\.remove\('show','recording'\); releaseVoiceStream\(\);\s*await ask\(transcript,/s.test(storeScript)) throw new Error('voice overlay must close before waiting for the assistant response');
   return { count_tabs:3, transfer_tabs:2, transfer_archive_removed:true, immersive_voice:true, mobile_input_fixed:true, permission_flow_guarded:true, consistent_input_icons:true, prompt_overlay_dismissal:true };
 });
 
@@ -127,8 +127,8 @@ await check('growing lists use pagination and lightweight API views', async () =
 
 await check('store HTML exposes three speech languages and safe fallback', async () => {
   const [page, script, voiceQaScript] = await Promise.all([fetch(`${base}/store/?store=STORE001`).then((r) => r.text()), fetch(`${base}/store-agent.js`).then((r) => r.text()), fetch(`${base}/voice-qa-page.js`).then((r) => r.text())]);
-  for (const token of ['agent-language', 'zh-CN', 'en-US', 'id-ID']) if (!page.includes(token)) throw new Error(`missing ${token} in store page`);
-  if (!/MediaRecorder/.test(script) || !/\/api\/voice-transcribe/.test(script) || !/x-speech-language/.test(script)) throw new Error('store assistant must use recorded audio and server ASR');
+  for (const token of ['agent-language', 'value="auto" selected', 'zh-CN', 'en-US', 'id-ID']) if (!page.includes(token)) throw new Error(`missing ${token} in store page`);
+  if (!/MediaRecorder/.test(script) || !/\/api\/voice-transcribe/.test(script) || !/selectedLang !== 'auto'/.test(script)) throw new Error('store assistant must use recorded audio and automatic server ASR by default');
   if (!/不可用|unavailable|tidak tersedia/i.test(`${page}\n${script}`)) throw new Error('speech fallback message missing');
   if (!/not-allowed/.test(script) || !/no-speech/.test(script) || !/Akses mikrofon belum diizinkan/.test(script)) throw new Error('localized speech error handling missing');
   if (!/probeMicrophone/.test(voiceQaScript) || !/TimeoutError/.test(voiceQaScript) || !/Chrome 或 Edge/.test(voiceQaScript)) throw new Error('microphone capability check needs a bounded timeout and browser fallback');
@@ -137,7 +137,7 @@ await check('store HTML exposes three speech languages and safe fallback', async
   const shortAudio = await fetch(`${base}/api/voice-transcribe?lang=en-US`, { method:'POST', headers:{ 'content-type':'audio/webm' }, body:new Uint8Array([1,2,3]) });
   const shortAudioPayload = await shortAudio.json();
   if (shortAudio.status !== 400 || !/过短/.test(shortAudioPayload.error || '')) throw new Error(`voice endpoint validation failed: ${shortAudio.status} ${JSON.stringify(shortAudioPayload)}`);
-  return { languages:['zh-CN','en-US','id-ID'], speech_binding:true, text_fallback:true, localized_errors:true, microphone_probe_timeout:true, server_asr:true };
+  return { languages:['auto','zh-CN','en-US','id-ID'], default_language:'auto', speech_binding:true, text_fallback:true, localized_errors:true, microphone_probe_timeout:true, server_asr:true };
 });
 
 if (mutationTests) {

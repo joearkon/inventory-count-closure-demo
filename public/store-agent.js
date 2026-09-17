@@ -145,11 +145,19 @@
       closeSheet(); draft = null; await loadLedger(); window.invalidateStoreBootstrap?.(); window.storeCountPlanReload?.();
     } catch (error) { sheetStatus.textContent = error.message; sheetSubmit.disabled = false; sheetSubmit.textContent = '提交'; }
   }
-  async function ask(raw) {
+  function assistantLocale(value = '', transcript = '') {
+    const locale = String(value || '').toLowerCase();
+    if (locale === 'id' || locale.startsWith('id-') || locale.includes('indones')) return 'id-ID';
+    if (locale === 'en' || locale.startsWith('en-') || locale.includes('english')) return 'en-US';
+    if (/\b(pindahkan|tampilkan|stok|susu|barang|rusak|kedaluwarsa|liter|kilogram)\b/i.test(transcript)) return 'id-ID';
+    if (/\b(transfer|show|check|stock|inventory|milk|damaged|expired)\b/i.test(transcript)) return 'en-US';
+    return 'zh-CN';
+  }
+  async function ask(raw, languageHint = '') {
     const message = String(raw || '').trim(); if (!message || busy) return; addMessage(message, 'user'); input.value = ''; resizeInput();
     if (/^(取消|重来|退出)$/.test(message)) { draft = null; addMessage('已取消当前操作。你可以重新说调拨、报损、收货或盘点。'); return; }
     setBusy(true); const waiting = addMessage('正在识别你的操作…');
-    try { const response = await fetch('/api/store-agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, store_code: storeCode, session_id: sessionId, draft, lang: language?.value || 'zh-CN' }) }); const data = await response.json().catch(() => ({})); waiting.remove(); if (!response.ok) throw Error(data.error || '助手暂时无法响应'); addMessage(data.reply || '已收到。'); renderTodayTasks(data.today_tasks); const intent = intentFromAction(data.action); if (intent) startDraft(intent, data.action.prefill || {}, ''); }
+    try { const selectedLocale = language?.value || 'auto'; const response = await fetch('/api/store-agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, store_code: storeCode, session_id: sessionId, draft, lang: languageHint || (selectedLocale === 'auto' ? 'zh-CN' : selectedLocale) }) }); const data = await response.json().catch(() => ({})); waiting.remove(); if (!response.ok) throw Error(data.error || '助手暂时无法响应'); addMessage(data.reply || '已收到。'); renderTodayTasks(data.today_tasks); const intent = intentFromAction(data.action); if (intent) startDraft(intent, data.action.prefill || {}, ''); }
     catch (error) { waiting.remove(); addMessage(`暂时无法连接助手：${error.message}。`); } finally { setBusy(false); }
   }
   async function welcome() { if (welcomed) return; welcomed = true; await loadLedger(); try { const response = await fetch('/api/store-agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: '__welcome__', store_code: storeCode, session_id: sessionId, lang: language?.value || 'zh-CN' }) }); const data = await response.json().catch(() => ({})); if (!response.ok) throw Error(data.error || '读取待办失败'); addMessage(data.reply || '你好！我是你的门店运营助手。'); renderTodayTasks(data.today_tasks); } catch (_) { addMessage('你好！我是你的门店运营助手。可以帮你处理调拨、报损、收货、盘点或查询库存。'); } }
@@ -176,14 +184,16 @@
     voiceNote.textContent = '正在转写并理解…'; mic.classList.remove('recording'); voiceOverlay?.classList.remove('recording'); if (voiceOverlayTitle) voiceOverlayTitle.textContent = '正在识别'; if (voiceOverlayText) voiceOverlayText.textContent = '请稍候，正在转写并理解你的操作';
     const controller = new AbortController(), timeoutId = setTimeout(() => controller.abort(), 45000);
     try {
-      const lang = language?.value || 'zh-CN';
-      const response = await fetch(`/api/voice-transcribe?lang=${encodeURIComponent(lang)}`, { method:'POST', headers:{ 'content-type':blob.type || 'audio/webm', 'x-speech-language':lang }, body:blob, signal:controller.signal });
+      const selectedLang = language?.value || 'auto';
+      const headers = { 'content-type':blob.type || 'audio/webm' };
+      if (selectedLang !== 'auto') headers['x-speech-language'] = selectedLang;
+      const response = await fetch(selectedLang === 'auto' ? '/api/voice-transcribe' : `/api/voice-transcribe?lang=${encodeURIComponent(selectedLang)}`, { method:'POST', headers, body:blob, signal:controller.signal });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || '语音转写失败');
       const transcript = String(data.transcript || '').trim(); if (!transcript) throw new Error('没有识别到有效语音');
       input.value = transcript; resizeInput();
       speaking = false; voicePermissionPending = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); releaseVoiceStream();
-      await ask(transcript);
+      await ask(transcript, assistantLocale(data.language, transcript));
     } catch (error) { addMessage(error.name === 'AbortError' ? '语音转写超时，请重试或直接输入文字。' : `${voiceErrorText(error.message.includes('有效语音') ? 'no-speech' : 'unavailable')}（${error.message}）`); }
     finally { clearTimeout(timeoutId); speaking = false; voicePermissionPending = false; discardVoice = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); releaseVoiceStream(); }
   }
@@ -199,7 +209,7 @@
       mediaRecorder.ondataavailable = (event) => { if (event.data?.size) voiceChunks.push(event.data); };
       mediaRecorder.onerror = (event) => { addMessage(`录音错误：${event.error?.message || 'unknown'}`); speaking = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); };
       mediaRecorder.onstop = () => { const blob = new Blob(voiceChunks, { type:mediaRecorder?.mimeType || mimeType || 'audio/webm' }); if (discardVoice) { speaking = false; discardVoice = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); return; } if (blob.size < 512) { speaking = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); return addMessage(voiceErrorText('no-speech')); } transcribeVoice(blob); };
-      mediaRecorder.start(250); voiceOverlay?.classList.add('show','recording'); if (voiceOverlayTitle) voiceOverlayTitle.textContent = '正在聆听'; if (voiceOverlayText) voiceOverlayText.textContent = `请说${language?.selectedOptions?.[0]?.textContent || language?.value || '中文'}，完成后点击下方按钮`; voiceNote.textContent = `正在录音（${language?.selectedOptions?.[0]?.textContent || language?.value || 'zh-CN'}）…`;
+      const languageLabel = language?.value === 'auto' ? '中文、English 或 Bahasa Indonesia' : (language?.selectedOptions?.[0]?.textContent || language?.value || '中文'); mediaRecorder.start(250); voiceOverlay?.classList.add('show','recording'); if (voiceOverlayTitle) voiceOverlayTitle.textContent = '正在聆听'; if (voiceOverlayText) voiceOverlayText.textContent = `请说${languageLabel}，完成后点击下方按钮`; voiceNote.textContent = `正在录音（${languageLabel}）…`;
     } catch (error) { speaking = false; voicePermissionPending = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); addMessage(voiceErrorText(error.name === 'NotAllowedError' ? 'not-allowed' : 'unavailable')); }
   }
   function stopVoice() { if (!speaking || voicePermissionPending) return; if (mediaRecorder?.state === 'recording') mediaRecorder.stop(); }

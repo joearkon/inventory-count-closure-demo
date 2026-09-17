@@ -368,11 +368,14 @@ async function transcribeVoice(request, env) {
     const result = await env.AI.run('@cf/openai/whisper-large-v3-turbo', {
       audio: arrayBufferToBase64(audioBuffer), task: 'transcribe', language,
       vad_filter: true, condition_on_previous_text: false,
-      initial_prompt: '门店库存操作语音，可能包含 STORE001、STORE002、牛奶、黑糖珍珠、调拨、报损、库存。'
+      initial_prompt: language
+        ? '门店库存操作语音，可能包含 STORE001、STORE002、牛奶、黑糖珍珠、调拨、报损、库存。'
+        : 'Retail store inventory operation in 中文, English, or Bahasa Indonesia. Terms may include STORE001, STORE002, 牛奶, milk, susu, 黑糖珍珠, transfer, pindahkan, stock, stok.'
     });
     const transcript = String(result?.text || result?.transcription_info?.text || '').trim();
     if (!transcript) return bad('没有识别到有效语音，请靠近麦克风后重试。', 422);
-    return json({ transcript, language: language || 'auto', model: '@cf/openai/whisper-large-v3-turbo', retained: false });
+    const detectedLanguage = String(result?.transcription_info?.language || result?.language || language || 'auto');
+    return json({ transcript, language: detectedLanguage, model: '@cf/openai/whisper-large-v3-turbo', retained: false });
   } catch (error) {
     console.error('Voice transcription failed', error instanceof Error ? error.message : String(error));
     return bad('语音转写服务暂时不可用，请重试或使用文字输入。', 502);
