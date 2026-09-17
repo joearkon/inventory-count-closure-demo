@@ -8,6 +8,9 @@
 # 署名策略（option C）：
 #   - author = PAT 所有者（你本人）
 #   - 加 trailer: Co-authored-by: 陈子卓野的工作伙伴 <noreply@joearkon.com>
+#
+# 并发安全：
+#   - 检测到 main HEAD 变化时自动 rebase（最多重试 3 次）
 
 set -e
 
@@ -37,21 +40,8 @@ FULL_MSG="${COMMIT_MSG}
 
 Co-authored-by: ${CO_AUTHOR_NAME} <${CO_AUTHOR_EMAIL}>"
 
-# 找到 main 分支的最新 commit SHA
-echo "🔍 查询 $REPO@$BRANCH 最新 commit..."
-SHA=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
-  "https://api.github.com/repos/$REPO/git/refs/heads/$BRANCH" | \
-  python3 -c "import sys,json; print(json.load(sys.stdin)['object']['sha'])")
-echo "   最新 commit SHA: $SHA"
-
-# 找到最新 commit 的 tree SHA
-TREE_SHA=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
-  "https://api.github.com/repos/$REPO/git/commits/$SHA" | \
-  python3 -c "import sys,json; print(json.load(sys.stdin)['tree']['sha'])")
-echo "   Tree SHA: $TREE_SHA"
-
-# 创建 blob 数组（每个文件一个 blob）
-echo "📦 上传文件到 references/ 子目录..."
+# 准备 blob 数组（一次性创建所有 blob，避免 race condition 反复创建）
+echo "📦 创建 blob（每个文件一个）..."
 BLOBS_JSON="[]"
 for file_path in $(cd "$SRC_DIR" && find . -type f); do
   rel_path="${file_path#./}"
@@ -76,43 +66,83 @@ print(json.dumps(arr))
 ")
 done
 
-echo "🌳 创建新 tree..."
-TREE_RESPONSE=$(curl -sS -X POST \
-  -H "Authorization: Bearer $GH_TOKEN" \
-  -H "Content-Type: application/json" \
-  "https://api.github.com/repos/$REPO/git/trees" \
-  -d "{\"base_tree\":\"$TREE_SHA\",\"tree\":$BLOBS_JSON}")
-NEW_TREE_SHA=$(echo "$TREE_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")
-echo "   新 Tree SHA: $NEW_TREE_SHA"
+# 重试逻辑：检测 main HEAD 变化 → 重建 commit + 重推
+MAX_RETRIES=3
+for attempt in 1 2 3; do
+  echo ""
+  echo "🔄 第 $attempt 次尝试（最多 $MAX_RETRIES 次）..."
+  echo "🔍 查询 $REPO@$BRANCH 最新 commit..."
+  SHA=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+    "https://api.github.com/repos/$REPO/git/refs/heads/$BRANCH" | \
+    python3 -c "import sys,json; print(json.load(sys.stdin)['object']['sha'])")
+  echo "   最新 commit SHA: $SHA"
 
-echo "📝 创建 commit（带 AI Co-authored-by trailer）..."
-COMMIT_RESPONSE=$(curl -sS -X POST \
-  -H "Authorization: Bearer $GH_TOKEN" \
-  -H "Content-Type: application/json" \
-  "https://api.github.com/repos/$REPO/git/commits" \
-  -d "$(python3 -c "
+  # 找到最新 commit 的 tree SHA
+  TREE_SHA=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+    "https://api.github.com/repos/$REPO/git/commits/$SHA" | \
+    python3 -c "import sys,json; print(json.load(sys.stdin)['tree']['sha'])")
+  echo "   Tree SHA: $TREE_SHA"
+
+  echo "🌳 创建新 tree（基于 main HEAD 的 tree）..."
+  TREE_RESPONSE=$(curl -sS -X POST \
+    -H "Authorization: Bearer $GH_TOKEN" \
+    -H "Content-Type: application/json" \
+    "https://api.github.com/repos/$REPO/git/trees" \
+    -d "{\"base_tree\":\"$TREE_SHA\",\"tree\":$BLOBS_JSON}")
+  NEW_TREE_SHA=$(echo "$TREE_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")
+  echo "   新 Tree SHA: $NEW_TREE_SHA"
+
+  echo "📝 创建 commit..."
+  COMMIT_BODY=$(python3 -c "
 import json
-msg = '''$FULL_MSG'''
 print(json.dumps({
-    'message': msg,
+    'message': '''$FULL_MSG''',
     'tree': '$NEW_TREE_SHA',
     'parents': ['$SHA']
 }))
-")")
-NEW_COMMIT_SHA=$(echo "$COMMIT_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")
-echo "   新 Commit SHA: $NEW_COMMIT_SHA"
+")
+  COMMIT_RESPONSE=$(curl -sS -X POST \
+    -H "Authorization: Bearer $GH_TOKEN" \
+    -H "Content-Type: application/json" \
+    "https://api.github.com/repos/$REPO/git/commits" \
+    -d "$COMMIT_BODY")
 
-echo "🚀 推送到 $BRANCH..."
-PUSH_RESPONSE=$(curl -sS -X PATCH \
-  -H "Authorization: Bearer $GH_TOKEN" \
-  -H "Content-Type: application/json" \
-  "https://api.github.com/repos/$REPO/git/refs/heads/$BRANCH" \
-  -d "{\"sha\":\"$NEW_COMMIT_SHA\"}")
-echo "$PUSH_RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); print('   ✅ 推送成功:', r.get('object',{}).get('url','OK'))"
+  # 检查 commit 创建错误
+  if echo "$COMMIT_RESPONSE" | python3 -c "import sys,json; sys.exit(1 if 'message' in json.load(sys.stdin) and 'sha' not in json.load(sys.stdin) else 0)" 2>/dev/null; then
+    echo "❌ Commit 创建失败: $COMMIT_RESPONSE"
+    exit 1
+  fi
 
-echo ""
-echo "✨ 全部完成！访问 https://github.com/$REPO/tree/$BRANCH/references"
-echo "📝 Commit message:"
-echo "---"
-echo "$FULL_MSG"
-echo "---"
+  NEW_COMMIT_SHA=$(echo "$COMMIT_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")
+  echo "   新 Commit SHA: $NEW_COMMIT_SHA"
+
+  echo "🚀 推送到 $BRANCH..."
+  PUSH_RESPONSE=$(curl -sS -X PATCH \
+    -H "Authorization: Bearer $GH_TOKEN" \
+    -H "Content-Type: application/json" \
+    "https://api.github.com/repos/$REPO/git/refs/heads/$BRANCH" \
+    -d "{\"sha\":\"$NEW_COMMIT_SHA\"}")
+
+  # 检查 push 是否成功
+  if echo "$PUSH_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0 if d.get('object',{}).get('sha') else 1)" 2>/dev/null; then
+    echo "   ✅ 推送成功"
+    echo ""
+    echo "✨ 全部完成！访问 https://github.com/$REPO/tree/$BRANCH/references"
+    echo "📝 Commit message:"
+    echo "---"
+    echo "$FULL_MSG"
+    echo "---"
+    exit 0
+  else
+    echo "   ⚠️ 推送失败（可能 main HEAD 已变化，需 rebase）"
+    echo "   错误: $PUSH_RESPONSE"
+    if [ $attempt -lt $MAX_RETRIES ]; then
+      echo "   等待 2 秒后重试..."
+      sleep 2
+      continue
+    else
+      echo "❌ 重试 $MAX_RETRIES 次仍失败，请检查后手动 merge"
+      exit 1
+    fi
+  fi
+done
