@@ -1,9 +1,19 @@
 import { buildFactPacket } from './facts.js';
 import { D2_ACTIONS, D2_RULESET, evaluateD2 } from './d2-engine.js';
+import { D1_RULESET, evaluateD1 } from './d1-engine.js';
+import { S1_RULESET, evaluateS1 } from './s1-engine.js';
+import { T2_RULESET, evaluateT2 } from './t2-engine.js';
 
-export function buildD2ShadowReport(calculated, materialCatalog = []) {
+const ENGINES = Object.freeze({
+  NEGATIVE_THEORETICAL: { ruleset:D2_RULESET, evaluate:evaluateD2 },
+  COUNT_VARIANCE: { ruleset:D1_RULESET, evaluate:evaluateD1 },
+  BELOW_SAFETY_STOCK: { ruleset:S1_RULESET, evaluate:evaluateS1 },
+  SELL_IN_IMBALANCE: { ruleset:T2_RULESET, evaluate:evaluateT2 }
+});
+
+export function buildDiagnosisShadowReport(calculated, materialCatalog = []) {
   const countPolicy = new Map(materialCatalog.map((item) => [String(item.material_name || '').trim().toLowerCase(), item.count_policy || (item.daily_count_enabled === false ? 'optional' : 'daily')]));
-  const signals = (calculated.materialAnomalies || []).filter((item) => item.rule_code === 'NEGATIVE_THEORETICAL' && !['closed', 'auto_closed'].includes(item.status));
+  const signals = (calculated.materialAnomalies || []).filter((item) => ENGINES[item.rule_code] && !['closed', 'auto_closed'].includes(item.status));
   const comparisons = signals.map((signal) => {
     const packet = buildFactPacket(signal, {
       ledgerSnapshots: calculated.ledgerSnapshots || [],
@@ -14,7 +24,8 @@ export function buildD2ShadowReport(calculated, materialCatalog = []) {
       countPolicy: countPolicy.get(String(signal.material_name || '').trim().toLowerCase()) || 'unknown',
       asOf: signal.updated_at || new Date().toISOString()
     });
-    const v2 = evaluateD2(packet);
+    const engine = ENGINES[signal.rule_code];
+    const v2 = engine.evaluate(packet);
     return {
       signal_id:signal.id,
       store_code:signal.store_code,
@@ -30,9 +41,12 @@ export function buildD2ShadowReport(calculated, materialCatalog = []) {
     mode:'shadow',
     writable:false,
     creates_work_orders:false,
-    ruleset:D2_RULESET,
+    ruleset:{ ruleset_id:D2_RULESET.ruleset_id, rule_code:'D1_D2_S1_T2', rule_version:D2_RULESET.rule_version, status:'shadow' },
     generated_at:new Date().toISOString(),
     comparison_count:comparisons.length,
+    counts_by_rule:Object.fromEntries(Object.keys(ENGINES).map((code) => [code, comparisons.filter((item) => item.v1.rule_code === code).length])),
     comparisons
   };
 }
+
+export const buildD2ShadowReport = buildDiagnosisShadowReport;

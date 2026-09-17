@@ -1,4 +1,4 @@
-import { buildD2ShadowReport } from './diagnosis/shadow.js';
+import { buildDiagnosisShadowReport } from './diagnosis/shadow.js';
 
 const STORE_CODE = 'STORE001';
 // 门店主档在系统侧维护。即使某店当天尚无销售，也要有零基线物料台账，
@@ -4160,7 +4160,7 @@ export default {
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/diagnosis-v2/shadow') {
       const state = await r2DemoState(env);
       const calculated = await r2FeishuSyncState(env);
-      return json(buildD2ShadowReport({ ...calculated, purchaseOrders:state.purchaseOrders || [], receiptOrders:state.receiptOrders || [], storeTransferRequests:state.storeTransferRequests || [] }, state.materialCatalog || []));
+      return json(buildDiagnosisShadowReport({ ...calculated, purchaseOrders:state.purchaseOrders || [], receiptOrders:state.receiptOrders || [], storeTransferRequests:state.storeTransferRequests || [] }, state.materialCatalog || []));
     }
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/store-masters') {
       const value = await r2DemoState(env);

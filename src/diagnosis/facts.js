@@ -82,6 +82,12 @@ export function buildFactPacket(signal, context = {}) {
     physical_count: physicalKnown
       ? { ...fact(number(info.physical_qty), 'confirmed', '最近有效盘点', [info.actual_count_document_id || `${signal.id}:physical_count`]), counted_at: info.actual_counted_at || null }
       : { ...fact(null, 'unknown', '尚未取得有效实盘', []), counted_at: null },
+    metrics: {
+      physical_delta: physicalKnown && info.physical_delta != null ? fact(number(info.physical_delta), 'confirmed', '实盘减理论库存', [info.actual_count_document_id || `${signal.id}:physical_delta`]) : fact(null, 'unknown', '尚无有效实盘差异', []),
+      variance_threshold: info.variance_threshold != null ? fact(number(info.variance_threshold), 'confirmed', '物料差异阈值', [`${signal.id}:variance_threshold`]) : fact(null, 'unknown', '差异阈值未配置', []),
+      safety_stock: signal.safety_qty != null ? fact(number(signal.safety_qty), 'confirmed', '门店物料安全库存配置', [`${signal.id}:safety_stock`]) : fact(null, 'not_integrated', '该物料未配置安全库存', []),
+      sell_in_ratio: info.sell_in_ratio != null ? fact(number(info.sell_in_ratio), 'confirmed', 'BOM 消耗 ÷ 收货量', [`${signal.id}:sell_in_ratio`]) : fact(null, 'unknown', '销入比不可计算', [])
+    },
     data_availability: {
       ...procurement,
       destination_acceptance: destinationAcceptanceAvailability(signal, context)
