@@ -12,8 +12,8 @@ export const D2_ACTIONS = Object.freeze({
   VERIFY_DESTINATION_ACCEPTANCE: { action_id:'VERIFY_DESTINATION_ACCEPTANCE', label:'核对目标门店签收', mode:'manual', route:null, requires_confirmation:true },
   CREATE_SPOT_COUNT: { action_id:'CREATE_SPOT_COUNT', label:'下发单物料临时盘点', mode:'link', route:'/count-plans/?source=work_order', requires_confirmation:true },
   VIEW_FLOWS: { action_id:'VIEW_FLOWS', label:'查看相关库存流水', mode:'link', route:'/flows/', requires_confirmation:false },
-  CREATE_RECEIPT_DRAFT: { action_id:'CREATE_RECEIPT_DRAFT', label:'建立收货补录草稿', mode:'draft', route:'/documents/?tab=create', requires_confirmation:true },
-  CREATE_RESTOCK_DRAFT: { action_id:'CREATE_RESTOCK_DRAFT', label:'建立补货建议草稿', mode:'draft', route:null, requires_confirmation:true }
+  CREATE_RECEIPT_DRAFT: { action_id:'CREATE_RECEIPT_DRAFT', label:'建立收货补录草稿', mode:'draft', route:'/receipt-orders/#create', requires_confirmation:true },
+  CREATE_RESTOCK_DRAFT: { action_id:'CREATE_RESTOCK_DRAFT', label:'建立紧急补货草稿', mode:'draft', route:'/purchase-orders/?urgency=urgent#create', requires_confirmation:true }
 });
 
 const value = (packet, key) => packet.quantities[key]?.status === 'confirmed' ? Number(packet.quantities[key].value) : null;
@@ -65,6 +65,9 @@ export function evaluateD2(packet) {
   }
   decisionTrace.push(trace('D2-ACTION-001', 'suggest_action', actions, `按“${location}”顺序生成只读建议动作。`));
 
+  const evidenceGaps = [];
+  if (packet.data_availability.purchase_orders.status !== 'confirmed') evidenceGaps.push({ code:'purchase_orders', label:'订货与在途记录', state:packet.data_availability.purchase_orders.status, explanation:packet.data_availability.purchase_orders.note });
+  if (primary.code === 'transfer_out' && packet.data_availability.destination_acceptance.status !== 'confirmed') evidenceGaps.push({ code:'destination_acceptance', label:'目标门店签收结果', state:packet.data_availability.destination_acceptance.status, explanation:packet.data_availability.destination_acceptance.note });
   const result = {
     case_id:`V2-${packet.fact_packet_id}`,
     ruleset_id:D2_RULESET.ruleset_id,
@@ -77,11 +80,8 @@ export function evaluateD2(packet) {
     primary_location:location,
     primary_hypothesis:hypothesis,
     largest_contributor:primary,
-    missing_evidence:[
-      ...(!counted ? ['当前有效实盘'] : []),
-      ...(packet.data_availability.purchase_orders.status !== 'confirmed' ? ['正式订货与在途记录'] : []),
-      ...(primary.code === 'transfer_out' && packet.data_availability.destination_acceptance.status !== 'confirmed' ? ['目标门店签收结果'] : [])
-    ],
+    evidence_gaps:[...(!counted ? [{ code:'physical_count', label:'当前有效实盘', state:'not_found', explanation:'尚无有效实盘，无法确认是否影响门店实际可售' }] : []), ...evidenceGaps],
+    missing_evidence:[...(!counted ? ['当前有效实盘'] : []), ...evidenceGaps.map((item) => item.label)],
     decision_trace:decisionTrace,
     recommended_action_ids:actions
   };

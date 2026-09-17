@@ -110,6 +110,7 @@ await check('D2 V2 preview is a read-only shadow comparison', async () => {
   ]);
   if (!page.includes('规则 V2 对照·预览') || !page.includes('v2-shadow-panel')) throw new Error('V2 preview entry is missing');
   if (!script.includes('查看 V2 推演') || !script.includes('/api/diagnosis-v2/shadow')) throw new Error('per-case V2 preview binding is missing');
+  if (!script.includes('已有直接证据') || !script.includes('系统已接入，历史覆盖不完整') || !script.includes('evidence_gaps')) throw new Error('V2 user-facing enum translations or evidence gap classifications are missing');
   if (shadow.mode !== 'shadow' || shadow.writable !== false || shadow.creates_work_orders !== false) throw new Error(`unsafe shadow flags: ${JSON.stringify(shadow)}`);
   if (!Array.isArray(shadow.comparisons) || shadow.ruleset?.status !== 'shadow') throw new Error('shadow response contract is incomplete');
   return { mode:shadow.mode, writable:shadow.writable, creates_work_orders:shadow.creates_work_orders, comparisons:shadow.comparison_count };

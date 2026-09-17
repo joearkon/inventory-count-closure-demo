@@ -8,6 +8,9 @@ export function buildD2ShadowReport(calculated, materialCatalog = []) {
     const packet = buildFactPacket(signal, {
       ledgerSnapshots: calculated.ledgerSnapshots || [],
       materialEvents: calculated.materialEvents || [],
+      purchaseOrders: calculated.purchaseOrders || [],
+      receiptOrders: calculated.receiptOrders || [],
+      storeTransferRequests: calculated.storeTransferRequests || [],
       countPolicy: countPolicy.get(String(signal.material_name || '').trim().toLowerCase()) || 'unknown',
       asOf: signal.updated_at || new Date().toISOString()
     });

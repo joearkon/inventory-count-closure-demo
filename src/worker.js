@@ -4160,7 +4160,7 @@ export default {
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/diagnosis-v2/shadow') {
       const state = await r2DemoState(env);
       const calculated = await r2FeishuSyncState(env);
-      return json(buildD2ShadowReport(calculated, state.materialCatalog || []));
+      return json(buildD2ShadowReport({ ...calculated, purchaseOrders:state.purchaseOrders || [], receiptOrders:state.receiptOrders || [], storeTransferRequests:state.storeTransferRequests || [] }, state.materialCatalog || []));
     }
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/store-masters') {
       const value = await r2DemoState(env);
