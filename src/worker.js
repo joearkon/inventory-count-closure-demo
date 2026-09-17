@@ -1683,6 +1683,86 @@ async function getFeishuTenantToken(env) {
   return payload.tenant_access_token;
 }
 
+const FEISHU_PROJECT_FILE_MANIFEST_KEY = 'knowledge/feishu-deliverables/manifest.json';
+
+async function syncFeishuProjectDocument(env) {
+  if (!env?.DEMO_STATE) throw new Error('R2 知识快照存储尚未配置。');
+  const documentId = String(env.FEISHU_PROJECT_DOCUMENT_ID || '').trim();
+  if (!documentId) throw new Error('飞书项目文档 ID 尚未配置。');
+  const token = await getFeishuTenantToken(env);
+  const baseUrl = `https://open.feishu.cn/open-apis/docx/v1/documents/${documentId}`;
+  const headers = { Authorization: `Bearer ${token}` };
+  const [metadataResponse, contentResponse] = await Promise.all([
+    fetch(baseUrl, { headers }),
+    fetch(`${baseUrl}/raw_content`, { headers })
+  ]);
+  const [metadataPayload, contentPayload] = await Promise.all([
+    metadataResponse.json().catch(() => ({})),
+    contentResponse.json().catch(() => ({}))
+  ]);
+  if (!metadataResponse.ok || metadataPayload.code !== 0) {
+    throw new Error(`飞书项目文档信息读取失败：${metadataPayload.msg || metadataResponse.status}`);
+  }
+  if (!contentResponse.ok || contentPayload.code !== 0) {
+    throw new Error(`飞书项目文档正文读取失败：${contentPayload.msg || contentResponse.status}`);
+  }
+  const snapshot = {
+    source: 'feishu_docx_read_only',
+    document_id: documentId,
+    source_url: `https://my.feishu.cn/docx/${documentId}`,
+    title: metadataPayload.data?.document?.title || '',
+    revision_id: metadataPayload.data?.document?.revision_id ?? null,
+    content: contentPayload.data?.content || '',
+    fetched_at: now()
+  };
+  await env.DEMO_STATE.put(`knowledge/feishu-project/${documentId}.json`, JSON.stringify(snapshot), {
+    httpMetadata: { contentType: 'application/json; charset=utf-8' },
+    customMetadata: {
+      source: snapshot.source,
+      document_id: snapshot.document_id,
+      revision_id: String(snapshot.revision_id ?? '')
+    }
+  });
+  return snapshot;
+}
+
+function feishuDownloadFilename(headers, fallback) {
+  const disposition = headers.get('content-disposition') || '';
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const quoted = disposition.match(/filename="([^"]+)"/i)?.[1];
+  const raw = encoded || quoted || fallback;
+  try { return decodeURIComponent(raw).replace(/[\\/:*?"<>|]/g, '_').slice(0, 180); } catch { return fallback; }
+}
+
+async function syncFeishuProjectFiles(env) {
+  if (!env?.DEMO_STATE) throw new Error('R2 交付物存储尚未配置。');
+  const fileTokens = String(env.FEISHU_PROJECT_FILE_TOKENS || '').split(',').map((value) => value.trim()).filter(Boolean);
+  if (!fileTokens.length) throw new Error('飞书项目交付物 token 尚未配置。');
+  const token = await getFeishuTenantToken(env);
+  const entries = [];
+  for (const fileToken of fileTokens) {
+    const response = await fetch(`https://open.feishu.cn/open-apis/drive/v1/medias/${fileToken}/download`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      const failure = await response.json().catch(() => ({}));
+      entries.push({ file_token: fileToken, status: 'failed', http_status: response.status, code: failure.code ?? null, message: failure.msg || '飞书云盘文件下载失败' });
+      continue;
+    }
+    const filename = feishuDownloadFilename(response.headers, `${fileToken}.bin`);
+    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    const body = await response.arrayBuffer();
+    const objectKey = `knowledge/feishu-deliverables/${fileToken}/${filename}`;
+    await env.DEMO_STATE.put(objectKey, body, { httpMetadata: { contentType } });
+    entries.push({ file_token: fileToken, status: 'synced', filename, content_type: contentType, size: body.byteLength, object_key: objectKey });
+  }
+  const manifest = { source: 'feishu_drive_read_only', fetched_at: now(), entries };
+  await env.DEMO_STATE.put(FEISHU_PROJECT_FILE_MANIFEST_KEY, JSON.stringify(manifest), {
+    httpMetadata: { contentType: 'application/json; charset=utf-8' }
+  });
+  return manifest;
+}
+
 async function listFeishuRecords(token, tableId) {
   const items = [];
   let pageToken = null;
@@ -4016,7 +4096,11 @@ export default {
   },
   async scheduled(controller, env, ctx) {
     if (env.DEMO_STATE) {
-      ctx.waitUntil(r2ImportFeishuSales(env, true).catch((error) => console.error('R2 Feishu import failed', error instanceof Error ? error.message : String(error))));
+      ctx.waitUntil(Promise.allSettled([
+        r2ImportFeishuSales(env, true).catch((error) => console.error('R2 Feishu import failed', error instanceof Error ? error.message : String(error))),
+        syncFeishuProjectDocument(env).catch((error) => console.error('Feishu project document sync failed', error instanceof Error ? error.message : String(error))),
+        syncFeishuProjectFiles(env).catch((error) => console.error('Feishu project deliverable sync failed', error instanceof Error ? error.message : String(error)))
+      ]));
       return;
     }
     if (!await hasD1Table(env.DB, 'demo_opening_inventory_counts') || !await hasD1Table(env.DB, 'material_inventory_anomalies')) {
