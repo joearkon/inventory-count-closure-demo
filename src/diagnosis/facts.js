@@ -18,7 +18,9 @@ function procurementAvailability(signal, context) {
       : { status:'partial', record_count:0, note:'订货功能已接入，但该历史营业日未找到相关单据；上线前存量数据未完整迁移' },
     arrival_receipts: receipts.length
       ? { status:'confirmed', record_count:receipts.length, note:`已找到 ${receipts.length} 张已确认收货单` }
-      : { status:'partial', record_count:0, note:'收货功能已接入，当日库存流水为 0；历史到货凭证覆盖仍不完整' }
+      : number(signal.evidence_detail?.receipt_qty) > 0
+        ? { status:'partial', record_count:0, note:`已找到收货流水 ${number(signal.evidence_detail.receipt_qty)}${signal.unit}，但未关联正式收货单；历史单据覆盖仍不完整` }
+        : { status:'partial', record_count:0, note:'当日未找到收货流水或正式收货单；上线前历史单据覆盖仍不完整' }
   };
 }
 

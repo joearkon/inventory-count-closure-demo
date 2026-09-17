@@ -2468,6 +2468,12 @@ async function r2StoreBootstrap(env, storeCode = STORE_CODE) {
   const materialEvents = (value.materialEvents || [])
     .filter((item) => item.store_code === storeCode && (!businessDate || item.business_date === businessDate))
     .slice(0, 50);
+  const purchaseOrders = (value.purchaseOrders || [])
+    .filter((item) => item.store_code === storeCode)
+    .slice(0, 30);
+  const receiptOrders = (value.receiptOrders || [])
+    .filter((item) => item.store_code === storeCode)
+    .slice(0, 30);
   const ledger = (view?.ledger || []).map((row) => ({
     material_name: row.material_name,
     unit: row.unit,
@@ -2487,6 +2493,8 @@ async function r2StoreBootstrap(env, storeCode = STORE_CODE) {
     documents,
     materialAnomalies,
     materialEvents,
+    purchaseOrders,
+    receiptOrders,
     storeTransferRequests,
     transfers: { store_requests: storeTransferRequests },
     ledger,
@@ -3865,9 +3873,9 @@ function r2StoreAgentTools() {
   return [
     { type: 'function', function: { name: 'transfer_stok', description: '发起门店调拨草稿。只有用户明确要调拨、调出或转给其他门店时调用。可一对多：每个调入门店单独给出数量；不能编造门店或数量。', parameters: { type: 'object', properties: { material: { type: 'string' }, qty: { type: 'number', description: '仅单一调入门店时使用' }, unit: { type: 'string', enum: ['kg', 'L', '个'] }, to_store: { type: 'string', description: '仅单一调入门店，例如 STORE002' }, destinations: { type: 'array', description: '一对多调拨的调入门店与对应数量', items: { type: 'object', properties: { store_code: { type: 'string' }, qty: { type: 'number' } }, required: ['store_code', 'qty'] } } }, required: [] } } },
     { type: 'function', function: { name: 'lapor_kerugian', description: '登记物料报损。报损、损耗、烂了、坏了、过期、破损或洒漏均使用此工具。', parameters: { type: 'object', properties: { material: { type: 'string' }, qty: { type: 'number' }, unit: { type: 'string', enum: ['kg', 'L', '个'] }, reason: { type: 'string', enum: ['破损', '过期', '变质', '洒漏'] } }, required: [] } } },
-    { type: 'function', function: { name: 'receipt_inventory', description: '登记门店实际收货或入库草稿。', parameters: { type: 'object', properties: { material: { type: 'string' }, qty: { type: 'number' }, unit: { type: 'string', enum: ['kg', 'L', '个'] } }, required: [] } } },
+    { type: 'function', function: { name: 'create_receipt_order_draft', description: '建立门店收货单草稿。只建立单据，不改变库存；之后必须由店员在单据详情确认收货。', parameters: { type: 'object', properties: { material: { type: 'string' }, qty: { type: 'number' }, unit: { type: 'string', enum: ['kg', 'L', '个'] } }, required: [] } } },
     { type: 'function', function: { name: 'stok_opname', description: '发起门店盘点；用户提到盘点、盘库、清点时调用。', parameters: { type: 'object', properties: { material: { type: 'string', description: '指定物料；全盘时可不传' } }, required: [] } } },
-    { type: 'function', function: { name: 'request_restock', description: '向总部发起补货申请。补货、缺货、要补货或库存不够时调用；申请须由门店确认后才提交。', parameters: { type: 'object', properties: { material: { type: 'string' }, qty: { type: 'number' }, unit: { type: 'string', enum: ['kg', 'L', '个'] }, urgency: { type: 'string', enum: ['normal', 'urgent', 'critical'] }, reason: { type: 'string' } }, required: [] } } },
+    { type: 'function', function: { name: 'create_purchase_order_draft', description: '建立订货单草稿。用户说订货、补货、缺货、要货或库存不足时调用；只建草稿，不自动提交。', parameters: { type: 'object', properties: { material: { type: 'string' }, qty: { type: 'number' }, unit: { type: 'string', enum: ['kg', 'L', '个'] }, urgency: { type: 'string', enum: ['normal', 'urgent', 'critical'] }, reason: { type: 'string' } }, required: [] } } },
     { type: 'function', function: { name: 'query_inventory', description: '查询一个或多个物料的当前理论库存。用户提到多个物料时必须全部放入 materials，不得只返回第一个。', parameters: { type: 'object', properties: { material: { type: 'string', description:'单物料查询时使用' }, materials: { type:'array', description:'多物料查询时使用，保留用户提到的全部物料', items:{ type:'string' } } }, required: [] } } }
   ];
 }
@@ -3889,9 +3897,9 @@ function r2StoreAgentLlmAction(toolName, args, rows) {
     return { type: 'open_transfer', prefill: { ...prefill, to_store_code: destinations[0]?.store_code || '', destinations } };
   }
   if (toolName === 'lapor_kerugian') return { type: 'open_scrap', prefill: { ...prefill, reason: r2StoreAgentReason(args.reason || '') || String(args.reason || '').trim() } };
-  if (toolName === 'receipt_inventory') return { type: 'open_receipt', prefill };
+  if (['create_receipt_order_draft', 'receipt_inventory'].includes(toolName)) return { type: 'open_receipt', prefill };
   if (toolName === 'stok_opname') return { type: 'open_count', prefill: { material_name: material?.material_name || '' } };
-  if (toolName === 'request_restock') return { type: 'open_restock', prefill: { ...prefill, urgency: ['urgent', 'critical'].includes(args.urgency) ? args.urgency : 'normal', reason: String(args.reason || '').trim() } };
+  if (['create_purchase_order_draft', 'request_restock'].includes(toolName)) return { type: 'open_restock', prefill: { ...prefill, urgency: ['urgent', 'critical'].includes(args.urgency) ? args.urgency : 'normal', reason: String(args.reason || '').trim() } };
   if (toolName === 'query_inventory') {
     const requested = Array.isArray(args.materials) ? args.materials : [args.material || args.material_name || ''];
     const items = [...new Map(requested.flatMap((name) => r2StoreAgentMaterials(rows, name)).map((item) => [item.material_name, item])).values()]
@@ -3907,8 +3915,8 @@ function r2StoreAgentReplyForAction(action) {
   const value = action.prefill || action.data || {};
   if (action.type === 'open_transfer') return '我已识别到调拨需求。可同时填写多个调入门店；请核对每家数量后确认提交。';
   if (action.type === 'open_scrap') return '我已识别到报损需求。请补全缺少的信息并上传照片凭证。';
-  if (action.type === 'open_receipt') return '我已识别到收货登记。请补全缺少的信息并上传收货凭证。';
-  if (action.type === 'open_restock') return '我已识别到补货申请。请补全原因后确认提交给总部。';
+  if (action.type === 'open_receipt') return '我已识别到收货需求。请补全信息后建立收货单草稿；草稿不会改变库存，进入详情确认后才入账。';
+  if (action.type === 'open_restock') return '我已识别到订货需求。请补全原因后建立订货单草稿；进入详情确认后才正式提交。';
   if (action.type === 'open_count') return value.material_name ? `我会为你打开 ${value.material_name} 的盘点入口，请拍照识别后确认异常项。` : '我已为你打开今日盘点入口，请拍照识别后确认异常项。';
   if (action.type === 'show_inventory' && Array.isArray(value.items) && value.items.length) return value.items.map((item) => `${item.material_name}：${r2Round(Number(item.theoretical_closing_qty || 0))} ${item.unit || ''}${item.safety_qty != null ? `（安全库存 ${r2Round(item.safety_qty)} ${item.unit || ''}）` : ''}`).join('\n');
   if (action.type === 'show_inventory' && value.material_name) return `${value.material_name} 当前理论库存为 ${r2Round(Number(value.theoretical_closing_qty || 0))} ${value.unit || ''}。`;
@@ -3958,7 +3966,7 @@ async function r2StoreAgentWithArk(env, message, storeCode, rows, history = [], 
         temperature: 0.1,
         thinking: { type: 'disabled' },
         messages: [
-          { role: 'system', content: `你是 ${storeCode} 的门店运营助手。理解中文、English 和 Bahasa Indonesia，并使用用户当前语言简短回复。仅处理调拨、报损、收货、盘点、补货和查库存。根据用户意图调用一个工具；参数不全时仍调用对应工具并只填写确定字段。查询库存时，用户提到多个物料必须将全部名称放入 query_inventory.materials，不得遗漏。用户问今日待办、帮我完成待办或今天做什么时，先说明当前待办，若第一项是盘点则调用 stok_opname。调拨可一对多：用户提到多个门店时，必须在 destinations 中逐店填入数量；不要合并或猜测数量。门店名称必须换成对应编码：${stores}。不要虚构物料、数量、门店、照片或库存数据，不要执行或承诺已提交；所有操作都要由店员确认后才会提交。当前可选物料：${materials || '暂未加载物料'}。当前今日待办：${todayTasks.length ? todayTasks.map((task) => `${task.title}（${task.detail}）`).join('；') : '无'}。当前未完成草稿：${currentDraft ? JSON.stringify(currentDraft).slice(0, 800) : '无'}。` },
+          { role: 'system', content: `你是 ${storeCode} 的门店运营助手。理解中文、English 和 Bahasa Indonesia，并使用用户当前语言简短回复。仅处理调拨、报损、收货、盘点、订货/补货和查库存。收货必须调用 create_receipt_order_draft；订货、补货、缺货和要货必须调用 create_purchase_order_draft。两个工具都只建立草稿，不改变库存、不自动提交。参数不全时仍调用对应工具并只填写确定字段。查询库存时，用户提到多个物料必须将全部名称放入 query_inventory.materials，不得遗漏。用户问今日待办、帮我完成待办或今天做什么时，先说明当前待办，若第一项是盘点则调用 stok_opname。调拨可一对多：用户提到多个门店时，必须在 destinations 中逐店填入数量；不要合并或猜测数量。门店名称必须换成对应编码：${stores}。不要虚构物料、数量、门店、照片或库存数据，不要执行或承诺已提交；所有操作都要由店员确认后才会提交。当前可选物料：${materials || '暂未加载物料'}。当前今日待办：${todayTasks.length ? todayTasks.map((task) => `${task.title}（${task.detail}）`).join('；') : '无'}。当前未完成草稿：${currentDraft ? JSON.stringify(currentDraft).slice(0, 800) : '无'}。` },
           ...history.slice(-8).map((turn) => ({ role: turn.role === 'assistant' ? 'assistant' : 'user', content: String(turn.content || '').slice(0, 600) })),
           { role: 'user', content: message }
         ],
@@ -3991,7 +3999,7 @@ async function r2StoreAgentDeterministic(env, body) {
   const toolContract = {
     provider: env.DOUBAO_API_KEY ? 'ark_function_calling' : 'deterministic_demo',
     execution: 'draft_only',
-    tools: ['lapor_kerugian', 'transfer_stok', 'stok_opname', 'query_inventory']
+    tools: ['lapor_kerugian', 'transfer_stok', 'stok_opname', 'create_purchase_order_draft', 'create_receipt_order_draft', 'query_inventory']
   };
   if (!message || message === '__welcome__') {
     return json({
@@ -4058,12 +4066,12 @@ async function r2StoreAgentDeterministic(env, body) {
     const missing = [!receiptMaterial && '物料', !receiptQty && '数量'].filter(Boolean);
     return json({ reply: missing.length ? `我识别到收货入库，还缺少：${missing.join('、')}。请补全后确认。` : `已识别收货草稿：${receiptMaterial.material_name} ${receiptQty} ${normalizedQuantity.unit}。请确认后提交，照片可选。`, action: { type: 'open_receipt', prefill: { material_name: receiptMaterial?.material_name || '', unit: normalizedQuantity.unit, qty: receiptQty } }, tool_contract: toolContract });
   }
-  if (currentDraft?.intent === 'restock' || /补货|缺货|库存不足|要货|restock|replenish|out of stock|isi ulang stok|tambah stok|stok kurang/.test(lower)) {
+  if (currentDraft?.intent === 'restock' || /订货|下单|补货|缺货|库存不足|要货|purchase order|place an order|restock|replenish|out of stock|pesan barang|buat pesanan|isi ulang stok|tambah stok|stok kurang/.test(lower)) {
     const missing = [!material && '物料', !number.qty && '数量', !/库存不足|促销|备货|缺货|断货/.test(message) && '申请原因'].filter(Boolean);
     const reason = /促销|备货/.test(message) ? '促销备货' : /库存不足|缺货|断货/.test(message) ? '库存不足' : '';
     return json({ reply: missing.length ? `我识别到补货申请，还缺少：${missing.join('、')}。` : `已识别补货申请：${material.material_name} ${number.qty}${material.unit}，请确认后提交给总部。`, action: { type: 'open_restock', prefill: { material_name: material?.material_name || '', unit: material?.unit || number.unit || '', qty: number.qty || '', urgency: /紧急|马上/.test(message) ? 'urgent' : 'normal', reason } }, tool_contract: toolContract });
   }
-  return json({ reply: '我可以处理“调拨、报损、盘点、查库存”。例如：调 2kg 黑糖珍珠去 STORE002。', action: { type: 'none' }, tool_contract: toolContract });
+  return json({ reply: '我可以处理调拨、报损、盘点、订货、收货和查询库存。例如：“订货 5L 牛奶”或“收到 2kg 黑糖珍珠”。', action: { type: 'none' }, tool_contract: toolContract });
 }
 
 function r2StoreAgentSession(value, storeCode, rawSessionId) {
@@ -4109,7 +4117,7 @@ async function r2StoreAgent(env, body) {
     return json({
       ...result,
       memory: { session_id: session.id, stored_turns: session.messages.length },
-      tool_contract: { provider: 'ark_function_calling', model: env.DOUBAO_MODEL || R2_ARK_STORE_AGENT_MODEL, execution: 'draft_only', tools: ['lapor_kerugian', 'transfer_stok', 'stok_opname', 'receipt_inventory', 'request_restock', 'query_inventory'] }
+      tool_contract: { provider: 'ark_function_calling', model: env.DOUBAO_MODEL || R2_ARK_STORE_AGENT_MODEL, execution: 'draft_only', tools: ['lapor_kerugian', 'transfer_stok', 'stok_opname', 'create_purchase_order_draft', 'create_receipt_order_draft', 'query_inventory'] }
     });
   }
   const fallback = await r2StoreAgentDeterministic(env, { ...body, draft });

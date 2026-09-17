@@ -45,4 +45,8 @@ const historicalGap = buildFactPacket(signal, { materialEvents:[{ id:'EVT-QA-UNL
 assert.equal(historicalGap.data_availability.purchase_orders.status, 'partial');
 assert.equal(historicalGap.data_availability.destination_acceptance.status, 'unlinked');
 
-console.log(JSON.stringify({ suite:'diagnosis-v2-d2', passed:14, primary_location:transferCase.primary_location, trace_nodes:transferCase.decision_trace.length }, null, 2));
+const receiptWithoutDocument = buildFactPacket({ ...signal, evidence_detail:{ ...signal.evidence_detail, receipt_qty:500 } }, {});
+assert.match(receiptWithoutDocument.data_availability.arrival_receipts.note, /已找到收货流水 500g/);
+assert.doesNotMatch(receiptWithoutDocument.data_availability.arrival_receipts.note, /库存流水为 0/);
+
+console.log(JSON.stringify({ suite:'diagnosis-v2-d2', passed:16, primary_location:transferCase.primary_location, trace_nodes:transferCase.decision_trace.length }, null, 2));
