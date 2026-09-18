@@ -46,6 +46,7 @@
     /* assistant and detail overlays */
     .overlay{position:fixed;inset:0;background:rgba(18,30,51,.42);z-index:40;display:none;align-items:stretch;justify-content:flex-end}.overlay.open{display:flex}.drawer{width:min(520px,100%);height:100%;background:#fff;padding:22px;overflow:auto;box-shadow:-18px 0 55px rgba(18,30,51,.2)}.drawer-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding-bottom:18px;border-bottom:1px solid var(--line)}.drawer-head h2{margin:4px 0 5px;font-size:21px}.close{border:0;background:#f0f3f8;width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:18px}.chat{padding:18px 0}.bubble{max-width:88%;padding:13px 15px;border-radius:14px;background:#f1f4f9;line-height:1.65;font-size:14px;margin-bottom:10px}.bubble.user{margin-left:auto;background:var(--blue);color:#fff}.explain-block{border:1px solid var(--line);border-radius:14px;padding:15px;margin:12px 0}.explain-block h3{font-size:14px;margin:0 0 9px}.explain-block p,.explain-block li{font-size:13px;color:#536279;line-height:1.65}.chips{display:flex;flex-wrap:wrap;gap:7px}.chips button{border:1px solid #ccdaf7;background:#f6f9ff;color:#2e61d5;border-radius:999px;padding:8px 10px;font-size:12px;cursor:pointer}
     .workorder-drawer{width:min(560px,100%);height:100%;background:#f5f7fb;overflow:auto;box-shadow:-18px 0 55px rgba(18,30,51,.2);padding-bottom:92px}.wo-nav{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:13px 16px;background:rgba(255,255,255,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}.wo-nav button{border:0;background:transparent;color:var(--blue);cursor:pointer}.wo-nav b{font-size:15px}.wo-head{background:#fff;padding:20px 17px;border-bottom:1px solid var(--line)}.wo-head h2{font-size:22px;margin:8px 0 6px;line-height:1.35}.wo-head p{margin:0;color:var(--muted);font-size:13px}.wo-content{padding:13px}.wo-card{background:#fff;border:1px solid var(--line);border-radius:16px;margin-bottom:12px;overflow:hidden}.wo-card-head{display:flex;align-items:center;justify-content:space-between;padding:14px 15px;border-bottom:1px solid var(--line)}.wo-card-head h3{font-size:15px;margin:0}.wo-card-body{padding:15px}.wo-goal{border-left:3px solid var(--blue);padding-left:12px}.wo-goal b{display:block;font-size:15px;margin-bottom:5px}.wo-goal p{font-size:13px;line-height:1.6;color:#526077;margin:0}.wo-facts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px}.wo-fact{background:#f7f9fc;border-radius:10px;padding:10px}.wo-fact small{display:block;color:var(--muted);font-size:10px}.wo-fact b{display:block;margin-top:4px;font-size:13px}.wo-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.wo-actions button{min-height:44px}.wo-timeline{position:relative;margin-left:5px}.wo-event{position:relative;padding:0 0 18px 24px;border-left:2px solid #dbe4f5}.wo-event:last-child{border-left-color:transparent;padding-bottom:0}.wo-event:before{content:"";position:absolute;left:-6px;top:2px;width:10px;height:10px;border-radius:50%;background:var(--blue);box-shadow:0 0 0 3px #edf3ff}.wo-event b{display:block;font-size:13px}.wo-event p{font-size:12px;color:#56657a;line-height:1.55;margin:4px 0}.wo-event time{font-size:11px;color:#96a0b1}.wo-event.accepted{display:none}.wo-event.accepted.show{display:block}.wo-bottom{position:fixed;right:0;bottom:0;width:min(560px,100%);display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:rgba(255,255,255,.97);border-top:1px solid var(--line);box-shadow:0 -8px 24px rgba(35,55,92,.08)}.accepted-panel,.simulation-panel{display:none;border-radius:12px;padding:12px;font-size:12px;line-height:1.55;margin-bottom:12px}.accepted-panel{background:var(--green-weak);border:1px solid #bce7d2;color:#176d49}.simulation-panel{background:var(--blue-weak);border:1px solid #c9d8ff;color:#315185}.accepted-panel.show,.simulation-panel.show{display:block}
+    .backend-chain{display:flex;align-items:center;gap:6px;overflow:auto;margin-top:12px;padding:10px;background:#f7f9fc;border-radius:11px}.backend-chain span{white-space:nowrap;font-size:11px;color:#536279}.backend-chain i{width:16px;height:1px;background:#bac5d5;flex:none}.form-row{display:grid;grid-template-columns:1fr 120px;gap:10px;align-items:end;margin-bottom:12px}.form-row label{font-size:12px;color:var(--muted)}.form-row input,.form-row select{width:100%;margin-top:6px;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff;color:var(--ink);font:inherit}.store-flow-event{display:none}.store-flow-event.show{display:block}.backend-link{display:inline-flex;text-decoration:none;justify-content:center}
     .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#16243b;color:#fff;padding:11px 16px;border-radius:10px;z-index:80;font-size:13px;display:none}.toast.show{display:block}
     @media(max-width:880px){.hq-shell{grid-template-columns:1fr}.hq-side{display:none}.hq-main,.supervisor-main{padding:20px 14px}.stats,.area-health{grid-template-columns:1fr 1fr}.hq-grid,.supervisor-grid{grid-template-columns:1fr}.wide-panel{grid-column:auto}.signal-funnel{overflow:auto}.funnel-note{display:none}}
     @media(max-width:540px){.prototype-bar{padding:9px 10px;gap:8px}.prototype-note{display:none}.view-switch button{padding:7px 10px}.store-stage{margin:0 auto;border:0;border-radius:0;min-height:calc(100vh - 51px)}.stats{grid-template-columns:1fr 1fr}.hq-head{display:block}.head-actions{margin-top:12px}.work-table th:nth-child(3),.work-table td:nth-child(3){display:none}.drawer{padding:16px}.workorder-drawer{width:100%}.wo-bottom{width:100%}}
@@ -61,7 +62,7 @@
     <div class="store-stage">
       <header class="store-head">
         <div class="store-brand"><div><h1>STORE001 · 门店助手</h1><p>今天只推送值得处理的经营事项</p><div class="identity-line" style="color:#dce6ff"><span class="identity-dot"></span>当前账号：小李 · 店员　上级责任人：陈店长</div></div><span class="date-pill">9月18日</span></div>
-        <div class="focus-summary"><strong>今天只需处理 2 件事</strong><span>1 项影响库存准确性，1 项等待你确认收货</span></div>
+        <div class="focus-summary"><strong>今天只需处理 2 件事</strong><span>1 项需要安排补货，1 项等待你确认收货</span></div>
       </header>
       <main class="store-body">
         <div class="store-page active" data-store-page="tasks">
@@ -70,18 +71,18 @@
         <section data-reminder-section="action"><div class="section-row"><h2>今天最重要</h2><small>按影响与可执行性排序</small></div>
         <article class="priority-card" data-reminder-kind="action">
           <div class="priority-strip"></div><div class="priority-inner">
-            <div class="priority-meta"><span class="tag red">优先 1</span><span class="tag blue">库存准确性</span><span class="tag">预计 10 分钟</span></div>
-            <h3>黑糖珍珠库存需要核对</h3>
-            <p class="impact">理论库存仍为负数。如果门店实际有货，今天的销售和成本判断会继续失真；先确认是否有到货未收或调拨未签收。</p>
-            <div class="reason-box"><b>系统已核对</b><ul><li>近 3 日没有可信收货入库</li><li>存在一笔调拨出库，目标门店签收证据待补</li><li>销售 BOM 消耗持续发生，规则置信度较高</li></ul></div>
-            <div class="card-actions"><button class="btn primary" data-toast="已进入核对流程（原型不提交）">开始核对</button><button class="btn" data-assistant-context>问门店助手</button></div>
+            <div class="priority-meta"><span class="tag red">优先 1</span><span class="tag blue">补货保障</span><span class="tag">预计 5 分钟</span></div>
+            <h3>茶叶库存需要安排补货</h3>
+            <p class="impact">理论库存与实盘均为 1.74kg，低于 2kg 安全库存。库存数本身可信，现在需要确认在途或建立补货安排。</p>
+            <div class="reason-box"><b>系统已核对</b><ul><li>理论公式结果 1.74kg</li><li>现场实盘同为 1.74kg，不需要重复盘点</li><li>没有找到该营业日相关订货或在途单据</li></ul></div>
+            <div class="card-actions"><button class="btn primary" data-open-store-task>开始核对</button><button class="btn" data-assistant-context>问门店助手</button></div>
             <div class="micro-actions"><button data-toast="已设置 2 小时后提醒">稍后提醒</button><button data-toast="已记录：需要督导帮助">需要帮助</button><button data-toast="已记录反馈，等待总部复核">与实际不符</button></div>
             <div class="state-line"><span>提醒：已查看</span><i></i><span class="current">工单：待处理</span><i></i><span>V2：仍触发</span></div><div class="owner-line"><span>当前责任：<b>STORE001 门店</b></span><span>执行人：<b>小李</b></span></div>
           </div>
         </article></section>
 
         <section data-reminder-section="action"><div class="section-row"><h2>需要你处理</h2><small>普通提醒最多 3 条</small></div>
-        <article class="task-card" data-reminder-kind="action"><div class="task-top"><div class="task-icon">02</div><div class="task-copy"><h3>确认一张收货单</h3><p>订货单 PO-0917-03 预计今天到货。确认实收数量后，系统才会更新库存。</p></div><span class="tag orange">待收货</span></div><div class="card-actions"><button class="btn primary" data-toast="已打开收货草稿（原型）">去确认</button><button class="btn" data-toast="已推迟到下午 4 点">下午提醒</button></div><div class="owner-line"><span>责任组织：<b>STORE001</b></span><span>执行人：<b>小李</b></span></div></article>
+        <article class="task-card" id="receipt-reminder-card" data-reminder-kind="action"><div class="task-top"><div class="task-icon" id="receipt-card-icon">02</div><div class="task-copy"><h3 id="receipt-card-title">确认一张收货单</h3><p id="receipt-card-copy">补货草稿 PO-SIM-S1-001 已到货。确认茶叶实收数量后，后台才生成库存流水并重算 S1。</p></div><span class="tag orange" id="receipt-card-status">待收货</span></div><div class="card-actions"><button class="btn primary" id="open-receipt-confirm">去确认</button><button class="btn" data-toast="已推迟到下午 4 点">下午提醒</button></div><div class="owner-line"><span>来源工单：<b>OPT-0868AD91</b></span><span>执行人：<b>小李</b></span></div></article>
         </section>
 
         <section data-reminder-section="brief"><div class="section-row"><h2>今日经营简报</h2><small>每天只生成 1 次</small></div>
@@ -108,7 +109,7 @@
 
         <div class="store-page assistant-page" data-store-page="assistant">
           <div class="assistant-intro"><div class="assistant-avatar">AI</div><div><h2>门店助手</h2><p>可以连续提问，也可以查询或发起业务动作</p></div><span class="tag green" style="margin-left:auto">在线</span></div>
-          <div class="context-card" id="assistant-context" hidden><b>正在协助：黑糖珍珠库存核对</b><p>已带入 STORE001、工单 OPT-2FBCCD16、最新 V2 证据与建议动作。你可以继续追问或让助手打开相关业务单据。</p></div>
+          <div class="context-card" id="assistant-context" hidden><b>正在协助：茶叶补货安排</b><p>已带入 STORE001、工单 OPT-0868AD91、最新 S1 证据与建议动作。你可以继续追问或让助手打开相关订货、调拨和收货单据。</p></div>
           <div class="chat-stream">
             <div class="bubble">你好，我是门店助手。你可以查库存、查询多件商品，也可以让我协助订货、收货、盘点、调拨和报损。所有写入操作都会在提交前请你确认。</div>
             <div class="bubble user">帮我查一下牛奶和黑糖珍珠的库存。</div>
@@ -166,6 +167,32 @@
     </div>
   </section>
 
+  <div class="overlay" id="store-task-overlay"><article class="workorder-drawer">
+    <nav class="wo-nav"><button data-close>← 返回任务</button><b>门店工单</b><button data-close>关闭</button></nav>
+    <header class="wo-head"><div class="priority-meta"><span class="tag orange" id="store-task-status">门店待处理</span><span class="tag blue">S1 · 低于安全库存</span></div><h2>茶叶（kg）补货／调拨跟进</h2><p>OPT-0868AD91 · STORE001 · 后台当前开放工单</p></header>
+    <main class="wo-content">
+      <section class="wo-card"><div class="wo-card-head"><h3>这次需要完成什么</h3><span class="tag red">今日</span></div><div class="wo-card-body"><div class="wo-goal"><b>确认是否已有在途；没有则建立补货安排</b><p>系统已确认库存数量可信，因此不要求重复盘点。门店只需处理补货事实，并将业务单据关联回原工单。</p></div><div class="wo-facts"><div class="wo-fact"><small>理论 / 实盘</small><b>1.74 / 1.74 kg</b></div><div class="wo-fact"><small>安全库存</small><b>2 kg</b></div><div class="wo-fact"><small>明确缺口</small><b style="color:var(--red)">0.26 kg</b></div><div class="wo-fact"><small>当前负责人</small><b>STORE001 店长</b></div></div></div></section>
+
+      <section class="wo-card"><div class="wo-card-head"><h3>后台核对结果</h3><a class="btn small backend-link" href="https://inventory-count-closure-demo.gdjustwuxia.workers.dev/work-order/?id=OPT-0868AD91" target="_blank" rel="noreferrer">查看后台工单</a></div><div class="wo-card-body"><ul style="margin:0;padding-left:18px;color:#526077;font-size:13px;line-height:1.8"><li>库存公式：3 + 0 + 0 − 1.26 − 0 − 0 = 1.74 kg</li><li>有效盘点结果 1.74kg，理论与实盘一致</li><li>订货功能已接入，但本营业日相关单据记录为 0</li></ul><div class="backend-chain"><span>工单 OPT-0868AD91</span><i></i><span>订货／调拨动作</span><i></i><span>收货流水</span><i></i><span>V2 重算</span></div></div></section>
+
+      <section class="wo-card"><div class="wo-card-head"><h3>选择处理方式</h3><span class="muted" style="font-size:11px">正式提交仍需人工确认</span></div><div class="wo-card-body"><div class="wo-actions"><a class="btn backend-link" href="https://inventory-count-closure-demo.gdjustwuxia.workers.dev/purchase-orders/#list" target="_blank" rel="noreferrer">查看订货与在途</a><button class="btn primary" id="store-create-restock">建立补货草稿</button><a class="btn backend-link" href="https://inventory-count-closure-demo.gdjustwuxia.workers.dev/transfers/" target="_blank" rel="noreferrer">查看邻店可调拨</a><button class="btn" id="store-request-help">请求督导协助</button></div></div></section>
+
+      <section class="wo-card"><div class="wo-card-head"><h3>处理记录</h3><span class="tag" id="store-event-count">2 条</span></div><div class="wo-card-body"><div class="wo-timeline"><div class="wo-event"><b>系统建立 S1 工单</b><p>实盘确认茶叶低于安全库存，分配 STORE001 店长处理。</p><time>9月17日 19:03 · 系统规则引擎</time></div><div class="wo-event"><b>系统完成 V2 重算</b><p>异常仍触发，建议优先处理补货与调拨安排。</p><time>9月17日 19:04 · 系统规则引擎</time></div><div class="wo-event store-flow-event" id="store-start-event"><b>门店开始处理</b><p>小李已查看证据并进入补货核对流程。</p><time>刚刚 · 小李</time></div><div class="wo-event store-flow-event" id="store-draft-event"><b>已建立紧急补货草稿</b><p>草稿 PO-SIM-S1-001 已关联原工单，等待门店确认提交。</p><time>刚刚 · 小李</time></div></div></div></section>
+    </main>
+    <footer class="wo-bottom"><button class="btn" data-close>返回任务</button><button class="btn primary" id="store-start-processing">开始处理</button></footer>
+  </article></div>
+
+  <div class="overlay" id="receipt-confirm-overlay"><article class="workorder-drawer">
+    <nav class="wo-nav"><button data-close>← 返回任务</button><b>确认收货</b><button data-close>关闭</button></nav>
+    <header class="wo-head"><div class="priority-meta"><span class="tag orange" id="receipt-detail-status">待收货</span><span class="tag">来源：补货工单</span></div><h2>茶叶到货确认</h2><p>RCV-SIM-S1-001 · 关联 PO-SIM-S1-001</p></header>
+    <main class="wo-content">
+      <section class="wo-card"><div class="wo-card-head"><h3>单据信息</h3><span class="tag blue">STORE001</span></div><div class="wo-card-body"><div class="wo-facts"><div class="wo-fact"><small>来源工单</small><b>OPT-0868AD91</b></div><div class="wo-fact"><small>供应方</small><b>Demo 总部供应仓</b></div><div class="wo-fact"><small>物料</small><b>茶叶</b></div><div class="wo-fact"><small>订货数量</small><b>1 kg</b></div></div></div></section>
+      <section class="wo-card"><div class="wo-card-head"><h3>人工确认实收</h3><span class="muted" style="font-size:11px">确认后才写库存</span></div><div class="wo-card-body"><div class="form-row"><label>实收数量<input id="received-qty" type="number" min="0" step="0.1" value="1"></label><label>单位<select><option>kg</option></select></label></div><div class="form-row"><label>差异说明<select id="receipt-difference"><option value="none">无差异</option><option>少收</option><option>多收</option><option>破损拒收</option></select></label><label>操作人<input value="小李" disabled></label></div><div class="backend-chain"><span>确认收货单</span><i></i><span>生成 +1kg 流水</span><i></i><span>理论库存 2.74kg</span><i></i><span>自动重算 S1</span></div><div class="accepted-panel" id="receipt-success"><b>✓ 收货已确认</b><br>模拟生成入库流水并触发 V2：理论库存从 1.74kg 变为 2.74kg，高于 2kg 安全库存；原工单进入“等待人工闭环”。</div></div></section>
+      <section class="wo-card"><div class="wo-card-head"><h3>后台会同步更新</h3></div><div class="wo-card-body"><ul style="margin:0;padding-left:18px;color:#526077;font-size:13px;line-height:1.8"><li>收货单状态：待收货 → 已确认入库</li><li>库存流水：新增一笔茶叶 +1kg</li><li>工单时间线：记录单据、操作人与确认时间</li><li>V2：自动重算并保存处理前后快照</li></ul></div></section>
+    </main>
+    <footer class="wo-bottom"><a class="btn backend-link" href="https://inventory-count-closure-demo.gdjustwuxia.workers.dev/receipt-orders/" target="_blank" rel="noreferrer">查看后台收货</a><button class="btn primary" id="confirm-receipt">确认实收并入库</button></footer>
+  </article></div>
+
   <div class="overlay" id="assistant-overlay"><aside class="drawer"><div class="drawer-head"><div><span class="eyebrow">门店助手</span><h2>为什么优先处理库存核对？</h2><p class="muted">LLM 只解释结构化事实，不替代规则。</p></div><button class="close" data-close>×</button></div><div class="chat"><div class="bubble user">为什么这是今天最重要的事情？</div><div class="bubble">因为黑糖珍珠的理论库存已经为负，而销售仍在发生。如果实际有货，说明至少有一笔入库、调拨签收或盘点没有正确记录。先把库存事实核对清楚，后面的成本和补货建议才不会继续偏差。</div><div class="explain-block"><h3>建议先做</h3><ol><li>确认最近到货是否已经收货入库；</li><li>核对调拨目标门店是否已经签收；</li><li>仍无法解释时，发起一次黑糖珍珠盘点。</li></ol></div><div class="chips"><button data-toast="已打开收货记录（原型）">查看收货记录</button><button data-toast="已打开调拨记录（原型）">查看调拨</button><button data-toast="已生成盘点草稿（原型）">建立盘点草稿</button></div></div></aside></div>
 
   <div class="overlay" id="detail-overlay"><aside class="drawer"><div class="drawer-head"><div><span class="eyebrow">总部聚合问题</span><h2>黑糖珍珠单位映射冲突</h2><p class="muted">一个总部问题，关联 3 家门店的 6 个独立工单。</p></div><button class="close" data-close>×</button></div><div class="explain-block"><h3>当前责任</h3><p><b>责任组织：</b>总部商品与主数据组<br><b>负责人：</b>王敏（总部库存运营）<br><b>来源：</b>雅加达北区督导 Rina 升级；原门店工单继续保留</p></div><div class="explain-block"><h3>为什么交给总部</h3><p>多家门店在同一物料、同一规则版本下同时触发，且门店重复盘点不能解决。系统已将门店执行问题降级，把包装单位与基础单位换算列为首要原因。</p></div><div class="explain-block"><h3>处理后如何验证</h3><p>总部确认换算版本后，系统对 6 个工单重新运行 V2。恢复的工单等待人工结论；仍触发的工单回到门店继续核对业务事实。</p></div><button class="btn primary" style="width:100%" data-toast="已打开主数据治理任务（原型）">进入主数据治理</button></aside></div>
@@ -205,7 +232,7 @@
       document.getElementById('assistant-context').hidden=false;
       switchStorePage('assistant');
     }));
-    const overlays={assistant:document.getElementById('assistant-overlay'),detail:document.getElementById('detail-overlay'),supervisor:document.getElementById('supervisor-overlay'),workorder:document.getElementById('work-order-overlay'),result:document.getElementById('result-overlay'),strategy:document.getElementById('strategy-overlay')};
+    const overlays={assistant:document.getElementById('assistant-overlay'),detail:document.getElementById('detail-overlay'),supervisor:document.getElementById('supervisor-overlay'),workorder:document.getElementById('work-order-overlay'),storeTask:document.getElementById('store-task-overlay'),receiptConfirm:document.getElementById('receipt-confirm-overlay'),result:document.getElementById('result-overlay'),strategy:document.getElementById('strategy-overlay')};
     document.querySelectorAll('[data-open]').forEach(button=>button.addEventListener('click',()=>overlays[button.dataset.open]?.classList.add('open')));
     document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>button.closest('.overlay').classList.remove('open')));
     document.querySelectorAll('.overlay').forEach(overlay=>overlay.addEventListener('click',event=>{if(event.target===overlay)overlay.classList.remove('open')}));
@@ -220,6 +247,45 @@
     document.querySelectorAll('[data-toast]').forEach(button=>button.addEventListener('click',()=>showToast(button.dataset.toast)));
     document.querySelectorAll('[data-view-work-order]').forEach(button=>button.addEventListener('click',()=>{overlays.supervisor.classList.remove('open');overlays.workorder.classList.add('open')}));
     document.querySelectorAll('[data-wo-back]').forEach(button=>button.addEventListener('click',()=>{overlays.workorder.classList.remove('open');overlays.supervisor.classList.add('open')}));
+    document.querySelectorAll('[data-open-store-task]').forEach(button=>button.addEventListener('click',()=>overlays.storeTask.classList.add('open')));
+    document.getElementById('open-receipt-confirm').addEventListener('click',()=>overlays.receiptConfirm.classList.add('open'));
+    let storeStarted=false;
+    document.getElementById('store-start-processing').addEventListener('click',event=>{
+      if(storeStarted)return;
+      storeStarted=true;
+      document.getElementById('store-start-event').classList.add('show');
+      document.getElementById('store-event-count').textContent='3 条';
+      document.getElementById('store-task-status').textContent='门店处理中';
+      event.currentTarget.textContent='处理中 · 请选择下一步';
+      event.currentTarget.disabled=true;
+      showToast('已记录门店开始处理，操作将继续写入原工单');
+    });
+    document.getElementById('store-create-restock').addEventListener('click',()=>{
+      if(!storeStarted){showToast('请先点击“开始处理”');return;}
+      document.getElementById('store-draft-event').classList.add('show');
+      document.getElementById('store-event-count').textContent='4 条';
+      document.getElementById('store-task-status').textContent='等待门店确认草稿';
+      showToast('已建立补货草稿并关联 OPT-0868AD91');
+    });
+    document.getElementById('store-request-help').addEventListener('click',()=>{
+      overlays.storeTask.classList.remove('open'); overlays.supervisor.classList.add('open');
+      showToast('已请求雅加达北区督导协助，同一工单继续流转');
+    });
+    document.getElementById('confirm-receipt').addEventListener('click',event=>{
+      const qty=Number(document.getElementById('received-qty').value);
+      if(!(qty>0)){showToast('请填写大于 0 的实收数量');return;}
+      document.getElementById('receipt-success').classList.add('show');
+      document.getElementById('receipt-detail-status').textContent='已确认入库';
+      document.getElementById('receipt-detail-status').className='tag green';
+      document.getElementById('receipt-card-title').textContent='茶叶收货已确认，等待工单闭环';
+      document.getElementById('receipt-card-copy').textContent='已模拟写入 +1kg 库存流水，S1 重算后恢复；后台仍需填写人工闭环结论。';
+      document.getElementById('receipt-card-status').textContent='已入库';
+      document.getElementById('receipt-card-status').className='tag green';
+      document.getElementById('receipt-card-icon').textContent='✓';
+      event.currentTarget.textContent='已确认入库'; event.currentTarget.disabled=true;
+      const openReceiptButton=document.getElementById('open-receipt-confirm'); openReceiptButton.textContent='查看结果'; openReceiptButton.classList.remove('primary');
+      showToast('收货确认完成：库存流水、V2 快照和工单时间线已联动（模拟）');
+    });
     const acceptIntervention=()=>{
       document.getElementById('accepted-panel').classList.add('show');
       document.getElementById('accepted-event').classList.add('show');
