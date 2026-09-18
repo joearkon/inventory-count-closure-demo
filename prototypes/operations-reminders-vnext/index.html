@@ -47,9 +47,10 @@
     .overlay{position:fixed;inset:0;background:rgba(18,30,51,.42);z-index:40;display:none;align-items:stretch;justify-content:flex-end}.overlay.open{display:flex}.drawer{width:min(520px,100%);height:100%;background:#fff;padding:22px;overflow:auto;box-shadow:-18px 0 55px rgba(18,30,51,.2)}.drawer-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding-bottom:18px;border-bottom:1px solid var(--line)}.drawer-head h2{margin:4px 0 5px;font-size:21px}.close{border:0;background:#f0f3f8;width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:18px}.chat{padding:18px 0}.bubble{max-width:88%;padding:13px 15px;border-radius:14px;background:#f1f4f9;line-height:1.65;font-size:14px;margin-bottom:10px}.bubble.user{margin-left:auto;background:var(--blue);color:#fff}.explain-block{border:1px solid var(--line);border-radius:14px;padding:15px;margin:12px 0}.explain-block h3{font-size:14px;margin:0 0 9px}.explain-block p,.explain-block li{font-size:13px;color:#536279;line-height:1.65}.chips{display:flex;flex-wrap:wrap;gap:7px}.chips button{border:1px solid #ccdaf7;background:#f6f9ff;color:#2e61d5;border-radius:999px;padding:8px 10px;font-size:12px;cursor:pointer}
     .workorder-drawer{width:min(560px,100%);height:100%;background:#f5f7fb;overflow:auto;box-shadow:-18px 0 55px rgba(18,30,51,.2);padding-bottom:92px}.wo-nav{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:13px 16px;background:rgba(255,255,255,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}.wo-nav button{border:0;background:transparent;color:var(--blue);cursor:pointer}.wo-nav b{font-size:15px}.wo-head{background:#fff;padding:20px 17px;border-bottom:1px solid var(--line)}.wo-head h2{font-size:22px;margin:8px 0 6px;line-height:1.35}.wo-head p{margin:0;color:var(--muted);font-size:13px}.wo-content{padding:13px}.wo-card{background:#fff;border:1px solid var(--line);border-radius:16px;margin-bottom:12px;overflow:hidden}.wo-card-head{display:flex;align-items:center;justify-content:space-between;padding:14px 15px;border-bottom:1px solid var(--line)}.wo-card-head h3{font-size:15px;margin:0}.wo-card-body{padding:15px}.wo-goal{border-left:3px solid var(--blue);padding-left:12px}.wo-goal b{display:block;font-size:15px;margin-bottom:5px}.wo-goal p{font-size:13px;line-height:1.6;color:#526077;margin:0}.wo-facts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px}.wo-fact{background:#f7f9fc;border-radius:10px;padding:10px}.wo-fact small{display:block;color:var(--muted);font-size:10px}.wo-fact b{display:block;margin-top:4px;font-size:13px}.wo-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.wo-actions button{min-height:44px}.wo-timeline{position:relative;margin-left:5px}.wo-event{position:relative;padding:0 0 18px 24px;border-left:2px solid #dbe4f5}.wo-event:last-child{border-left-color:transparent;padding-bottom:0}.wo-event:before{content:"";position:absolute;left:-6px;top:2px;width:10px;height:10px;border-radius:50%;background:var(--blue);box-shadow:0 0 0 3px #edf3ff}.wo-event b{display:block;font-size:13px}.wo-event p{font-size:12px;color:#56657a;line-height:1.55;margin:4px 0}.wo-event time{font-size:11px;color:#96a0b1}.wo-event.accepted{display:none}.wo-event.accepted.show{display:block}.wo-bottom{position:fixed;right:0;bottom:0;width:min(560px,100%);display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:rgba(255,255,255,.97);border-top:1px solid var(--line);box-shadow:0 -8px 24px rgba(35,55,92,.08)}.accepted-panel,.simulation-panel{display:none;border-radius:12px;padding:12px;font-size:12px;line-height:1.55;margin-bottom:12px}.accepted-panel{background:var(--green-weak);border:1px solid #bce7d2;color:#176d49}.simulation-panel{background:var(--blue-weak);border:1px solid #c9d8ff;color:#315185}.accepted-panel.show,.simulation-panel.show{display:block}
     .backend-chain{display:flex;align-items:center;gap:6px;overflow:auto;margin-top:12px;padding:10px;background:#f7f9fc;border-radius:11px}.backend-chain span{white-space:nowrap;font-size:11px;color:#536279}.backend-chain i{width:16px;height:1px;background:#bac5d5;flex:none}.form-row{display:grid;grid-template-columns:1fr 120px;gap:10px;align-items:end;margin-bottom:12px}.form-row label{font-size:12px;color:var(--muted)}.form-row input,.form-row select{width:100%;margin-top:6px;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff;color:var(--ink);font:inherit}.store-flow-event{display:none}.store-flow-event.show{display:block}.backend-link{display:inline-flex;text-decoration:none;justify-content:center}
+    .bo-crumb{font-size:12px;color:var(--muted);margin-bottom:12px}.bo-crumb button{border:0;background:transparent;color:var(--blue);padding:0;cursor:pointer}.bo-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:15px}.bo-head h1{font-size:25px;margin:3px 0 5px}.bo-head p{margin:0;color:var(--muted)}.bo-stage{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0 16px}.bo-stage div{position:relative;padding:12px;background:#fff;border:1px solid var(--line);border-radius:11px;color:var(--muted);font-size:12px}.bo-stage div.active{border-color:#a8c0ff;background:var(--blue-weak);color:var(--blue);font-weight:800}.bo-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:14px;align-items:start}.bo-stack{display:grid;gap:14px}.bo-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.bo-meta div{padding:11px;background:#f7f9fc;border-radius:10px}.bo-meta small{display:block;color:var(--muted);font-size:10px}.bo-meta b{display:block;margin-top:4px;font-size:13px}.bo-action{display:grid;grid-template-columns:34px 1fr auto;gap:11px;align-items:center;padding:12px 0;border-bottom:1px solid #edf0f5}.bo-action:last-child{border-bottom:0}.bo-action>i{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--blue-weak);color:var(--blue);font-style:normal;font-weight:800}.bo-action h3{font-size:14px;margin:0 0 3px}.bo-action p{font-size:12px;color:var(--muted);margin:0}.bo-action-state{font-size:11px;color:#a66510;background:var(--orange-weak);border-radius:999px;padding:4px 8px}.bo-doc{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px}.bo-doc b{display:block;font-size:13px}.bo-doc small{color:var(--muted)}.bo-form label{display:block;font-size:12px;color:var(--muted);margin-bottom:10px}.bo-form input,.bo-form textarea,.bo-form select{width:100%;margin-top:5px;border:1px solid var(--line);border-radius:9px;padding:9px;font:inherit}.bo-form textarea{min-height:74px}.bo-sync{display:none}.bo-sync.show{display:block}
     .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#16243b;color:#fff;padding:11px 16px;border-radius:10px;z-index:80;font-size:13px;display:none}.toast.show{display:block}
-    @media(max-width:880px){.hq-shell{grid-template-columns:1fr}.hq-side{display:none}.hq-main,.supervisor-main{padding:20px 14px}.stats,.area-health{grid-template-columns:1fr 1fr}.hq-grid,.supervisor-grid{grid-template-columns:1fr}.wide-panel{grid-column:auto}.signal-funnel{overflow:auto}.funnel-note{display:none}}
-    @media(max-width:540px){.prototype-bar{padding:9px 10px;gap:8px}.prototype-note{display:none}.view-switch button{padding:7px 10px}.store-stage{margin:0 auto;border:0;border-radius:0;min-height:calc(100vh - 51px)}.stats{grid-template-columns:1fr 1fr}.hq-head{display:block}.head-actions{margin-top:12px}.work-table th:nth-child(3),.work-table td:nth-child(3){display:none}.drawer{padding:16px}.workorder-drawer{width:100%}.wo-bottom{width:100%}}
+    @media(max-width:880px){.hq-shell{grid-template-columns:1fr}.hq-side{display:none}.hq-main,.supervisor-main{padding:20px 14px}.stats,.area-health{grid-template-columns:1fr 1fr}.hq-grid,.supervisor-grid,.bo-layout{grid-template-columns:1fr}.wide-panel{grid-column:auto}.signal-funnel{overflow:auto}.funnel-note{display:none}}
+    @media(max-width:540px){.prototype-bar{padding:9px 10px;gap:8px}.prototype-note{display:none}.view-switch button{padding:7px 10px}.store-stage{margin:0 auto;border:0;border-radius:0;min-height:calc(100vh - 51px)}.stats{grid-template-columns:1fr 1fr}.hq-head,.bo-head{display:block}.head-actions{margin-top:12px}.work-table th:nth-child(3),.work-table td:nth-child(3){display:none}.drawer{padding:16px}.workorder-drawer{width:100%}.wo-bottom{width:100%}.bo-meta{grid-template-columns:1fr 1fr}.bo-stage{grid-template-columns:1fr 1fr}.bo-action{grid-template-columns:34px 1fr}.bo-action-state{grid-column:2;width:max-content}}
   </style>
 </head>
 <body>
@@ -142,14 +143,14 @@
 
   <section class="view" data-view="hq">
     <div class="hq-shell">
-      <aside class="hq-side"><div class="logo">小笼包总部运营</div><div class="side-label">业务总览</div><button class="side-link active">运营总览</button><button class="side-link">区域汇总</button><button class="side-link">跟进工单</button><div class="side-label">专题治理</div><button class="side-link">商品与物料</button><button class="side-link">供应与履约</button><button class="side-link">数据质量</button><div class="side-label">配置</div><button class="side-link">规则与提醒</button></aside>
-      <main class="hq-main">
+      <aside class="hq-side"><div class="logo">小笼包总部运营</div><div class="side-label">业务总览</div><button class="side-link active" data-hq-target="overview">运营总览</button><button class="side-link">区域汇总</button><button class="side-link" data-hq-target="workorders">跟进工单</button><div class="side-label">专题治理</div><button class="side-link">商品与物料</button><button class="side-link">供应与履约</button><button class="side-link">数据质量</button><div class="side-label">配置</div><button class="side-link">规则与提醒</button></aside>
+      <main class="hq-main"><div data-hq-page="overview">
         <header class="hq-head"><div><span class="eyebrow">总部运营</span><h1>库存与单据总览</h1><div class="identity-line"><span class="identity-dot"></span>当前账号：王敏 · 总部库存运营　可见范围：全部 6 个区域</div></div><div class="head-actions"><select class="filter"><option>全部 6 个区域</option><option>雅加达区域</option></select><select class="filter"><option>今日</option><option>近 7 日</option><option>近 30 日</option></select></div></header>
         <div class="selection-note"><span><b>数据口径</b>：库存研判、跟进工单、订货单、收货单、调拨单和盘点计划</span><button data-toast="暂不计算金额损失、毛利和综合健康分">查看口径</button></div>
         <section class="stats"><article class="stat alert"><small>未闭环库存异常</small><strong>16</strong><span>按最新 V2 状态统计</span></article><article class="stat warn"><small>处理中工单</small><strong>3</strong><span>门店 2 · 总部 1</span></article><article class="stat"><small>待处理业务单据</small><strong>4</strong><span>收货 1 · 调拨 2 · 盘点 1</span></article><article class="stat"><small>缺少关键证据</small><strong>6</strong><span>来自 V2 证据缺口</span></article></section>
 
         <div class="hq-grid">
-          <section class="panel"><div class="panel-head"><h2>需要总部处理</h2><button class="btn small">查看全部工单</button></div><div class="panel-body">
+          <section class="panel"><div class="panel-head"><h2>需要总部处理</h2><button class="btn small" data-hq-target="workorders">查看全部工单</button></div><div class="panel-body">
             <article class="issue-row" data-open="detail"><div class="rank">1</div><div><h3>多家门店出现黑糖珍珠单位异常</h3><p>相同物料在多店触发单位或库存偏差，门店盘点不能修复主数据，转商品与主数据组核对。</p><div style="margin-top:7px"><span class="tag red">多店重复</span> <span class="tag blue">主数据治理</span></div></div><div class="issue-meta"><b>3 家门店</b><small>6 个关联工单</small></div></article>
             <article class="issue-row" data-open="detail"><div class="rank orange">2</div><div><h3>调拨单等待目标门店签收</h3><p>调出流水已经登记，但目标门店尚未确认实际收货，需要区域督导跟进。</p><div style="margin-top:7px"><span class="tag orange">待签收</span> <span class="tag">调拨管理</span></div></div><div class="issue-meta"><b>2 张单</b><small>2 家目标门店</small></div></article>
             <article class="issue-row" data-open="detail"><div class="rank orange">3</div><div><h3>库存核对后异常仍未恢复</h3><p>相关业务动作完成后最新 V2 仍触发，需要复核收货、盘点或 BOM 证据。</p><div style="margin-top:7px"><span class="tag">连续未恢复</span></div></div><div class="issue-meta"><b>1 家门店</b><small>已重算 2 次</small></div></article>
@@ -162,6 +163,28 @@
           </div></section>
 
           <section class="panel wide-panel"><div class="panel-head"><h2>按区域汇总</h2><div><button class="btn small">按区域</button> <button class="btn small">按异常类型</button></div></div><div class="panel-body"><table class="work-table"><thead><tr><th>区域</th><th>未闭环异常</th><th>处理中工单</th><th>待处理单据</th><th>当前动作</th></tr></thead><tbody><tr><td><b>雅加达北区</b><br><span class="muted">7 家门店</span></td><td>4 项</td><td>2 项</td><td>调拨 1 · 盘点 1</td><td><span class="tag green">督导处理中</span></td></tr><tr><td><b>雅加达东区</b><br><span class="muted">9 家门店</span></td><td>7 项</td><td>1 项</td><td>收货 1 · 调拨 1</td><td><span class="tag orange">等待单据</span></td></tr><tr><td><b>泗水南区</b><br><span class="muted">8 家门店</span></td><td>5 项</td><td>0 项</td><td>无</td><td><span class="tag red">待分派</span></td></tr></tbody></table></div></section>
+        </div></div>
+
+        <div data-hq-page="workorders" hidden>
+          <div class="bo-crumb"><button data-hq-target="overview">运营中心</button> / 跟进工单 / 工单详情</div>
+          <header class="bo-head"><div><span class="eyebrow">跟进工单 · OPT-0868AD91</span><h1>茶叶（kg）补货／调拨跟进</h1><p>STORE001 · S1 安全库存预警 · 与门店端、督导端共用同一工单</p></div><span class="tag orange" id="bo-status">门店处理中</span></header>
+          <div class="bo-stage"><div class="active">1　发现问题</div><div class="active" id="bo-stage-action">2　核查处理</div><div id="bo-stage-reassess">3　V2 重算</div><div id="bo-stage-close">4　人工闭环</div></div>
+          <div class="bo-layout">
+            <div class="bo-stack">
+              <section class="panel"><div class="panel-head"><h2>工单与责任</h2><span class="tag blue">当前后台数据</span></div><div class="panel-body"><div class="bo-meta"><div><small>工单编号</small><b>OPT-0868AD91</b></div><div><small>责任组织</small><b>STORE001 门店</b></div><div><small>当前负责人</small><b id="bo-owner">STORE001 店长</b></div><div><small>协助角色</small><b id="bo-helper">—</b></div><div><small>规则</small><b>S1 · 安全库存</b></div><div><small>理论 / 实盘</small><b id="bo-inventory">1.74 / 1.74 kg</b></div><div><small>安全库存</small><b>2 kg</b></div><div><small>最新 V2</small><b id="bo-v2" style="color:var(--red)">仍触发</b></div></div></div></section>
+
+              <section class="panel"><div class="panel-head"><h2>研判过程与处理建议</h2><span class="muted" style="font-size:12px">规则版本 1.0.0-shadow</span></div><div class="panel-body"><div class="wo-goal"><b>首要位置：补货与调拨安排</b><p>理论与实盘一致，库存事实可信；当前距安全库存缺口 0.26kg，应先核对在途，没有则补货或调拨。</p></div><div class="backend-chain"><span>3kg 期初</span><i></i><span>−1.26kg 调拨出</span><i></i><span>=1.74kg</span><i></i><span>低于 2kg</span></div><div style="margin-top:14px"><div class="bo-action"><i>1</i><div><h3>查看订货与在途</h3><p>当前营业日相关单据记录为 0。</p></div><span class="bo-action-state">待核对</span></div><div class="bo-action"><i>2</i><div><h3>建立紧急补货草稿</h3><p>带入门店、物料、来源工单和紧急程度，人工确认后提交。</p></div><span class="bo-action-state" id="bo-draft-state">待处理</span></div><div class="bo-action"><i>3</i><div><h3>收货确认后自动重算</h3><p>生成库存流水，保存处理前后 V2 快照。</p></div><span class="bo-action-state" id="bo-reassess-state">等待业务动作</span></div></div></div></section>
+
+              <section class="panel"><div class="panel-head"><h2>关联单据与库存修正</h2><span class="muted" style="font-size:12px">所有动作关联原工单</span></div><div class="panel-body"><div class="bo-doc"><div><b>补货草稿 PO-SIM-S1-001</b><small>茶叶 1kg · 来源 OPT-0868AD91</small></div><span class="tag orange" id="bo-po-status">等待门店确认</span></div><div class="bo-doc"><div><b>收货单 RCV-SIM-S1-001</b><small>确认后生成库存流水并触发 V2</small></div><span class="tag orange" id="bo-rcv-status">待收货</span></div><div class="accepted-panel bo-sync" id="bo-correction"><b>库存修正已完成</b><br>1.74 + 1.00 = 2.74kg；S1 从“仍触发”变为“已恢复”，下一步填写人工闭环结论。</div></div></section>
+
+              <section class="panel"><div class="panel-head"><h2>完整处理时间线</h2><span class="tag" id="bo-event-count">2 条</span></div><div class="panel-body"><div class="wo-timeline"><div class="wo-event"><b>系统建立安全库存工单</b><p>茶叶理论与实盘均为 1.74kg，分配 STORE001 店长。</p><time>9月17日 19:03 · 系统规则引擎</time></div><div class="wo-event"><b>V2 自动重算</b><p>异常仍触发；首要位置为补货与调拨安排。</p><time>9月17日 19:04 · 系统规则引擎</time></div><div class="wo-event bo-sync" id="bo-start-event"><b>门店开始处理</b><p>小李已查看证据并开始核对。</p><time>刚刚 · 小李</time></div><div class="wo-event bo-sync" id="bo-draft-event"><b>建立紧急补货草稿</b><p>PO-SIM-S1-001 已关联原工单。</p><time>刚刚 · 小李</time></div><div class="wo-event bo-sync" id="bo-receipt-event"><b>门店确认收货</b><p>RCV-SIM-S1-001 确认 1kg，生成库存流水并触发 V2。</p><time>刚刚 · 小李</time></div><div class="wo-event bo-sync" id="bo-v2-event"><b>V2 重算后恢复</b><p>理论库存更新为 2.74kg，S1 不再触发。</p><time>刚刚 · 系统规则引擎</time></div></div></div></section>
+            </div>
+
+            <aside class="bo-stack">
+              <section class="panel"><div class="panel-head"><h2>后台动作</h2></div><div class="panel-body"><div class="wo-actions"><a class="btn backend-link" href="https://inventory-count-closure-demo.gdjustwuxia.workers.dev/purchase-orders/" target="_blank" rel="noreferrer">订货管理</a><a class="btn backend-link" href="https://inventory-count-closure-demo.gdjustwuxia.workers.dev/receipt-orders/" target="_blank" rel="noreferrer">收货管理</a><a class="btn backend-link" href="https://inventory-count-closure-demo.gdjustwuxia.workers.dev/flows/" target="_blank" rel="noreferrer">库存流水</a><button class="btn" data-hq-to-store>查看门店端</button></div></div></section>
+              <section class="panel"><div class="panel-head"><h2>人工闭环门禁</h2></div><div class="panel-body bo-form"><label>最终原因<select id="bo-final-cause"><option value="">待填写</option><option value="restock_delay">补货安排滞后</option><option value="transfer_not_replenished">调拨后未及时补货</option></select></label><label>解决方式<textarea id="bo-resolution" placeholder="记录最终如何解决"></textarea></label><label>操作人<input value="王敏 · 总部库存运营"></label><label><input type="checkbox" id="bo-store-adopted"> 门店已采纳并执行</label><label><input type="checkbox" id="bo-hq-confirmed"> 总部已确认</label><button class="btn primary" id="bo-close" disabled>等待 V2 恢复后关闭</button><p class="muted" id="bo-close-note" style="font-size:12px;margin-bottom:0">必须有业务凭证、最新 V2 已恢复、最终原因、解决方式和双方确认。</p></div></section>
+            </aside>
+          </div>
         </div>
       </main>
     </div>
@@ -227,6 +250,12 @@
       document.querySelectorAll('[data-store-page]').forEach(page=>page.classList.toggle('active',page.dataset.storePage===target));
       document.querySelectorAll('.store-bottom [data-store-target]').forEach(button=>button.classList.toggle('active',button.dataset.storeTarget===target));
     };
+    const switchHqPage=target=>{
+      document.querySelectorAll('[data-hq-page]').forEach(page=>page.hidden=page.dataset.hqPage!==target);
+      document.querySelectorAll('.hq-side [data-hq-target]').forEach(button=>button.classList.toggle('active',button.dataset.hqTarget===target));
+      window.scrollTo({top:0,behavior:'smooth'});
+    };
+    document.querySelectorAll('[data-hq-target]').forEach(button=>button.addEventListener('click',()=>switchHqPage(button.dataset.hqTarget)));
     document.querySelectorAll('[data-store-target]').forEach(button=>button.addEventListener('click',()=>switchStorePage(button.dataset.storeTarget)));
     document.querySelectorAll('[data-assistant-context]').forEach(button=>button.addEventListener('click',()=>{
       document.getElementById('assistant-context').hidden=false;
@@ -247,24 +276,50 @@
     document.querySelectorAll('[data-toast]').forEach(button=>button.addEventListener('click',()=>showToast(button.dataset.toast)));
     document.querySelectorAll('[data-view-work-order]').forEach(button=>button.addEventListener('click',()=>{overlays.supervisor.classList.remove('open');overlays.workorder.classList.add('open')}));
     document.querySelectorAll('[data-wo-back]').forEach(button=>button.addEventListener('click',()=>{overlays.workorder.classList.remove('open');overlays.supervisor.classList.add('open')}));
+    const prototypeState={storeStarted:false,draftCreated:false,receiptConfirmed:false,supervisorAccepted:false,closed:false};
+    const renderBackoffice=()=>{
+      const show=(id,value)=>document.getElementById(id)?.classList.toggle('show',value);
+      show('bo-start-event',prototypeState.storeStarted);
+      show('bo-draft-event',prototypeState.draftCreated);
+      show('bo-receipt-event',prototypeState.receiptConfirmed);
+      show('bo-v2-event',prototypeState.receiptConfirmed);
+      show('bo-correction',prototypeState.receiptConfirmed);
+      document.getElementById('bo-helper').textContent=prototypeState.supervisorAccepted?'Rina · 雅加达北区':'—';
+      document.getElementById('bo-draft-state').textContent=prototypeState.draftCreated?'已建立':'待处理';
+      document.getElementById('bo-po-status').textContent=prototypeState.receiptConfirmed?'已完成':prototypeState.draftCreated?'等待门店确认':'待建立';
+      document.getElementById('bo-rcv-status').textContent=prototypeState.receiptConfirmed?'已确认入库':'待收货';
+      document.getElementById('bo-reassess-state').textContent=prototypeState.receiptConfirmed?'已恢复':'等待业务动作';
+      document.getElementById('bo-inventory').textContent=prototypeState.receiptConfirmed?'2.74 / 1.74 kg':'1.74 / 1.74 kg';
+      document.getElementById('bo-v2').textContent=prototypeState.receiptConfirmed?'已恢复':'仍触发';
+      document.getElementById('bo-v2').style.color=prototypeState.receiptConfirmed?'var(--green)':'var(--red)';
+      document.getElementById('bo-event-count').textContent=`${2+(prototypeState.storeStarted?1:0)+(prototypeState.draftCreated?1:0)+(prototypeState.receiptConfirmed?2:0)} 条`;
+      document.getElementById('bo-stage-reassess').classList.toggle('active',prototypeState.receiptConfirmed);
+      document.getElementById('bo-stage-close').classList.toggle('active',prototypeState.closed);
+      const gate=prototypeState.receiptConfirmed&&document.getElementById('bo-final-cause').value&&document.getElementById('bo-resolution').value.trim()&&document.getElementById('bo-store-adopted').checked&&document.getElementById('bo-hq-confirmed').checked;
+      const closeButton=document.getElementById('bo-close'); closeButton.disabled=!gate||prototypeState.closed; closeButton.textContent=prototypeState.closed?'工单已闭环':gate?'确认闭环':'等待满足关闭门禁';
+      document.getElementById('bo-status').textContent=prototypeState.closed?'已闭环':prototypeState.receiptConfirmed?'待人工闭环':prototypeState.storeStarted?'门店处理中':'门店待处理';
+      document.getElementById('bo-status').className=`tag ${prototypeState.closed?'green':'orange'}`;
+    };
     document.querySelectorAll('[data-open-store-task]').forEach(button=>button.addEventListener('click',()=>overlays.storeTask.classList.add('open')));
     document.getElementById('open-receipt-confirm').addEventListener('click',()=>overlays.receiptConfirm.classList.add('open'));
-    let storeStarted=false;
     document.getElementById('store-start-processing').addEventListener('click',event=>{
-      if(storeStarted)return;
-      storeStarted=true;
+      if(prototypeState.storeStarted)return;
+      prototypeState.storeStarted=true;
       document.getElementById('store-start-event').classList.add('show');
       document.getElementById('store-event-count').textContent='3 条';
       document.getElementById('store-task-status').textContent='门店处理中';
       event.currentTarget.textContent='处理中 · 请选择下一步';
       event.currentTarget.disabled=true;
+      renderBackoffice();
       showToast('已记录门店开始处理，操作将继续写入原工单');
     });
     document.getElementById('store-create-restock').addEventListener('click',()=>{
-      if(!storeStarted){showToast('请先点击“开始处理”');return;}
+      if(!prototypeState.storeStarted){showToast('请先点击“开始处理”');return;}
+      prototypeState.draftCreated=true;
       document.getElementById('store-draft-event').classList.add('show');
       document.getElementById('store-event-count').textContent='4 条';
       document.getElementById('store-task-status').textContent='等待门店确认草稿';
+      renderBackoffice();
       showToast('已建立补货草稿并关联 OPT-0868AD91');
     });
     document.getElementById('store-request-help').addEventListener('click',()=>{
@@ -274,6 +329,7 @@
     document.getElementById('confirm-receipt').addEventListener('click',event=>{
       const qty=Number(document.getElementById('received-qty').value);
       if(!(qty>0)){showToast('请填写大于 0 的实收数量');return;}
+      prototypeState.receiptConfirmed=true;
       document.getElementById('receipt-success').classList.add('show');
       document.getElementById('receipt-detail-status').textContent='已确认入库';
       document.getElementById('receipt-detail-status').className='tag green';
@@ -284,9 +340,16 @@
       document.getElementById('receipt-card-icon').textContent='✓';
       event.currentTarget.textContent='已确认入库'; event.currentTarget.disabled=true;
       const openReceiptButton=document.getElementById('open-receipt-confirm'); openReceiptButton.textContent='查看结果'; openReceiptButton.classList.remove('primary');
+      renderBackoffice();
       showToast('收货确认完成：库存流水、V2 快照和工单时间线已联动（模拟）');
     });
+    document.querySelectorAll('#bo-final-cause,#bo-resolution,#bo-store-adopted,#bo-hq-confirmed').forEach(input=>input.addEventListener('input',renderBackoffice));
+    document.getElementById('bo-close').addEventListener('click',()=>{prototypeState.closed=true;renderBackoffice();showToast('工单已完成总部确认并闭环（模拟）')});
+    document.querySelectorAll('[data-hq-to-store]').forEach(button=>button.addEventListener('click',()=>{
+      document.querySelector('[data-view-target="store"]').click(); overlays.storeTask.classList.add('open');
+    }));
     const acceptIntervention=()=>{
+      prototypeState.supervisorAccepted=true;
       document.getElementById('accepted-panel').classList.add('show');
       document.getElementById('accepted-event').classList.add('show');
       document.getElementById('wo-event-count').textContent='3 条';
@@ -296,19 +359,23 @@
       document.querySelectorAll('[data-post-accept]').forEach(button=>button.disabled=false);
       const acceptButton=document.getElementById('wo-accept'); acceptButton.textContent='已接受 · 继续处理'; acceptButton.disabled=true;
       overlays.supervisor.classList.remove('open'); overlays.workorder.classList.add('open');
+      renderBackoffice();
       showToast('已接受工单并写入责任移交记录');
     };
     document.querySelectorAll('[data-accept-intervention]').forEach(button=>button.addEventListener('click',acceptIntervention));
     document.querySelectorAll('[data-post-accept]').forEach(button=>button.addEventListener('click',()=>showToast(`已进入“${button.textContent}”流程（原型）`)));
     document.getElementById('simulate-restock').addEventListener('click',event=>{
+      prototypeState.draftCreated=true;
       document.getElementById('simulation-panel').classList.add('show');
       document.getElementById('restock-event').classList.add('show');
       document.getElementById('wo-event-count').textContent='4 条';
       document.getElementById('wo-status').textContent='等待门店确认';
       event.currentTarget.textContent='补货草稿已建立';
       event.currentTarget.disabled=true;
+      renderBackoffice();
       showToast('已模拟建立紧急补货草稿并关联原工单');
     });
+    renderBackoffice();
   </script>
 </body>
 </html>
