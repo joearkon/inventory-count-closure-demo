@@ -24,6 +24,7 @@
     .store-head{padding:24px 20px 28px;background:linear-gradient(135deg,#2f6bff,#2451d1);color:#fff}.store-brand{display:flex;align-items:center;justify-content:space-between}.store-brand h1{font-size:21px;margin:0 0 5px}.store-brand p{margin:0;color:#cfddff;font-size:13px}.date-pill{padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.14);font-size:12px}
     .focus-summary{margin-top:22px;padding:17px;border-radius:18px;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.16)}.focus-summary strong{font-size:25px}.focus-summary span{display:block;margin-top:5px;color:#dbe5ff;font-size:13px}
     .store-body{padding:16px 14px 92px}.section-row{display:flex;align-items:end;justify-content:space-between;margin:6px 3px 10px}.section-row h2{font-size:17px;margin:0}.section-row small{color:var(--muted)}
+    .selection-note{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;margin-bottom:12px;border:1px solid #dce6fa;background:#f5f8ff;border-radius:14px;font-size:12px;color:#506078}.selection-note b{color:var(--ink)}.selection-note button{border:0;background:transparent;color:var(--blue);font-weight:750;cursor:pointer;white-space:nowrap}.reminder-filters{display:flex;gap:7px;overflow:auto;padding:1px 2px 13px}.reminder-filters button{white-space:nowrap;border:1px solid var(--line);background:#fff;color:#68758a;border-radius:999px;padding:7px 11px;font-size:12px;cursor:pointer}.reminder-filters button.active{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:750}
     .priority-card{background:#fff;border:1px solid #dbe5fb;border-radius:18px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:14px}.priority-strip{height:4px;background:var(--blue)}.priority-inner{padding:17px}.priority-meta{display:flex;gap:7px;flex-wrap:wrap}.priority-card h3{font-size:19px;line-height:1.35;margin:13px 0 7px}.impact{font-size:14px;line-height:1.65;color:#40506a;margin:0 0 14px}.reason-box{background:#f7f9fd;border-radius:13px;padding:13px}.reason-box b{font-size:13px}.reason-box ul{padding-left:18px;margin:8px 0 0;color:#56657a;font-size:13px;line-height:1.75}.card-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px}.micro-actions{display:flex;justify-content:space-between;gap:7px;margin-top:12px;color:#6d7889;font-size:12px}.micro-actions button{border:0;background:transparent;color:inherit;padding:4px;cursor:pointer}
     .task-card,.brief-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:15px;margin-bottom:12px}.task-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.task-icon{width:38px;height:38px;border-radius:12px;background:var(--orange-weak);color:#b56809;display:grid;place-items:center;font-weight:800}.task-copy{flex:1}.task-copy h3{font-size:15px;margin:1px 0 5px}.task-copy p{font-size:13px;color:var(--muted);line-height:1.55;margin:0}.brief-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.metric{padding:10px;background:#f7f9fc;border-radius:11px}.metric small{display:block;color:var(--muted);font-size:10px}.metric b{display:block;margin-top:4px;font-size:14px}.brief-footer{margin-top:11px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:#526077;line-height:1.6}
     .store-bottom{position:absolute;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(3,1fr);padding:9px 10px 13px;background:rgba(255,255,255,.96);border-top:1px solid var(--line);backdrop-filter:blur(10px)}.store-bottom button{border:0;background:transparent;padding:7px;color:#778296;font-size:12px}.store-bottom button.active{color:var(--blue);font-weight:800}.nav-mark{display:block;margin:0 auto 4px;width:20px;height:20px;border:2px solid currentColor;border-radius:7px}
@@ -59,8 +60,10 @@
         <div class="focus-summary"><strong>今天只需处理 2 件事</strong><span>1 项影响库存准确性，1 项等待你确认收货</span></div>
       </header>
       <main class="store-body">
-        <div class="section-row"><h2>今天最重要</h2><small>按影响与可执行性排序</small></div>
-        <article class="priority-card">
+        <div class="selection-note"><span><b>18 条系统信号</b>已合并成 2 项可执行事项</span><button data-open="strategy">为什么只有 2 件？</button></div>
+        <div class="reminder-filters"><button class="active" data-reminder-filter="all">全部 4</button><button data-reminder-filter="action">需处理 2</button><button data-reminder-filter="result">处理结果 1</button><button data-reminder-filter="brief">经营简报 1</button></div>
+        <section data-reminder-section="action"><div class="section-row"><h2>今天最重要</h2><small>按影响与可执行性排序</small></div>
+        <article class="priority-card" data-reminder-kind="action">
           <div class="priority-strip"></div><div class="priority-inner">
             <div class="priority-meta"><span class="tag red">优先 1</span><span class="tag blue">库存准确性</span><span class="tag">预计 10 分钟</span></div>
             <h3>黑糖珍珠库存需要核对</h3>
@@ -70,14 +73,18 @@
             <div class="micro-actions"><button data-toast="已设置 2 小时后提醒">稍后提醒</button><button data-toast="已记录：需要督导帮助">需要帮助</button><button data-toast="已记录反馈，等待总部复核">与实际不符</button></div>
             <div class="state-line"><span>提醒：已查看</span><i></i><span class="current">工单：待处理</span><i></i><span>V2：仍触发</span></div>
           </div>
-        </article>
+        </article></section>
 
-        <div class="section-row"><h2>需要你处理</h2><small>普通提醒最多 3 条</small></div>
-        <article class="task-card"><div class="task-top"><div class="task-icon">02</div><div class="task-copy"><h3>确认一张收货单</h3><p>订货单 PO-0917-03 预计今天到货。确认实收数量后，系统才会更新库存。</p></div><span class="tag orange">待收货</span></div><div class="card-actions"><button class="btn primary" data-toast="已打开收货草稿（原型）">去确认</button><button class="btn" data-toast="已推迟到下午 4 点">下午提醒</button></div></article>
+        <section data-reminder-section="action"><div class="section-row"><h2>需要你处理</h2><small>普通提醒最多 3 条</small></div>
+        <article class="task-card" data-reminder-kind="action"><div class="task-top"><div class="task-icon">02</div><div class="task-copy"><h3>确认一张收货单</h3><p>订货单 PO-0917-03 预计今天到货。确认实收数量后，系统才会更新库存。</p></div><span class="tag orange">待收货</span></div><div class="card-actions"><button class="btn primary" data-toast="已打开收货草稿（原型）">去确认</button><button class="btn" data-toast="已推迟到下午 4 点">下午提醒</button></div></article>
+        </section>
 
-        <div class="section-row"><h2>今日经营简报</h2><small>每天只生成 1 次</small></div>
-        <article class="brief-card"><span class="eyebrow">截至昨日完整营业日</span><div class="brief-grid"><div class="metric"><small>销售杯数</small><b>318</b></div><div class="metric"><small>较前一周</small><b style="color:var(--green)">+6.2%</b></div><div class="metric"><small>待办完成</small><b>4 / 5</b></div></div><div class="brief-footer">销售总体稳定。今天优先完成库存核对，不额外推送普通销售波动。</div></article>
-        <article class="task-card" data-open="result"><div class="task-top"><div class="task-icon" style="background:var(--green-weak);color:var(--green)">✓</div><div class="task-copy"><h3>昨日问题已有处理结果</h3><p>牛奶安全库存已恢复。系统保留了处理前后两次 V2，本条只通知一次。</p></div><span class="tag green">已恢复</span></div></article>
+        <section data-reminder-section="brief"><div class="section-row"><h2>今日经营简报</h2><small>每天只生成 1 次</small></div>
+        <article class="brief-card" data-reminder-kind="brief"><span class="eyebrow">截至昨日完整营业日</span><div class="brief-grid"><div class="metric"><small>销售杯数</small><b>318</b></div><div class="metric"><small>较前一周</small><b style="color:var(--green)">+6.2%</b></div><div class="metric"><small>待办完成</small><b>4 / 5</b></div></div><div class="brief-footer">销售总体稳定。今天优先完成库存核对，不额外推送普通销售波动。</div></article>
+        </section>
+        <section data-reminder-section="result"><div class="section-row"><h2>处理结果</h2><small>状态变化只提醒一次</small></div>
+        <article class="task-card" data-reminder-kind="result" data-open="result"><div class="task-top"><div class="task-icon" style="background:var(--green-weak);color:var(--green)">✓</div><div class="task-copy"><h3>昨日问题已有处理结果</h3><p>牛奶安全库存已恢复。系统保留了处理前后两次 V2，本条只通知一次。</p></div><span class="tag green">已恢复</span></div></article>
+        </section>
       </main>
       <nav class="store-bottom"><button><span class="nav-mark"></span>任务</button><button class="active"><span class="nav-mark"></span>提醒</button><button data-open="assistant"><span class="nav-mark"></span>助手</button></nav>
     </div>
@@ -131,6 +138,7 @@
   <div class="overlay" id="detail-overlay"><aside class="drawer"><div class="drawer-head"><div><span class="eyebrow">总部聚合问题</span><h2>黑糖珍珠单位映射冲突</h2><p class="muted">一个总部问题，关联 3 家门店的 6 个独立工单。</p></div><button class="close" data-close>×</button></div><div class="explain-block"><h3>为什么交给总部</h3><p>多家门店在同一物料、同一规则版本下同时触发，且门店重复盘点不能解决。系统已将门店执行问题降级，把包装单位与基础单位换算列为首要原因。</p></div><div class="explain-block"><h3>处理后如何验证</h3><p>总部确认换算版本后，系统对 6 个工单重新运行 V2。恢复的工单等待人工结论；仍触发的工单回到门店继续核对业务事实。</p></div><button class="btn primary" style="width:100%" data-toast="已打开主数据治理任务（原型）">进入主数据治理</button></aside></div>
   <div class="overlay" id="supervisor-overlay"><aside class="drawer"><div class="drawer-head"><div><span class="eyebrow">督导介入</span><h2>同一工单，不复制异常</h2><p class="muted">提醒 NTF-018 · 工单 OPT-2FBCCD16</p></div><button class="close" data-close>×</button></div><div class="explain-block"><h3>当前状态</h3><p>门店已查看提醒，但尚未建立业务动作。工单仍为“待处理”，最新 V2 仍触发。提醒投递成功不改变工单状态。</p><div class="state-line"><span>提醒：已查看</span><i></i><span class="current">工单：待处理</span><i></i><span>V2：仍触发</span></div></div><div class="explain-block"><h3>督导可做</h3><p>联系门店、协助核对、派发现场复核或升级总部。督导不能通过“已处理”隐藏未恢复工单。</p></div><div class="card-actions"><button class="btn primary" data-toast="已记录督导介入（原型）">记录介入</button><button class="btn" data-toast="已打开原工单（原型）">查看原工单</button></div></aside></div>
   <div class="overlay" id="result-overlay"><aside class="drawer"><div class="drawer-head"><div><span class="eyebrow">处理结果</span><h2>牛奶安全库存已恢复</h2><p class="muted">状态变化只通知一次，历史仍可追溯。</p></div><button class="close" data-close>×</button></div><div class="explain-block"><h3>处理前后</h3><p>首次 V2：低于安全库存；收货确认后自动重算；最新 V2：不再触发。工单仍需人工填写最终原因和解决方式后关闭。</p></div><button class="btn primary" style="width:100%" data-toast="已打开闭环结论（原型）">填写闭环结论</button></aside></div>
+  <div class="overlay" id="strategy-overlay"><aside class="drawer"><div class="drawer-head"><div><span class="eyebrow">今日提醒策略</span><h2>系统没有把所有异常都推给你</h2><p class="muted">只保留今天有价值、门店能够处理的事项。</p></div><button class="close" data-close>×</button></div><div class="explain-block"><h3>18 条信号如何变成 2 件事</h3><p>合并同一门店、同一物料和同一营业窗口的重复信号 7 条；已有工单且结论未变化 4 条；系统同步等待自动重试 3 条；门店无法处理的主数据问题转总部 2 条；最终保留 2 项门店可执行动作。</p></div><div class="explain-block"><h3>什么情况下会立即提醒</h3><p>预计影响营业、明确等待门店动作、SLA 即将超时，或者已经处理的问题重新触发。普通销售波动只进入每日经营简报。</p></div></aside></div>
   <div class="toast" id="toast"></div>
   <script>
     const views=[...document.querySelectorAll('[data-view]')];
@@ -139,10 +147,16 @@
       views.forEach(view=>view.classList.toggle('active',view.dataset.view===button.dataset.viewTarget));
       window.scrollTo({top:0,behavior:'smooth'});
     }));
-    const overlays={assistant:document.getElementById('assistant-overlay'),detail:document.getElementById('detail-overlay'),supervisor:document.getElementById('supervisor-overlay'),result:document.getElementById('result-overlay')};
+    const overlays={assistant:document.getElementById('assistant-overlay'),detail:document.getElementById('detail-overlay'),supervisor:document.getElementById('supervisor-overlay'),result:document.getElementById('result-overlay'),strategy:document.getElementById('strategy-overlay')};
     document.querySelectorAll('[data-open]').forEach(button=>button.addEventListener('click',()=>overlays[button.dataset.open]?.classList.add('open')));
     document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>button.closest('.overlay').classList.remove('open')));
     document.querySelectorAll('.overlay').forEach(overlay=>overlay.addEventListener('click',event=>{if(event.target===overlay)overlay.classList.remove('open')}));
+    document.querySelectorAll('[data-reminder-filter]').forEach(button=>button.addEventListener('click',()=>{
+      document.querySelectorAll('[data-reminder-filter]').forEach(item=>item.classList.toggle('active',item===button));
+      const selected=button.dataset.reminderFilter;
+      document.querySelectorAll('[data-reminder-kind]').forEach(card=>card.hidden=selected!=='all'&&card.dataset.reminderKind!==selected);
+      document.querySelectorAll('[data-reminder-section]').forEach(section=>section.hidden=selected!=='all'&&section.dataset.reminderSection!==selected);
+    }));
     const toast=document.getElementById('toast'); let toastTimer;
     document.querySelectorAll('[data-toast]').forEach(button=>button.addEventListener('click',()=>{toast.textContent=button.dataset.toast;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1800)}));
   </script>
