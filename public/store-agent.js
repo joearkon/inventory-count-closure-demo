@@ -11,8 +11,10 @@
     if (Number(parts.hour) < 4) date.setUTCDate(date.getUTCDate() - 1);
     return date.toISOString().slice(0, 10);
   })();
-  const chat = by('store-agent-chat'), input = by('store-agent-input'), send = by('store-agent-send'), mic = by('store-agent-mic'), voiceNote = by('store-agent-voice-note'), voiceOverlay = by('store-agent-voice-overlay'), voiceOverlayTitle = by('store-agent-voice-overlay-title'), voiceOverlayText = by('store-agent-voice-overlay-text'), voiceCancel = by('store-agent-voice-cancel'), voiceFinish = by('store-agent-voice-finish'), language = by('store-agent-language'), voiceQa = by('store-agent-voice-qa');
+  const chat = by('store-agent-chat'), input = by('store-agent-input'), send = by('store-agent-send'), mic = by('store-agent-mic'), voiceNote = by('store-agent-voice-note'), voiceOverlay = by('store-agent-voice-overlay'), voiceOverlayTitle = by('store-agent-voice-overlay-title'), voiceOverlayText = by('store-agent-voice-overlay-text'), voiceCancel = by('store-agent-voice-cancel'), voiceFinish = by('store-agent-voice-finish'), language = by('store-agent-language'), voiceQa = by('store-agent-voice-qa'), voiceSettings = by('store-agent-voice-settings'), voiceSettingsToggle = by('store-agent-settings-toggle');
   if (voiceQa) voiceQa.href = `/voice-qa/?store=${encodeURIComponent(storeCode)}`;
+  const savedVoiceLanguage = localStorage.getItem('store-agent-voice-language');
+  if (language && [...language.options].some((option) => option.value === savedVoiceLanguage)) language.value = savedVoiceLanguage;
   const sheet = by('agent-sheet'), sheetTitle = by('agent-sheet-title'), sheetForm = by('agent-sheet-form'), sheetStatus = by('agent-sheet-status'), sheetSubmit = by('agent-sheet-submit');
   let welcomed = false, busy = false, speaking = false, voicePermissionPending = false, discardVoice = false, mediaRecorder = null, activeVoiceStream = null, voiceChunks = [], ledger = [], draft = null, latestStoreState = null;
   fetch('/api/auth/session').then(async (response) => {
@@ -255,6 +257,12 @@
   chat.addEventListener('click', (event) => { if (event.target.closest('[data-agent-open-sheet]')) { openSheet(); return; } const taskButton = event.target.closest('[data-agent-task-action]'); if (!taskButton) return; const type = taskButton.dataset.agentTaskAction; if (type === 'open_task_tab') { window.switchStoreTab?.('tasks'); return; } const intent = intentFromAction({ type }); if (!intent) return; startDraft(intent, { plan_no: taskButton.dataset.agentTaskPlan || '', request_id: taskButton.dataset.agentTaskRequest || '', direction: taskButton.dataset.agentTaskDirection || '' }, '', false); openSheet(); });
   mic.addEventListener('click', (event) => { event.preventDefault(); if (speaking) { if (voicePermissionPending) cancelVoice(); else stopVoice(); } else startVoice(); });
   voiceFinish?.addEventListener('click', stopVoice); voiceCancel?.addEventListener('click', cancelVoice);
+  const closeVoiceSettings = () => { if (!voiceSettings || !voiceSettingsToggle) return; voiceSettings.hidden = true; voiceSettingsToggle.setAttribute('aria-expanded', 'false'); };
+  voiceSettingsToggle?.addEventListener('click', (event) => { event.stopPropagation(); const opening = voiceSettings.hidden; voiceSettings.hidden = !opening; voiceSettingsToggle.setAttribute('aria-expanded', String(opening)); });
+  voiceSettings?.addEventListener('click', (event) => event.stopPropagation());
+  document.addEventListener('click', closeVoiceSettings);
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeVoiceSettings(); });
+  language?.addEventListener('change', () => localStorage.setItem('store-agent-voice-language', language.value));
   [by('agent-sheet-close'), by('agent-sheet-cancel')].forEach((button) => button?.addEventListener('click', closeSheet)); sheetForm.addEventListener('submit', submitSheet);
   window.storeAgentTabOpened = welcome;
   window.storeAgentAsk = async (message) => {

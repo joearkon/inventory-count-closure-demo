@@ -217,7 +217,9 @@ await check('growing lists use pagination and lightweight API views', async () =
 await check('store HTML exposes three speech languages and safe fallback', async () => {
   const [page, script, voiceQaScript] = await Promise.all([fetch(`${base}/store/?store=STORE001`).then((r) => r.text()), fetch(`${base}/store-agent.js`).then((r) => r.text()), fetch(`${base}/voice-qa-page.js`).then((r) => r.text())]);
   for (const token of ['agent-language', 'value="auto" selected', 'zh-CN', 'en-US', 'id-ID']) if (!page.includes(token)) throw new Error(`missing ${token} in store page`);
-  if (!/class="agent-voice-settings" hidden/.test(page)) throw new Error('automatic speech detection must not expose a scrolling language selector in the store UI');
+  if (!/id="store-agent-settings-toggle"/.test(page) || !/id="store-agent-voice-settings" hidden/.test(page)) throw new Error('voice language selection must live in a hidden assistant-header settings panel');
+  if (/class="agent-helper"/.test(page) || /语音自动识别中文、English 和 Bahasa Indonesia/.test(page)) throw new Error('legacy scrolling voice settings must be removed from the store UI');
+  if (!/voiceSettingsToggle\?\.addEventListener/.test(script) || !/voiceSettings\.hidden/.test(script)) throw new Error('assistant-header voice settings must support explicit open and close interactions');
   if (!/MediaRecorder/.test(script) || !/\/api\/voice-transcribe/.test(script) || !/selectedLang !== 'auto'/.test(script)) throw new Error('store assistant must use recorded audio and automatic server ASR by default');
   if (!/不可用|unavailable|tidak tersedia/i.test(`${page}\n${script}`)) throw new Error('speech fallback message missing');
   if (!/not-allowed/.test(script) || !/no-speech/.test(script) || !/Akses mikrofon belum diizinkan/.test(script)) throw new Error('localized speech error handling missing');
