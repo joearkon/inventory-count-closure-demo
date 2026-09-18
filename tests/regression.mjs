@@ -97,11 +97,25 @@ await check('new pages are served', async () => {
 
 await check('mobile login has a dedicated touch layout', async () => {
   const page = await fetch(`${base}/login/`).then((r) => r.text());
-  for (const token of ['viewport-fit=cover', '@media(max-width:720px)', 'min-height:100dvh', 'grid-template-columns:1fr', 'env(safe-area-inset-bottom)', 'font-size:16px', '移动端登录', '登录移动工作台']) {
+  for (const token of ['viewport-fit=cover', '@media(max-width:720px)', 'min-height:100dvh', 'grid-template-columns:1fr', 'env(safe-area-inset-bottom)', '选择人物进入', 'enter-arrow']) {
     if (!page.includes(token)) throw new Error(`missing mobile login token: ${token}`);
   }
   if (!page.includes('touch-action:manipulation')) throw new Error('mobile login choices and submit action must be touch-friendly');
-  return { breakpoint:720, account_layout:'single-column', ios_input_zoom_prevented:true, safe_area:true };
+  if (page.includes('type="password"') || page.includes('账号邮箱')) throw new Error('mobile demo login must not ask for credentials');
+  return { breakpoint:720, account_layout:'single-column', direct_identity_select:true, safe_area:true };
+});
+
+await check('demo identity selection creates a scoped server session', async () => {
+  const optionsResponse = await nativeFetch(`${base}/api/auth/options?portal=mobile`);
+  const options = await optionsResponse.json();
+  if (!optionsResponse.ok || options.mode !== 'demo_identity_select') throw new Error(`unexpected auth mode: ${options.mode}`);
+  const response = await nativeFetch(`${base}/api/auth/demo-login`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ account_id:'ACC-STORE-LI', portal:'mobile' }) });
+  const data = await response.json();
+  if (!response.ok || !data.account?.role_ids?.includes('store_staff') || !String(data.home).startsWith('/store/')) throw new Error(`direct selection failed: ${JSON.stringify(data)}`);
+  if (!(response.headers.get('set-cookie') || '').includes('HttpOnly')) throw new Error('direct selection must issue an HttpOnly session cookie');
+  const denied = await nativeFetch(`${base}/api/auth/demo-login`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ account_id:'ACC-HQ-WANG', portal:'mobile' }) });
+  if (denied.status !== 403) throw new Error(`mobile portal accepted HQ identity: ${denied.status}`);
+  return { mode:options.mode, identity:data.account.display_name, home:data.home, hq_mobile_denied:true };
 });
 
 await check('store mobile header identifies the assistant', async () => {

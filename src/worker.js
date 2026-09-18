@@ -4452,7 +4452,7 @@ function r2PortalAllowsAccount(account, portal = '') {
 async function r2AuthOptions(env, portal = '') {
   const value = await r2DemoState(env);
   return json({
-    mode: 'demo_password',
+    mode: 'demo_identity_select',
     portal: ['hq', 'mobile'].includes(portal) ? portal : 'all',
     accounts: r2NormalizeAccounts(value.accounts).filter((item) => item.status === 'active' && item.source === 'demo_seed' && r2PortalAllowsAccount(item, portal)).map((item) => ({
       id:item.id, display_name:item.display_name, email:item.email, identity_label:item.identity_label,
@@ -4460,6 +4460,28 @@ async function r2AuthOptions(env, portal = '') {
     })),
     roles: r2DefaultRoleDefinitions()
   });
+}
+
+async function r2CreateAuthSession(env, value, account, auditAction) {
+  const token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+  const createdAt = now();
+  const expiresAt = new Date(Date.now() + R2_SESSION_MAX_AGE * 1000).toISOString();
+  value.authSessions = (value.authSessions || []).filter((item) => new Date(item.expires_at).getTime() > Date.now() && item.account_id !== account.id);
+  value.authSessions.unshift({ id:id('SES'), account_id:account.id, token_hash:await r2TokenHash(token), created_at:createdAt, expires_at:expiresAt });
+  value.activeAccountId = account.id;
+  r2Audit(value, account.display_name, auditAction, `${account.email} · ${account.role_ids.join('、')}`, account.id);
+  await r2SaveDemoState(env, value, 'auth-login');
+  return r2AuthResponse({ account:r2SafeAccount(account), expires_at:expiresAt, home:r2AuthHome(account) }, 200, `${R2_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${R2_SESSION_MAX_AGE}`);
+}
+
+async function r2AuthDemoLogin(env, body = {}) {
+  const accountId = String(body.account_id || body.accountId || '').trim();
+  const portal = ['hq', 'mobile'].includes(body.portal) ? body.portal : '';
+  const value = await r2DemoState(env);
+  const account = r2NormalizeAccounts(value.accounts).find((item) => item.id === accountId && item.status === 'active' && item.source === 'demo_seed');
+  if (!account) return bad('演示人物不存在或已停用。', 404);
+  if (!r2PortalAllowsAccount(account, portal)) return bad(portal === 'hq' ? '该人物不是总部人员，请从移动端入口选择。' : '总部人员请从总部后台入口选择。', 403);
+  return r2CreateAuthSession(env, value, account, '演示身份直接进入');
 }
 
 async function r2AuthLogin(env, body = {}) {
@@ -4471,15 +4493,7 @@ async function r2AuthLogin(env, body = {}) {
   const matches = account?.password_hash && password && await r2PasswordHash(account.password_salt, password) === account.password_hash;
   if (!matches) return bad('账号或密码不正确。', 401);
   if (!r2PortalAllowsAccount(account, portal)) return bad(portal === 'hq' ? '该账号不是总部人员，请从移动端入口登录。' : '总部人员请从总部后台入口登录。', 403);
-  const token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
-  const createdAt = now();
-  const expiresAt = new Date(Date.now() + R2_SESSION_MAX_AGE * 1000).toISOString();
-  value.authSessions = (value.authSessions || []).filter((item) => new Date(item.expires_at).getTime() > Date.now() && item.account_id !== account.id);
-  value.authSessions.unshift({ id:id('SES'), account_id:account.id, token_hash:await r2TokenHash(token), created_at:createdAt, expires_at:expiresAt });
-  value.activeAccountId = account.id;
-  r2Audit(value, account.display_name, '演示账号登录', `${account.email} · ${account.role_ids.join('、')}`, account.id);
-  await r2SaveDemoState(env, value, 'auth-login');
-  return r2AuthResponse({ account:r2SafeAccount(account), expires_at:expiresAt, home:r2AuthHome(account) }, 200, `${R2_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${R2_SESSION_MAX_AGE}`);
+  return r2CreateAuthSession(env, value, account, '演示账号密码登录');
 }
 
 async function r2AuthSession(env, request) {
@@ -4671,6 +4685,7 @@ export default {
       return env.ASSETS.fetch(request);
     }
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/auth/options') return r2AuthOptions(env, url.searchParams.get('portal') || '');
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/auth/demo-login') return r2AuthDemoLogin(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/auth/login') return r2AuthLogin(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/auth/session') return r2AuthSession(env, request);
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/auth/logout') return r2AuthLogout(env, request);
