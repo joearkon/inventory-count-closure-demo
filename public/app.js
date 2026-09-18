@@ -173,7 +173,7 @@
       <div class="task-code">工单 ${esc(task.id)}${task.source_anomaly_id ? ` · 来源研判 ${esc(task.source_anomaly_id)}` : ' · 来源：总部运营任务'}</div>
       <div class="task-meta">${esc(task.instruction)}<br>责任人：${esc(task.assigned_to)}</div>
       <details class="task-detail" open><summary>系统已核对</summary><p>下发时间：${esc(formatDate(task.created_at))}。任务来自后台统一工单；提交处理凭证后进入总部验收，并在同一条时间线保留操作人与结果。</p></details>
-      ${isPending ? `<div class="task-action"><button class="btn btn-primary" id="operation-submit-btn">开始核对</button><a class="btn btn-outline" href="/work-order/?id=${encodeURIComponent(task.id)}">查看原工单</a></div>` : ''}
+      ${isPending ? '<div class="task-action"><button class="btn btn-primary" id="operation-submit-btn">开始核对</button><button class="btn btn-outline" id="operation-ask-agent-btn" type="button">问门店助手</button></div>' : ''}
       ${isReview ? `<div class="task-action"><span class="pending-copy">已提交凭证：${esc(task.proof_filename)}；等待总部验收。</span></div>` : ''}
       ${task.status === 'closed' ? `<div class="task-action"><span class="closed-copy">${esc(task.resolution)} · ${formatDuration(task.created_at, task.closed_at)}</span></div>` : ''}
       </div></div>`;
@@ -250,6 +250,12 @@
     document.querySelector('#recount-btn')?.addEventListener('click', () => openPicker('inventory_count', 'recheck'));
     document.querySelector('#daily-count-btn')?.addEventListener('click', () => openPicker('inventory_count', 'initial'));
     document.querySelector('#operation-submit-btn')?.addEventListener('click', () => document.querySelector('#operation-proof-file').click());
+    document.querySelector('#operation-ask-agent-btn')?.addEventListener('click', async () => {
+      if (!actionableOperationTask) return;
+      const prompt = `我正在处理工单 ${actionableOperationTask.id}：${actionableOperationTask.title}。任务要求是：${actionableOperationTask.instruction}。请告诉我应该先核对什么，并带我完成下一步。`;
+      if (typeof window.storeAgentAsk === 'function') await window.storeAgentAsk(prompt);
+      else window.switchStoreTab?.('agent');
+    });
   }
 
   function operationTaskAction(task) {

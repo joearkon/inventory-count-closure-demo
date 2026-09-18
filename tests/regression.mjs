@@ -112,8 +112,10 @@ await check('store vNext keeps reminders, operations and conversational assistan
   for (const action of ['restock', 'receipt', 'count', 'transfer', 'scrap', 'inventory']) if (!page.includes(`data-common-action="${action}"`)) throw new Error(`missing store operation: ${action}`);
   if (!page.includes('id="store-agent-chat"') || !page.includes('id="store-agent-input"') || !page.includes('id="store-agent-mic"')) throw new Error('conversational assistant must be preserved');
   if (!storeScript.includes("action === 'inventory'") || !storeScript.includes("ask('查看当前库存')")) throw new Error('inventory query must enter the assistant flow');
-  if (!appScript.includes("status === 'pending_store_submission'") || !appScript.includes('查看原工单')) throw new Error('priority reminders must be store-actionable and traceable to the original work order');
-  return { reminder_sections:4, operation_entries:6, conversation_preserved:true, work_order_traceable:true };
+  if (!appScript.includes("status === 'pending_store_submission'") || !appScript.includes('问门店助手') || !appScript.includes('window.storeAgentAsk(prompt)')) throw new Error('priority reminders must keep the store user inside the assistant workflow');
+  if (appScript.includes('id="operation-ask-agent-btn" href="/work-order/')) throw new Error('store task assistant action must not navigate to the HQ work order page');
+  if (!storeScript.includes('window.storeAgentAsk = async')) throw new Error('contextual store assistant entry is missing');
+  return { reminder_sections:4, operation_entries:6, conversation_preserved:true, store_assistant_handoff:true };
 });
 
 await check('follow-up work orders use a traceable full detail page', async () => {

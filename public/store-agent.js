@@ -252,6 +252,11 @@
   voiceFinish?.addEventListener('click', stopVoice); voiceCancel?.addEventListener('click', cancelVoice);
   [by('agent-sheet-close'), by('agent-sheet-cancel')].forEach((button) => button?.addEventListener('click', closeSheet)); sheetForm.addEventListener('submit', submitSheet);
   window.storeAgentTabOpened = welcome;
+  window.storeAgentAsk = async (message) => {
+    window.switchStoreTab?.('agent');
+    await welcome();
+    return ask(message);
+  };
   window.storeOpsRefresh = loadLedger;
   window.storeOperationOpen = async (action) => {
     if (action === 'inventory') {
