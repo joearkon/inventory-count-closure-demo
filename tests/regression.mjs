@@ -119,6 +119,7 @@ await check('store vNext keeps reminders, operations and conversational assistan
   for (const token of ['当前账号', '上级督导', 'summary-business-date', 'summary-data-note']) if (!page.includes(token)) throw new Error(`missing store accountability or date token: ${token}`);
   if (!appScript.includes("'尚未回传'") || !appScript.includes('available_for_business_date')) throw new Error('sales must not fall back to a misleading zero when the business day has no return');
   if (!appScript.includes('营业日 ${esc(task.business_date')) throw new Error('store work orders must show their business date');
+  if (!page.includes('id="operation-task-secondary"') || !appScript.includes('actionableOperationTasks.slice(1)') || !appScript.includes('data-store-operation-submit')) throw new Error('all pending store work orders must render after the single priority task');
   if (bootstrap.businessCalendar?.time_zone !== 'Asia/Jakarta' || bootstrap.businessCalendar?.cutoff_hour !== 4 || bootstrap.businessDate !== bootstrap.businessCalendar.business_date) throw new Error(`invalid business calendar: ${JSON.stringify(bootstrap.businessCalendar)}`);
   if ((bootstrap.ledger || []).some((row) => row.as_of_business_date !== bootstrap.ledger_as_of_business_date || row.is_current_business_date !== bootstrap.ledger_is_current)) throw new Error('ledger freshness metadata is inconsistent');
   if (!bootstrap.feishuImport?.available_for_business_date && bootstrap.feishuImport?.latest_sales_qty !== null) throw new Error('stale sales quantity must be null');

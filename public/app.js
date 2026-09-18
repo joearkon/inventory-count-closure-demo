@@ -10,6 +10,7 @@
   let selectedDocumentType = 'inventory_count';
   let uploadBusy = false;
   let operationProofBusy = false;
+  let selectedStoreOperationTaskId = null;
   let latestStoreState = null;
   let latestHqState = null;
   let selectedOperationTaskId = null;
@@ -163,17 +164,17 @@
       <div class="task-meta">${task.status === 'pending_hq_decision' ? '首次盘点已完成；牛奶差异较大，系统已推送总部审核，等待是否要求复盘。' : task.status === 'pending_store_recount' ? '总部要求对牛奶单独复盘，请查看下方任务。' : task.status === 'pending_hq_review' ? '牛奶复盘已提交，等待总部最终确认。' : `本次盘点任务已完成闭环（${formatDuration(task.created_at, task.closed_at)}）。`}</div></div></div>`;
   }
 
-  function operationStoreTask(task, fallbackBusinessDate = '') {
+  function operationStoreTask(task, fallbackBusinessDate = '', primary = false) {
     if (!task) return '';
     const isPending = task.status === 'pending_store_submission';
     const isReview = task.status === 'pending_hq_review';
-    return `<div class="task-item count-task operation-task demo-flow ${task.status === 'closed' ? 'closed-task' : ''}"><span class="store-demo-float">优先处理</span>
+    return `<div class="task-item count-task operation-task demo-flow ${task.status === 'closed' ? 'closed-task' : ''}" data-store-operation-task="${esc(task.id)}"><span class="store-demo-float">${primary ? '优先处理' : '待处理'}</span>
       <div class="task-icon ${task.status === 'closed' ? 'green' : 'blue'}">${task.status === 'closed' ? '✓' : '📌'}</div>
       <div class="task-body"><div class="task-title">${esc(task.title)}<span class="badge-direct">${operationStatusText(task.status)}</span></div>
       <div class="task-code">工单 ${esc(task.id)} · 营业日 ${esc(task.business_date || String(task.created_at || '').slice(0, 10) || fallbackBusinessDate || '未标注')}${task.source_anomaly_id ? ` · 来源研判 ${esc(task.source_anomaly_id)}` : ' · 来源：总部运营任务'}</div>
       <div class="task-meta">${esc(task.instruction)}<br>责任人：${esc(task.assigned_to)}</div>
       <details class="task-detail" open><summary>系统已核对</summary><p>下发时间：${esc(formatDate(task.created_at))}。任务来自后台统一工单；提交处理凭证后进入总部验收，并在同一条时间线保留操作人与结果。</p></details>
-      ${isPending ? '<div class="task-action"><button class="btn btn-primary" id="operation-submit-btn">开始核对</button><button class="btn btn-outline" id="operation-ask-agent-btn" type="button">问门店助手</button></div>' : ''}
+      ${isPending ? `<div class="task-action"><button class="btn btn-primary" type="button" data-store-operation-submit="${esc(task.id)}">开始核对</button><button class="btn btn-outline" type="button" data-store-operation-ask="${esc(task.id)}">问门店助手</button></div>` : ''}
       ${isReview ? `<div class="task-action"><span class="pending-copy">已提交凭证：${esc(task.proof_filename)}；等待总部验收。</span></div>` : ''}
       ${task.status === 'closed' ? `<div class="task-action"><span class="closed-copy">${esc(task.resolution)} · ${formatDuration(task.created_at, task.closed_at)}</span></div>` : ''}
       </div></div>`;
@@ -212,8 +213,11 @@
     const planCount = document.querySelector('#header-plan-count'); if (planCount) planCount.textContent = String((state.countPlans || []).filter((plan) => plan.store_code === storeCode && plan.business_date === today).length);
     const taskArea = document.querySelector('#count-task-area');
     if (taskArea) taskArea.innerHTML = taskCard(state.task);
-    const actionableOperationTask = storeOperationTasks.find((item) => item.status === 'pending_store_submission') || null;
-    document.querySelector('#operation-task-area').innerHTML = operationStoreTask(actionableOperationTask, businessDate);
+    const actionableOperationTasks = storeOperationTasks.filter((item) => item.status === 'pending_store_submission');
+    const actionableOperationTask = actionableOperationTasks[0] || null;
+    document.querySelector('#operation-task-area').innerHTML = operationStoreTask(actionableOperationTask, businessDate, true);
+    const secondaryOperationArea = document.querySelector('#operation-task-secondary');
+    if (secondaryOperationArea) secondaryOperationArea.innerHTML = actionableOperationTasks.slice(1).map((task) => operationStoreTask(task, businessDate)).join('');
     renderDocuments(state.documents);
     const todoCount = document.querySelector('#todo-count');
     if (!state.task) {
@@ -258,13 +262,17 @@
     syncUploadControl(state.task);
     document.querySelector('#recount-btn')?.addEventListener('click', () => openPicker('inventory_count', 'recheck'));
     document.querySelector('#daily-count-btn')?.addEventListener('click', () => openPicker('inventory_count', 'initial'));
-    document.querySelector('#operation-submit-btn')?.addEventListener('click', () => document.querySelector('#operation-proof-file').click());
-    document.querySelector('#operation-ask-agent-btn')?.addEventListener('click', async () => {
-      if (!actionableOperationTask) return;
-      const prompt = `我正在处理工单 ${actionableOperationTask.id}：${actionableOperationTask.title}。任务要求是：${actionableOperationTask.instruction}。请告诉我应该先核对什么，并带我完成下一步。`;
+    document.querySelectorAll('[data-store-operation-submit]').forEach((button) => button.addEventListener('click', () => {
+      selectedStoreOperationTaskId = button.dataset.storeOperationSubmit;
+      document.querySelector('#operation-proof-file').click();
+    }));
+    document.querySelectorAll('[data-store-operation-ask]').forEach((button) => button.addEventListener('click', async () => {
+      const task = actionableOperationTasks.find((item) => item.id === button.dataset.storeOperationAsk);
+      if (!task) return;
+      const prompt = `我正在处理工单 ${task.id}：${task.title}。任务要求是：${task.instruction}。请告诉我应该先核对什么，并带我完成下一步。`;
       if (typeof window.storeAgentAsk === 'function') await window.storeAgentAsk(prompt);
       else window.switchStoreTab?.('agent');
-    });
+    }));
   }
 
   function operationTaskAction(task) {
@@ -416,16 +424,18 @@
   async function submitOperationProof() {
     const input = document.querySelector('#operation-proof-file');
     const file = input.files?.[0];
-    const task = latestStoreState?.operationTask;
+    const task = (latestStoreState?.operationTasks || []).find((item) => item.id === selectedStoreOperationTaskId)
+      || latestStoreState?.operationTask;
     if (!file || !task || operationProofBusy) return;
     operationProofBusy = true;
-    const button = document.querySelector('#operation-submit-btn');
+    const button = document.querySelector(`[data-store-operation-submit="${CSS.escape(task.id)}"]`);
     const restore = setButtonLoading(button, '提交中…');
     setStoreMessage(`正在上传巡检凭证：${file.name}。`, 'warning');
     try {
       const previewData = await makePreviewData(file);
       const state = await api(`/api/operation-tasks/${task.id}/submit`, { method: 'POST', body: JSON.stringify({ filename: file.name, previewData }) });
       operationProofBusy = false;
+      selectedStoreOperationTaskId = null;
       renderStore(state);
       setStoreMessage('巡检凭证已提交，总部刷新后可验收关闭。', 'success');
     } catch (error) {
