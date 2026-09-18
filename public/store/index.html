@@ -53,7 +53,7 @@
   }
   .header-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:14px; }
   .header-date { font-size:12px; padding:3px 9px; border-radius:12px; background:rgba(255,255,255,.16); color:rgba(255,255,255,.9); white-space:nowrap; }
-  .header-session { display:flex;align-items:center;gap:6px }.header-user{font-size:11px;color:rgba(255,255,255,.9)}.header-logout{border:1px solid rgba(255,255,255,.35);border-radius:9px;background:transparent;color:#fff;padding:3px 7px;font:11px inherit}.store-scope-switcher{display:none;max-width:118px;border:1px solid rgba(255,255,255,.32);border-radius:9px;background:rgba(255,255,255,.14);color:#fff;padding:4px 7px;font:11px inherit}.store-scope-switcher option{color:#172033;background:#fff}
+  .header-session { display:flex;align-items:center;gap:6px }.header-user{font-size:11px;color:rgba(255,255,255,.9)}.header-identity{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.header-identity-label{color:rgba(255,255,255,.72);font-size:11px}.header-supervisor{width:100%;margin-left:13px;color:rgba(255,255,255,.78);font-size:11px}.header-logout{border:1px solid rgba(255,255,255,.35);border-radius:9px;background:transparent;color:#fff;padding:3px 7px;font:11px inherit}.store-scope-switcher{display:none;max-width:118px;border:1px solid rgba(255,255,255,.32);border-radius:9px;background:rgba(255,255,255,.14);color:#fff;padding:4px 7px;font:11px inherit}.store-scope-switcher option{color:#172033;background:#fff}
   .stats-row { display:flex; gap:8px; }
   .stat-pill { flex:1; text-align:center; padding:8px 5px; border-radius:11px; background:rgba(255,255,255,.16); }
   .stat-number { display:block; font-size:20px; font-weight:700; }
@@ -342,7 +342,7 @@
 <body data-view="store">
 
 <div class="header">
-  <div class="header-top"><div><h1><span id="store-header-code">STORE001</span><span id="store-header-title"> · 门店助手</span></h1><div class="store-header-name" id="store-header-name">小茶日记</div><div class="header-identity"><span class="identity-dot"></span><span id="store-header-user">读取身份…</span><span class="badge-direct" id="store-header-role">门店</span></div></div><div class="header-session"><select class="store-scope-switcher" id="store-scope-switcher" aria-label="切换授权门店"></select><button class="header-logout" id="store-logout" type="button">退出</button><div class="header-date" id="store-header-date">今日</div></div></div>
+  <div class="header-top"><div><h1><span id="store-header-code">STORE001</span><span id="store-header-title"> · 门店助手</span></h1><div class="store-header-name" id="store-header-name">小茶日记</div><div class="header-identity"><span class="identity-dot"></span><span class="header-identity-label">当前账号</span><b id="store-header-user">读取身份…</b><span class="badge-direct" id="store-header-role">门店</span><span class="header-supervisor">上级督导：<b id="store-header-supervisor">读取中…</b></span></div></div><div class="header-session"><select class="store-scope-switcher" id="store-scope-switcher" aria-label="切换授权门店"></select><button class="header-logout" id="store-logout" type="button">退出</button><div class="header-date" id="store-header-date">营业日</div></div></div>
   <div class="focus-summary" id="today-stats"><strong>今天只需处理 <span id="header-todo-count">0</span> 件事</strong><span><b id="header-risk-count">0</b> 项已逾期，<b id="header-plan-count">0</b> 项盘点等待执行</span></div>
 </div>
 
@@ -373,13 +373,13 @@
 
 <div class="store-section-row reminder-brief"><h2>经营简报</h2><small>帮助判断，不制造额外待办</small></div>
 <div class="card store-brief-card reminder-brief" id="summary-card">
-  <div class="card-header"><span>昨日经营与库存</span><span class="today-count">系统汇总</span></div>
+  <div class="card-header"><span>经营与库存</span><span class="today-count" id="summary-business-date">营业日 —</span></div>
   <div class="summary"><div class="brief-grid">
-    <div class="brief-metric"><span>销量</span><b id="summary-sales">读取中</b></div>
+    <div class="brief-metric"><span id="summary-sales-label">销量数据</span><b id="summary-sales">读取中</b></div>
     <div class="brief-metric"><span>预警物料</span><b id="summary-risk" style="color:#d68a00">读取中</b></div>
     <div class="brief-metric"><span>损耗</span><b id="summary-loss">读取中</b></div>
     <div class="brief-metric"><span>台账状态</span><b id="summary-health">读取中</b></div>
-  </div><div class="brief-note">简报只使用现有销售快照、库存流水和盘点数据；数据不完整时会明确提示，不推算“潜在经营损失”。</div></div>
+  </div><div class="brief-note" id="summary-data-note">简报只使用当前营业日已经回传的数据；缺失时明确提示，不使用旧数据代替。</div></div>
 </div>
 
 <div class="store-section-row reminder-result"><h2>最近结果</h2><small>完成动作与关联单据可追溯</small></div>

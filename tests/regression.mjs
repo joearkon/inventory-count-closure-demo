@@ -115,7 +115,10 @@ await check('store vNext keeps reminders, operations and conversational assistan
   if (!appScript.includes("status === 'pending_store_submission'") || !appScript.includes('问门店助手') || !appScript.includes('window.storeAgentAsk(prompt)')) throw new Error('priority reminders must keep the store user inside the assistant workflow');
   if (appScript.includes('id="operation-ask-agent-btn" href="/work-order/')) throw new Error('store task assistant action must not navigate to the HQ work order page');
   if (!storeScript.includes('window.storeAgentAsk = async')) throw new Error('contextual store assistant entry is missing');
-  return { reminder_sections:4, operation_entries:6, conversation_preserved:true, store_assistant_handoff:true };
+  for (const token of ['当前账号', '上级督导', 'summary-business-date', 'summary-data-note']) if (!page.includes(token)) throw new Error(`missing store accountability or date token: ${token}`);
+  if (!appScript.includes("'尚未回传'") || !appScript.includes('available_for_business_date')) throw new Error('sales must not fall back to a misleading zero when the business day has no return');
+  if (!appScript.includes('营业日 ${esc(task.business_date')) throw new Error('store work orders must show their business date');
+  return { reminder_sections:4, operation_entries:6, conversation_preserved:true, store_assistant_handoff:true, business_date_visible:true, accountability_visible:true, stale_sales_suppressed:true };
 });
 
 await check('follow-up work orders use a traceable full detail page', async () => {

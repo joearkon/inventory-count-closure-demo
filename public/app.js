@@ -163,14 +163,14 @@
       <div class="task-meta">${task.status === 'pending_hq_decision' ? '首次盘点已完成；牛奶差异较大，系统已推送总部审核，等待是否要求复盘。' : task.status === 'pending_store_recount' ? '总部要求对牛奶单独复盘，请查看下方任务。' : task.status === 'pending_hq_review' ? '牛奶复盘已提交，等待总部最终确认。' : `本次盘点任务已完成闭环（${formatDuration(task.created_at, task.closed_at)}）。`}</div></div></div>`;
   }
 
-  function operationStoreTask(task) {
+  function operationStoreTask(task, fallbackBusinessDate = '') {
     if (!task) return '';
     const isPending = task.status === 'pending_store_submission';
     const isReview = task.status === 'pending_hq_review';
     return `<div class="task-item count-task operation-task demo-flow ${task.status === 'closed' ? 'closed-task' : ''}"><span class="store-demo-float">优先处理</span>
       <div class="task-icon ${task.status === 'closed' ? 'green' : 'blue'}">${task.status === 'closed' ? '✓' : '📌'}</div>
       <div class="task-body"><div class="task-title">${esc(task.title)}<span class="badge-direct">${operationStatusText(task.status)}</span></div>
-      <div class="task-code">工单 ${esc(task.id)}${task.source_anomaly_id ? ` · 来源研判 ${esc(task.source_anomaly_id)}` : ' · 来源：总部运营任务'}</div>
+      <div class="task-code">工单 ${esc(task.id)} · 营业日 ${esc(task.business_date || String(task.created_at || '').slice(0, 10) || fallbackBusinessDate || '未标注')}${task.source_anomaly_id ? ` · 来源研判 ${esc(task.source_anomaly_id)}` : ' · 来源：总部运营任务'}</div>
       <div class="task-meta">${esc(task.instruction)}<br>责任人：${esc(task.assigned_to)}</div>
       <details class="task-detail" open><summary>系统已核对</summary><p>下发时间：${esc(formatDate(task.created_at))}。任务来自后台统一工单；提交处理凭证后进入总部验收，并在同一条时间线保留操作人与结果。</p></details>
       ${isPending ? '<div class="task-action"><button class="btn btn-primary" id="operation-submit-btn">开始核对</button><button class="btn btn-outline" id="operation-ask-agent-btn" type="button">问门店助手</button></div>' : ''}
@@ -198,11 +198,13 @@
     latestStoreState = state;
     const storeCode = new URLSearchParams(window.location.search).get('store') || state.storeCode || 'STORE001';
     const storeMaster = state.storeMaster || {};
+    const businessDate = state.businessDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
     const headerCode = document.querySelector('#store-header-code'); if (headerCode) headerCode.textContent = storeMaster.store_code || storeCode;
     const headerName = document.querySelector('#store-header-name'); if (headerName) headerName.textContent = storeMaster.store_name || storeCode;
     const headerRole = document.querySelector('#store-header-role'); if (headerRole) headerRole.textContent = storeMaster.store_role || '门店';
     const footerName = document.querySelector('#store-footer-name'); if (footerName) footerName.textContent = `${storeMaster.store_name || storeCode} · ${storeMaster.store_code || storeCode}`;
-    const headerDate = document.querySelector('#store-header-date'); if (headerDate) headerDate.textContent = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', weekday: 'short' }).format(new Date());
+    const headerDate = document.querySelector('#store-header-date'); if (headerDate) headerDate.textContent = `营业日 ${businessDate.slice(5).replace('-', '/')}`;
+    const supervisorName = document.querySelector('#store-header-supervisor'); if (supervisorName) supervisorName.textContent = state.supervisor?.display_name || '尚未配置';
     const storeOperationTasks = (state.operationTasks || []).filter((item) => (item.store_code || item.assigned_store_code || storeCode) === storeCode);
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
     const overdueTasks = storeOperationTasks.filter((item) => item.status === 'pending_store_submission' && item.due_date && item.due_date < today);
@@ -211,7 +213,7 @@
     const taskArea = document.querySelector('#count-task-area');
     if (taskArea) taskArea.innerHTML = taskCard(state.task);
     const actionableOperationTask = storeOperationTasks.find((item) => item.status === 'pending_store_submission') || null;
-    document.querySelector('#operation-task-area').innerHTML = operationStoreTask(actionableOperationTask);
+    document.querySelector('#operation-task-area').innerHTML = operationStoreTask(actionableOperationTask, businessDate);
     renderDocuments(state.documents);
     const todoCount = document.querySelector('#todo-count');
     if (!state.task) {
@@ -232,7 +234,14 @@
       const total = operation + plans + receipts;
       if (todoCount) todoCount.textContent = String(total);
       const headerTodo = document.querySelector('#header-todo-count'); if (headerTodo) headerTodo.textContent = String(total);
-      const summarySales = document.querySelector('#summary-sales'); if (summarySales) summarySales.textContent = `${Number(latestStoreState?.feishuImport?.latest_sales_qty || 0).toLocaleString('zh-CN')} 杯`;
+      const importState = latestStoreState?.feishuImport || {};
+      const salesAvailable = Boolean(importState.available_for_business_date);
+      const summaryDate = document.querySelector('#summary-business-date'); if (summaryDate) summaryDate.textContent = `营业日 ${businessDate}`;
+      const summarySales = document.querySelector('#summary-sales'); if (summarySales) summarySales.textContent = salesAvailable ? `${Number(importState.latest_sales_qty).toLocaleString('zh-CN')} 杯` : '尚未回传';
+      const summarySalesLabel = document.querySelector('#summary-sales-label'); if (summarySalesLabel) summarySalesLabel.textContent = salesAvailable ? '销量' : '销量数据';
+      const summaryDataNote = document.querySelector('#summary-data-note'); if (summaryDataNote) summaryDataNote.textContent = salesAvailable
+        ? `销售数据已回传，统计营业日为 ${businessDate}；库存与损耗使用同一营业日口径。`
+        : `营业日 ${businessDate} 尚无销售回传${importState.latest_business_date ? `；最近一次销售快照为 ${importState.latest_business_date}，本简报不沿用旧销量` : ''}。库存任务和流水仍按各自营业日展示。`;
       const activeRisks = (latestStoreState?.materialAnomalies || []).filter((item) => !['closed','auto_closed'].includes(item.status));
       const summaryRisk = document.querySelector('#summary-risk'); if (summaryRisk) summaryRisk.textContent = `${activeRisks.length} 项`;
       const scrapQty = (latestStoreState?.materialEvents || []).filter((event) => event.type === 'scrap' && event.status === 'active').reduce((sum, event) => sum + Number(event.qty || 0), 0);

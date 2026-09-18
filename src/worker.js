@@ -736,7 +736,7 @@ async function r2CreateOperationTask(env, body) {
   if (!title || !instruction) return bad('请填写任务名称和执行要求。');
   const storeCode = String(body.storeCode || STORE_CODE).trim().slice(0, 64);
   const linkedDocumentIds = Array.isArray(body.linkedDocumentIds) ? body.linkedDocumentIds.map((item) => String(item).slice(0, 80)).filter(Boolean).slice(0, 20) : [];
-  const task = { id: id('OPT'), store_code: storeCode, task_type: String(body.taskType || 'custom').slice(0, 40), title, instruction, status: 'pending_store_submission', assigned_to: `${storeCode} 店长`, created_at: now(), source_anomaly_id: sourceAnomalyId || null, source_rule_code: String(body.sourceRuleCode || '').slice(0, 40) || null, linked_document_ids: [...new Set(linkedDocumentIds)], linked_event_ids: [] };
+  const task = { id: id('OPT'), store_code: storeCode, business_date: String(body.businessDate || body.business_date || chinaBusinessDate()).slice(0, 10), task_type: String(body.taskType || 'custom').slice(0, 40), title, instruction, status: 'pending_store_submission', assigned_to: `${storeCode} 店长`, created_at: now(), source_anomaly_id: sourceAnomalyId || null, source_rule_code: String(body.sourceRuleCode || '').slice(0, 40) || null, linked_document_ids: [...new Set(linkedDocumentIds)], linked_event_ids: [] };
   value.operationTasks.unshift(task); value.operationTask = task;
   r2Audit(value, '', '创建跟进工单', `${task.id} · ${task.title}`, task.id);
   return r2Result(await r2SaveDemoState(env, value, 'operation-create'), 201);
@@ -892,7 +892,7 @@ async function r2CreateDiagnosisWorkOrder(env, anomalyId) {
   const createdAt = now();
   const task = {
     id: id('OPT'), store_code: signal.store_code, task_type: copy.taskType, title: copy.title, instruction: copy.instruction,
-    status: 'pending_store_submission', assigned_to: `${signal.store_code} 店长`, created_at: createdAt, updated_at: createdAt,
+    business_date: signal.business_date || chinaBusinessDate(), status: 'pending_store_submission', assigned_to: `${signal.store_code} 店长`, created_at: createdAt, updated_at: createdAt,
     source_anomaly_id: signal.id, source_rule_code: signal.rule_code,
     linked_document_ids: sourceDocumentId ? [sourceDocumentId] : [], linked_event_ids: []
   };
@@ -2636,7 +2636,9 @@ async function r2StoreBootstrap(env, storeCode = STORE_CODE) {
   const calculated = value.feishuImport?.sales?.length ? r2ImportedFeishuState(value) : null;
   const view = (calculated?.storeViews || []).find((item) => item.store_code === storeCode)
     || (storeCode === STORE_CODE ? calculated?.storeViews?.[0] : null);
-  const businessDate = view?.business_date || value.feishuImport?.latest_business_date || chinaBusinessDate();
+  const businessDate = chinaBusinessDate();
+  const salesBusinessDate = view?.business_date || value.feishuImport?.latest_business_date || null;
+  const supervisor = r2NormalizeAccounts(value.accounts).find((account) => account.status === 'active' && r2HasRole(account, 'area_supervisor') && r2AllowedStores(account).includes(storeCode));
   // 研判衍生的“补凭证”由总部研判中心跟踪，不作为门店移动端的日常待办展示。
   // 门店首页仅保留独立、可执行的运营任务，避免旧研判信息淹没收货、调拨和盘点。
   const operationTasks = (value.operationTasks || [])
@@ -2678,6 +2680,7 @@ async function r2StoreBootstrap(env, storeCode = STORE_CODE) {
   return {
     storeCode,
     storeMaster,
+    supervisor: supervisor ? { id:supervisor.id, display_name:supervisor.display_name } : null,
     safetyStockPolicies: (value.safetyStockPolicies || []).filter((item) => item.store_code === storeCode && item.status !== 'inactive'),
     businessDate,
     task: value.task?.store_code === storeCode ? value.task : null,
@@ -2695,9 +2698,10 @@ async function r2StoreBootstrap(env, storeCode = STORE_CODE) {
     ledger,
     materialCatalog: (value.materialCatalog || r2DefaultMaterialCatalog()).filter((item) => item.status !== 'inactive'),
     feishuImport: {
-      latest_business_date: businessDate,
-      latest_sales_qty: view?.sales_qty || 0,
-      imported_at: value.feishuImport?.imported_at || null
+      latest_business_date: salesBusinessDate,
+      latest_sales_qty: view?.sales_qty ?? null,
+      imported_at: value.feishuImport?.imported_at || null,
+      available_for_business_date: Boolean(salesBusinessDate && salesBusinessDate === businessDate && value.feishuImport?.imported_at)
     },
     storage: value.storage
   };
@@ -3388,7 +3392,7 @@ async function r2CreateDiagnosisFollowup(env, caseId, type) {
     const existing = (value.operationTasks || []).find((task) => task.source_case_id === caseItem.id && task.task_type === 'receipt_evidence' && task.status !== 'closed');
     if (existing) return json({ case: caseItem, task: existing, state: value });
     const names = review.next_action.material_names || [];
-    const task = { id: id('OPT'), store_code: caseItem.store_code, task_type: 'receipt_evidence', title: `补充 ${names.length} 项收货凭证`, instruction: `请补充以下物料的收货单号、到货时间或入库照片：${names.join('、')}。提交后系统将继续沿用研判工单 ${caseItem.case_no} 重新核对。`, material_names: names, status: 'pending_store_submission', assigned_to: `${caseItem.store_code} 店长`, created_at: createdAt, source_case_id: caseItem.id, source_case_no: caseItem.case_no };
+    const task = { id: id('OPT'), store_code: caseItem.store_code, business_date: caseItem.latest_business_date || caseItem.opened_business_date || chinaBusinessDate(), task_type: 'receipt_evidence', title: `补充 ${names.length} 项收货凭证`, instruction: `请补充以下物料的收货单号、到货时间或入库照片：${names.join('、')}。提交后系统将继续沿用研判工单 ${caseItem.case_no} 重新核对。`, material_names: names, status: 'pending_store_submission', assigned_to: `${caseItem.store_code} 店长`, created_at: createdAt, source_case_id: caseItem.id, source_case_no: caseItem.case_no };
     value.operationTasks.unshift(task); value.operationTask = task; review.next_action.status = 'dispatched'; review.next_action.task_id = task.id; caseItem.guide_review = review; caseItem.updated_at = createdAt;
     r2Audit(value, '研判处理向导', '向门店索取收货凭证', `${caseItem.case_no} · 已生成 ${task.id}，涉及 ${names.length} 项物料。`, caseItem.id);
     return json({ case: caseItem, task, state: await r2SaveDemoState(env, value, 'diagnosis-request-evidence') }, 201);
