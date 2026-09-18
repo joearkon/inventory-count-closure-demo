@@ -35,7 +35,7 @@
     let openOrders = [];
     const storeOptions = (state.storeMasters || []).filter((item) => item.status !== '停用').map((item) => `<option value="${esc(item.store_code)}">${esc(item.store_code)} · ${esc(item.store_name)}</option>`).join('');
     by('store-filter').insertAdjacentHTML('beforeend', storeOptions); by('store').innerHTML = storeOptions;
-    by('date').value = new Date().toISOString().slice(0, 10);
+    by('date').value = state.businessCalendar?.business_date || '';
     if (mode === 'purchase') by('expected-date').value = by('date').value;
     else {
       openOrders = (state.purchaseOrders || []).filter((item) => ['pending_receipt','partially_received'].includes(item.status));

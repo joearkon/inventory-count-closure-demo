@@ -5,7 +5,12 @@
   const storeCode = new URLSearchParams(location.search).get('store') || 'STORE001';
   const sessionKey = `store-agent-session:${storeCode}`;
   const sessionId = sessionStorage.getItem(sessionKey) || (() => { const value = `web-${crypto.randomUUID()}`; sessionStorage.setItem(sessionKey, value); return value; })();
-  const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+  const today = () => latestStoreState?.businessDate || (() => {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Jakarta', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', hourCycle:'h23' }).formatToParts(new Date()).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+    const date = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)));
+    if (Number(parts.hour) < 4) date.setUTCDate(date.getUTCDate() - 1);
+    return date.toISOString().slice(0, 10);
+  })();
   const chat = by('store-agent-chat'), input = by('store-agent-input'), send = by('store-agent-send'), mic = by('store-agent-mic'), voiceNote = by('store-agent-voice-note'), voiceOverlay = by('store-agent-voice-overlay'), voiceOverlayTitle = by('store-agent-voice-overlay-title'), voiceOverlayText = by('store-agent-voice-overlay-text'), voiceCancel = by('store-agent-voice-cancel'), voiceFinish = by('store-agent-voice-finish'), language = by('store-agent-language'), voiceQa = by('store-agent-voice-qa');
   if (voiceQa) voiceQa.href = `/voice-qa/?store=${encodeURIComponent(storeCode)}`;
   const sheet = by('agent-sheet'), sheetTitle = by('agent-sheet-title'), sheetForm = by('agent-sheet-form'), sheetStatus = by('agent-sheet-status'), sheetSubmit = by('agent-sheet-submit');

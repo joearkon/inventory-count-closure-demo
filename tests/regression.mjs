@@ -103,10 +103,11 @@ await check('store mobile header identifies the assistant', async () => {
 });
 
 await check('store vNext keeps reminders, operations and conversational assistant together', async () => {
-  const [page, storeScript, appScript] = await Promise.all([
+  const [page, storeScript, appScript, bootstrap] = await Promise.all([
     fetch(`${base}/store/?store=STORE001`).then((r) => r.text()),
     fetch(`${base}/store-agent.js`).then((r) => r.text()),
-    fetch(`${base}/app.js`).then((r) => r.text())
+    fetch(`${base}/app.js`).then((r) => r.text()),
+    json('/api/store/bootstrap?store=STORE001')
   ]);
   for (const token of ['今天最重要', '需要你处理', '经营简报', '最近结果', 'data-reminder-filter="mine"', 'data-reminder-filter="result"']) if (!page.includes(token)) throw new Error(`missing store reminder token: ${token}`);
   for (const action of ['restock', 'receipt', 'count', 'transfer', 'scrap', 'inventory']) if (!page.includes(`data-common-action="${action}"`)) throw new Error(`missing store operation: ${action}`);
@@ -118,7 +119,10 @@ await check('store vNext keeps reminders, operations and conversational assistan
   for (const token of ['当前账号', '上级督导', 'summary-business-date', 'summary-data-note']) if (!page.includes(token)) throw new Error(`missing store accountability or date token: ${token}`);
   if (!appScript.includes("'尚未回传'") || !appScript.includes('available_for_business_date')) throw new Error('sales must not fall back to a misleading zero when the business day has no return');
   if (!appScript.includes('营业日 ${esc(task.business_date')) throw new Error('store work orders must show their business date');
-  return { reminder_sections:4, operation_entries:6, conversation_preserved:true, store_assistant_handoff:true, business_date_visible:true, accountability_visible:true, stale_sales_suppressed:true };
+  if (bootstrap.businessCalendar?.time_zone !== 'Asia/Jakarta' || bootstrap.businessCalendar?.cutoff_hour !== 4 || bootstrap.businessDate !== bootstrap.businessCalendar.business_date) throw new Error(`invalid business calendar: ${JSON.stringify(bootstrap.businessCalendar)}`);
+  if ((bootstrap.ledger || []).some((row) => row.as_of_business_date !== bootstrap.ledger_as_of_business_date || row.is_current_business_date !== bootstrap.ledger_is_current)) throw new Error('ledger freshness metadata is inconsistent');
+  if (!bootstrap.feishuImport?.available_for_business_date && bootstrap.feishuImport?.latest_sales_qty !== null) throw new Error('stale sales quantity must be null');
+  return { reminder_sections:4, operation_entries:6, conversation_preserved:true, store_assistant_handoff:true, business_date_visible:true, accountability_visible:true, stale_sales_suppressed:true, time_zone:bootstrap.businessCalendar.time_zone, cutoff:bootstrap.businessCalendar.cutoff_time, ledger_as_of:bootstrap.ledger_as_of_business_date, ledger_current:bootstrap.ledger_is_current };
 });
 
 await check('follow-up work orders use a traceable full detail page', async () => {
@@ -212,7 +216,7 @@ if (mutationTests) {
   });
 
   await check('manual count plan can be issued', async () => {
-    const date = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Shanghai' }).format(new Date());
+    const date = (await json('/api/store/bootstrap?store=STORE001')).businessDate;
     const value = await json('/api/count-plans/manual', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ store_code:'STORE001', business_date:date, material_names:['牛奶','黑糖珍珠'], source_type:'work_order', source_work_order_id:'QA-WO-001', instruction:'自动回归：仅本地状态' }) });
     if (value.plan?.material_count !== 2 || value.plan?.plan_type !== 'work_order_material_set') throw new Error(JSON.stringify(value.plan));
     manualPlan = value.plan;
@@ -232,7 +236,7 @@ if (mutationTests) {
   });
 
   await check('receipt and scrap flows create traceable documents and can be reverted', async () => {
-    const date = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Shanghai' }).format(new Date());
+    const date = (await json('/api/store/bootstrap?store=STORE001')).businessDate;
     const receiptState = await json('/api/material-events', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ store_code:'STORE001', business_date:date, material_name:'牛奶', unit:'L', qty:3, type:'receipt', reference:'QA receipt' }) });
     const receipt = (receiptState.materialEvents || []).find((item) => item.reference === 'QA receipt');
     const scrapState = await json('/api/material-events', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ store_code:'STORE001', business_date:date, material_name:'牛奶', unit:'L', qty:0.5, type:'scrap', reference:'QA scrap' }) });

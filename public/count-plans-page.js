@@ -47,7 +47,7 @@
   function renderSelectors() {
     const stores = (state?.storeMasters || []).filter((item) => item.status !== '停用');
     by('manual-store').innerHTML = stores.map((item) => `<option value="${esc(item.store_code)}">${esc(item.store_code)} · ${esc(item.store_name)}</option>`).join('');
-    const defaultDate = state?.feishuImport?.latest_business_date || new Date().toISOString().slice(0, 10);
+    const defaultDate = state?.businessCalendar?.business_date;
     by('manual-date').value = defaultDate;
   }
   async function load() {

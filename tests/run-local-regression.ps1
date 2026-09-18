@@ -22,6 +22,9 @@ New-Item -ItemType Directory -Path $persistPath | Out-Null
 try {
   Push-Location $projectRoot
 
+  & node (Join-Path $projectRoot 'tests\business-date.mjs')
+  if ($LASTEXITCODE -ne 0) { throw "Business-date boundary tests failed with exit code $LASTEXITCODE" }
+
   & node (Join-Path $projectRoot 'tests\diagnosis-v1-characterization.mjs')
   if ($LASTEXITCODE -ne 0) { throw "V1 diagnosis characterization failed with exit code $LASTEXITCODE" }
 

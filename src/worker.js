@@ -1,5 +1,6 @@
 import { buildDiagnosisShadowReport } from './diagnosis/shadow.js';
 import { evaluateClosureGate } from './diagnosis/closure.js';
+import { operationalBusinessDate, DEFAULT_BUSINESS_TIME_ZONE, DEFAULT_BUSINESS_DAY_CUTOFF_HOUR } from './business-date.js';
 
 const STORE_CODE = 'STORE001';
 // 门店主档在系统侧维护。即使某店当天尚无销售，也要有零基线物料台账，
@@ -13,6 +14,19 @@ const R2_STORE_MASTERS = Object.freeze([
   { store_code: 'STORE006', store_name: 'MOMOYO BENHIL', region: '雅加达', status: '营业中', store_role: '普通门店', franchisee: 'MOMOYO 印尼加盟商' }
 ]);
 const R2_STORE_CODES = Object.freeze(R2_STORE_MASTERS.map((item) => item.store_code));
+function r2BusinessCalendar(value, storeCode = STORE_CODE, at = new Date()) {
+  const master = (value?.storeMasters || R2_STORE_MASTERS).find((item) => item.store_code === storeCode) || {};
+  const timeZone = master.business_time_zone || DEFAULT_BUSINESS_TIME_ZONE;
+  const cutoffHour = Number.isInteger(Number(master.business_day_cutoff_hour)) ? Number(master.business_day_cutoff_hour) : DEFAULT_BUSINESS_DAY_CUTOFF_HOUR;
+  return {
+    business_date: operationalBusinessDate({ at, timeZone, cutoffHour }),
+    time_zone: timeZone,
+    cutoff_hour: cutoffHour,
+    cutoff_time: `${String(cutoffHour).padStart(2, '0')}:00`,
+    basis: 'store_local_time_with_cutoff'
+  };
+}
+function r2StoreBusinessDate(value, storeCode = STORE_CODE, at = new Date()) { return r2BusinessCalendar(value, storeCode, at).business_date; }
 const R2_ROLE_DEFINITIONS = Object.freeze([
   { id: 'store_staff', name: '门店店员', level: 'store', description: '处理授权门店的任务、草稿和库存查询；正式写入仍需人工确认。', permissions: ['store.read', 'task.handle', 'draft.create', 'inventory.read'] },
   { id: 'store_manager', name: '加盟商（门店负责人）', level: 'store', description: '负责门店单据确认、工单提交和日常库存操作。', permissions: ['store.read', 'task.handle', 'draft.create', 'document.confirm', 'work_order.submit'] },
@@ -122,7 +136,7 @@ const FEISHU_EVENT_SOURCE_SCHEMA = [
 ];
 
 const R2_NOTIFICATION_DEFAULTS = Object.freeze({
-  channel: 'feishu_group_bot', group_label: '品牌运营群', timezone: 'Asia/Shanghai',
+  channel: 'feishu_group_bot', group_label: '品牌运营群', timezone: 'Asia/Jakarta',
   realtime: { enabled: false, cooldown_minutes: 30, rules: { negative_inventory: true, below_safety_stock: true, transfer_exception: true } },
   daily_report: { enabled: false, send_time: '20:00', include: { sales: true, inventory_risks: true, transfers: true, count_plans: true } },
   templates: {
@@ -147,7 +161,7 @@ const R2_DIAGNOSIS_ATTRIBUTIONS = Object.freeze({
 
 function id(prefix) { return `${prefix}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`; }
 function now() { return new Date().toISOString(); }
-function chinaBusinessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()); }
+function chinaBusinessDate() { return operationalBusinessDate(); }
 function json(data, status = 200) { return Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } }); }
 function bad(message, status = 400) { return json({ error: message }, status); }
 function base64(buffer) {
@@ -333,11 +347,24 @@ function normalizeR2DemoState(value) {
     const recommended = (caseItem.recommended_actions || []).filter((item) => item.type !== 'targeted_count');
     return { ...caseItem, recommended_actions: [...recommended, { type: 'targeted_count', label, owner: `${caseItem.store_code} 店长`, status: 'recommended', material_name: materialName, unit: materialName ? variances[0].unit : null }] };
   });
+  const storeMasters = (Array.isArray(source.storeMasters) && source.storeMasters.length ? source.storeMasters : initial.storeMasters)
+    .map((item) => ({ ...item, business_time_zone:item.business_time_zone || DEFAULT_BUSINESS_TIME_ZONE, business_day_cutoff_hour:Number.isInteger(Number(item.business_day_cutoff_hour)) ? Number(item.business_day_cutoff_hour) : DEFAULT_BUSINESS_DAY_CUTOFF_HOUR }));
+  const materialAnomalies = Array.isArray(source.materialAnomalies) ? source.materialAnomalies : [];
+  const anomalyDates = new Map(materialAnomalies.map((item) => [item.id, item.business_date]).filter(([, date]) => date));
+  const countPlanDates = new Map((Array.isArray(source.countPlans) ? source.countPlans : []).flatMap((plan) => [[plan.id, plan.business_date], [plan.plan_no, plan.business_date]]).filter(([, date]) => date));
+  const operationTasks = (Array.isArray(source.operationTasks) ? source.operationTasks : []).map((task) => ({
+    ...task,
+    business_date: task.business_date || anomalyDates.get(task.source_anomaly_id) || String(task.created_at || '').slice(0, 10) || r2StoreBusinessDate({ storeMasters }, task.store_code || STORE_CODE)
+  }));
+  const documents = (Array.isArray(source.documents) ? source.documents : []).map((document) => ({
+    ...document,
+    business_date: document.business_date || countPlanDates.get(document.count_plan_no) || String(document.received_at || document.created_at || '').slice(0, 10) || r2StoreBusinessDate({ storeMasters }, document.store_code || STORE_CODE)
+  }));
   return {
     ...initial,
     ...source,
     stockStandard: Array.isArray(source.stockStandard) ? source.stockStandard : initial.stockStandard,
-    storeMasters: Array.isArray(source.storeMasters) && source.storeMasters.length ? source.storeMasters : initial.storeMasters,
+    storeMasters,
     roleDefinitions: r2DefaultRoleDefinitions(),
     organizationUnits: Array.isArray(source.organizationUnits) && source.organizationUnits.length ? source.organizationUnits : initial.organizationUnits,
     accounts,
@@ -345,10 +372,10 @@ function normalizeR2DemoState(value) {
     productCatalog: r2NormalizeProductCatalog(source.productCatalog),
     materialCatalog: r2NormalizeMaterialCatalog(source.materialCatalog),
     safetyStockPolicies: Array.isArray(source.safetyStockPolicies) ? source.safetyStockPolicies : initial.safetyStockPolicies,
-    operationTasks: Array.isArray(source.operationTasks) ? source.operationTasks : [],
+    operationTasks,
     governanceTasks: Array.isArray(source.governanceTasks) ? source.governanceTasks : [],
     anomalyClosures: Array.isArray(source.anomalyClosures) ? source.anomalyClosures : [],
-    materialAnomalies: Array.isArray(source.materialAnomalies) ? source.materialAnomalies : [],
+    materialAnomalies,
     diagnosisCases,
     diagnosisKnowledge: Array.isArray(source.diagnosisKnowledge) ? source.diagnosisKnowledge : [],
     materialEvents: Array.isArray(source.materialEvents) ? source.materialEvents : [],
@@ -368,7 +395,7 @@ function normalizeR2DemoState(value) {
     notificationSettings: normalizeNotificationSettings(source.notificationSettings),
     notificationDeliveries: Array.isArray(source.notificationDeliveries) ? source.notificationDeliveries : [],
     feishuEventSources: Array.isArray(source.feishuEventSources) ? source.feishuEventSources : initial.feishuEventSources,
-    documents: Array.isArray(source.documents) ? source.documents : [],
+    documents,
     audits: Array.isArray(source.audits) ? source.audits : [],
     storage: { provider: 'R2', mode: 'demo-workflow', updatedAt: source.storage?.updatedAt || now() }
   };
@@ -455,9 +482,9 @@ function r2StateView(value, view = '') {
     latest_business_date: value.feishuImport.latest_business_date,
     latest_records: value.feishuImport.latest_records, latest_sales_qty: value.feishuImport.latest_sales_qty
   } : null;
-  if (view === 'count-plans') return { countPlans: value.countPlans || [], materialCatalog: value.materialCatalog || [], storeMasters: value.storeMasters || [], feishuImport: importSummary, storage: value.storage };
+  if (view === 'count-plans') return { countPlans: value.countPlans || [], materialCatalog: value.materialCatalog || [], storeMasters: value.storeMasters || [], feishuImport: importSummary, businessCalendar:r2BusinessCalendar(value), storage: value.storage };
   if (view === 'documents') return { storeMasters: value.storeMasters || [], materialEvents: value.materialEvents || [], transferOrders: value.transferOrders || [], purchaseOrders: value.purchaseOrders || [], receiptOrders: value.receiptOrders || [], storage: value.storage };
-  if (view === 'procurement') return { storeMasters: value.storeMasters || [], materialCatalog: value.materialCatalog || [], purchaseOrders: value.purchaseOrders || [], receiptOrders: value.receiptOrders || [], storage: value.storage };
+  if (view === 'procurement') return { storeMasters: value.storeMasters || [], materialCatalog: value.materialCatalog || [], purchaseOrders: value.purchaseOrders || [], receiptOrders: value.receiptOrders || [], businessCalendar:r2BusinessCalendar(value), storage: value.storage };
   if (view === 'accounts') return { accounts: r2NormalizeAccounts(value.accounts).map(r2SafeAccount), roleDefinitions: r2DefaultRoleDefinitions(), organizationUnits: value.organizationUnits || r2DefaultOrganizationUnits(), activeAccountId: value.activeAccountId || 'ACC-HQ-WANG', storeMasters: value.storeMasters || r2DefaultStoreMasters(), storage: value.storage };
   if (view === 'materials-evidence') return { countPlans: value.countPlans || [], documents: (value.documents || []).map(({ preview_data, ...item }) => item), storage: value.storage };
   return {
@@ -736,7 +763,7 @@ async function r2CreateOperationTask(env, body) {
   if (!title || !instruction) return bad('请填写任务名称和执行要求。');
   const storeCode = String(body.storeCode || STORE_CODE).trim().slice(0, 64);
   const linkedDocumentIds = Array.isArray(body.linkedDocumentIds) ? body.linkedDocumentIds.map((item) => String(item).slice(0, 80)).filter(Boolean).slice(0, 20) : [];
-  const task = { id: id('OPT'), store_code: storeCode, business_date: String(body.businessDate || body.business_date || chinaBusinessDate()).slice(0, 10), task_type: String(body.taskType || 'custom').slice(0, 40), title, instruction, status: 'pending_store_submission', assigned_to: `${storeCode} 店长`, created_at: now(), source_anomaly_id: sourceAnomalyId || null, source_rule_code: String(body.sourceRuleCode || '').slice(0, 40) || null, linked_document_ids: [...new Set(linkedDocumentIds)], linked_event_ids: [] };
+  const task = { id: id('OPT'), store_code: storeCode, business_date: String(body.businessDate || body.business_date || r2StoreBusinessDate(value, storeCode)).slice(0, 10), task_type: String(body.taskType || 'custom').slice(0, 40), title, instruction, status: 'pending_store_submission', assigned_to: `${storeCode} 店长`, created_at: now(), source_anomaly_id: sourceAnomalyId || null, source_rule_code: String(body.sourceRuleCode || '').slice(0, 40) || null, linked_document_ids: [...new Set(linkedDocumentIds)], linked_event_ids: [] };
   value.operationTasks.unshift(task); value.operationTask = task;
   r2Audit(value, '', '创建跟进工单', `${task.id} · ${task.title}`, task.id);
   return r2Result(await r2SaveDemoState(env, value, 'operation-create'), 201);
@@ -892,7 +919,7 @@ async function r2CreateDiagnosisWorkOrder(env, anomalyId) {
   const createdAt = now();
   const task = {
     id: id('OPT'), store_code: signal.store_code, task_type: copy.taskType, title: copy.title, instruction: copy.instruction,
-    business_date: signal.business_date || chinaBusinessDate(), status: 'pending_store_submission', assigned_to: `${signal.store_code} 店长`, created_at: createdAt, updated_at: createdAt,
+    business_date: signal.business_date || r2StoreBusinessDate(value, signal.store_code), status: 'pending_store_submission', assigned_to: `${signal.store_code} 店长`, created_at: createdAt, updated_at: createdAt,
     source_anomaly_id: signal.id, source_rule_code: signal.rule_code,
     linked_document_ids: sourceDocumentId ? [sourceDocumentId] : [], linked_event_ids: []
   };
@@ -1068,7 +1095,7 @@ async function r2CreateMaterialEvent(env, body) {
   const materialName = String(body.material_name || '').trim().slice(0, 80);
   const unit = String(body.unit || '').trim().slice(0, 16);
   const qty = Number(body.qty);
-  const businessDate = String(body.business_date || value.feishuImport?.latest_business_date || chinaBusinessDate()).slice(0, 10);
+  const businessDate = String(body.business_date || r2StoreBusinessDate(value, storeCode)).slice(0, 10);
   if (!config) return bad('不支持的库存动作。');
   if (!storeCode || !materialName || !unit || !Number.isFinite(qty) || qty <= 0) return bad('请完整填写门店、物料、单位和大于 0 的数量。');
   const event = {
@@ -1113,7 +1140,7 @@ async function r2CreateMaterialTransfer(env, body) {
   const unit = String(body.unit || '').trim();
   const qty = r2Round(Number(body.qty));
   if (!fromStore || !toStore || fromStore === toStore || !materialName || !unit || !Number.isFinite(qty) || qty <= 0) return bad('调拨门店、物料、单位和数量不完整。');
-  const calculated = r2ImportedFeishuState(value), businessDate = value.feishuImport.latest_business_date;
+  const calculated = r2ImportedFeishuState(value), businessDate = String(body.business_date || r2StoreBusinessDate(value, fromStore)).slice(0, 10);
   const sourceView = (calculated.storeViews || []).find((item) => item.store_code === fromStore);
   const targetView = (calculated.storeViews || []).find((item) => item.store_code === toStore);
   const match = (row) => normalizedKey(row.material_name) === normalizedKey(materialName) && row.unit === unit;
@@ -1150,8 +1177,8 @@ async function r2CreateTransferOrder(env, body) {
   const fromParty = String(body.from_party || '').trim().slice(0, 80);
   const materialName = String(body.material_name || '').trim().slice(0, 80);
   const unit = String(body.unit || '').trim().slice(0, 16);
-  const businessDate = String(body.business_date || value.feishuImport.latest_business_date || chinaBusinessDate()).slice(0, 10);
   const destinations = (Array.isArray(body.destinations) ? body.destinations : []).map((item) => ({ store_code: String(item.store_code || '').trim().slice(0, 64), qty: r2Round(Number(item.qty)) })).filter((item) => item.store_code && Number.isFinite(item.qty) && item.qty > 0);
+  const businessDate = String(body.business_date || r2StoreBusinessDate(value, fromType === 'store' ? fromParty : destinations[0]?.store_code || STORE_CODE)).slice(0, 10);
   if (!fromParty || !materialName || !unit || !destinations.length) return bad('请填写调出方、物料、单位，以及至少一个调入门店和数量。');
   if (fromType === 'store' && destinations.some((item) => item.store_code === fromParty)) return bad('门店调出方不能同时是调入方。');
   const calculated = r2ImportedFeishuState(value), stores = calculated.storeViews || [];
@@ -1182,7 +1209,7 @@ async function r2CreateStoreTransferRequest(env, body) {
   const storeCode = String(body.store_code || STORE_CODE).trim().slice(0, 64);
   const materialName = String(body.material_name || '').trim().slice(0, 80);
   const unit = String(body.unit || '').trim().slice(0, 16);
-  const businessDate = String(body.business_date || chinaBusinessDate()).slice(0, 10);
+  const businessDate = String(body.business_date || r2StoreBusinessDate(value, storeCode)).slice(0, 10);
   const note = String(body.note || '').trim().slice(0, 160);
   const destinations = (Array.isArray(body.destinations) ? body.destinations : [{ store_code: body.to_store_code, qty: body.qty }]).map((item) => ({ store_code: String(item.store_code || '').trim().slice(0, 64), qty: r2Round(Number(item.qty)) })).filter((item) => item.store_code && Number.isFinite(item.qty) && item.qty > 0);
   if (!storeCode || !materialName || !unit || !destinations.length || destinations.some((item) => item.store_code === storeCode)) return bad('请完整填写调出门店、至少一个调入门店、物料、单位和数量；调出与调入门店不能相同。');
@@ -1216,7 +1243,8 @@ async function r2CreateStoreRestockRequest(env, body) {
   const unit = String(body.unit || '').trim().slice(0, 12);
   const qty = Number(body.qty);
   if (!materialName || !unit || !Number.isFinite(qty) || qty <= 0) return bad('请填写有效的补货物料、数量和单位。');
-  const request = { id: id('RST'), request_no: `RST-${chinaBusinessDate().replaceAll('-', '')}-${String((value.restockRequests || []).length + 1).padStart(3, '0')}`, store_code: storeCode, business_date: String(body.business_date || chinaBusinessDate()), material_name: materialName, unit, qty, urgency: ['normal', 'urgent', 'critical'].includes(body.urgency) ? body.urgency : 'normal', reason: String(body.reason || '门店补货申请').slice(0, 160), status: 'pending_hq_review', created_at: now(), source: 'store_ai_agent' };
+  const businessDate = String(body.business_date || r2StoreBusinessDate(value, storeCode)).slice(0, 10);
+  const request = { id: id('RST'), request_no: `RST-${businessDate.replaceAll('-', '')}-${String((value.restockRequests || []).length + 1).padStart(3, '0')}`, store_code: storeCode, business_date: businessDate, material_name: materialName, unit, qty, urgency: ['normal', 'urgent', 'critical'].includes(body.urgency) ? body.urgency : 'normal', reason: String(body.reason || '门店补货申请').slice(0, 160), status: 'pending_hq_review', created_at: now(), source: 'store_ai_agent' };
   value.restockRequests.unshift(request);
   r2Audit(value, '门店 AI 助手', '提交补货申请', `${request.request_no} · ${storeCode} · ${materialName} ${qty}${unit}，等待总部处理。`, request.id);
   await r2SaveDemoState(env, value, 'store-agent-restock');
@@ -1278,7 +1306,7 @@ async function r2CreatePurchaseOrder(env, body = {}) {
   if (!store) return bad('请选择有效门店。');
   const parsed = r2ProcurementLines(value, body.lines);
   if (parsed.error) return bad(parsed.error);
-  const businessDate = String(body.business_date || chinaBusinessDate()).slice(0, 10);
+  const businessDate = String(body.business_date || r2StoreBusinessDate(value, storeCode)).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) return bad('订货日期格式不正确。');
   const source = r2ProcurementSource(body), createdAt = now();
   const order = {
@@ -1334,7 +1362,7 @@ async function r2CreateReceiptOrder(env, body = {}) {
       if (!orderedLine || line.qty > remaining + 0.000001) return bad(`${line.material_name} 收货数量超过订货未收数量 ${remaining}${line.unit}。`, 409);
     }
   }
-  const businessDate = String(body.business_date || chinaBusinessDate()).slice(0, 10);
+  const businessDate = String(body.business_date || r2StoreBusinessDate(value, storeCode)).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) return bad('收货日期格式不正确。');
   const source = r2ProcurementSource({ ...body, source_work_order_id: body.source_work_order_id || purchase?.source_work_order_id, source_type: body.source_type || purchase?.source_type, urgency: body.urgency || purchase?.urgency });
   const createdAt = now();
@@ -1472,7 +1500,7 @@ async function r2ResetDemo(env) {
 async function r2ResetStoreBusinessDay(env, body = {}) {
   const value = await r2DemoState(env);
   const storeCode = String(body.store_code || STORE_CODE).trim().slice(0, 64);
-  const businessDate = String(body.business_date || value.feishuImport?.latest_business_date || chinaBusinessDate()).slice(0, 10);
+  const businessDate = String(body.business_date || r2StoreBusinessDate(value, storeCode)).slice(0, 10);
   if (!storeCode || !/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) return bad('请提供有效的门店和营业日。');
   const scopedPlans = (value.countPlans || []).filter((item) => item.store_code === storeCode && item.business_date === businessDate);
   const planNos = new Set(scopedPlans.map((item) => item.plan_no));
@@ -1509,7 +1537,7 @@ async function r2ResetStoreBusinessDay(env, body = {}) {
 async function r2InitializeStoreBusinessDay(env, body = {}) {
   const value = await r2DemoState(env);
   const storeCode = String(body.store_code || STORE_CODE).trim().slice(0, 64);
-  const businessDate = String(body.business_date || chinaBusinessDate()).slice(0, 10);
+  const businessDate = String(body.business_date || r2StoreBusinessDate(value, storeCode)).slice(0, 10);
   if (!storeCode || !/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) return bad('请提供有效的门店和营业日。');
   const materials = r2LocalMaterialMaster(value.materialCatalog);
   if (!materials.length) return bad('系统物料主档为空，无法建立期初。', 409);
@@ -2557,7 +2585,8 @@ function r2AttachLatestPhysicalCounts(value, ledger, storeCode, businessDate = n
 
 async function r2CreateDemoSales(env) {
   const value = await r2DemoState(env);
-  const businessDate = chinaBusinessDate();
+  const businessCalendar = r2BusinessCalendar(value, STORE_CODE);
+  const businessDate = businessCalendar.business_date;
   const rows = r2DemoRows(businessDate);
   const opening = {};
   for (const lines of Object.values(R2_DEMO_BOM)) for (const [material, unit] of lines) opening[`${normalizedKey(material)}|${unit}`] = demoOpeningQty(material, unit);
@@ -2636,7 +2665,8 @@ async function r2StoreBootstrap(env, storeCode = STORE_CODE) {
   const calculated = value.feishuImport?.sales?.length ? r2ImportedFeishuState(value) : null;
   const view = (calculated?.storeViews || []).find((item) => item.store_code === storeCode)
     || (storeCode === STORE_CODE ? calculated?.storeViews?.[0] : null);
-  const businessDate = chinaBusinessDate();
+  const businessCalendar = r2BusinessCalendar(value, storeCode);
+  const businessDate = businessCalendar.business_date;
   const salesBusinessDate = view?.business_date || value.feishuImport?.latest_business_date || null;
   const supervisor = r2NormalizeAccounts(value.accounts).find((account) => account.status === 'active' && r2HasRole(account, 'area_supervisor') && r2AllowedStores(account).includes(storeCode));
   // 研判衍生的“补凭证”由总部研判中心跟踪，不作为门店移动端的日常待办展示。
@@ -2676,12 +2706,16 @@ async function r2StoreBootstrap(env, storeCode = STORE_CODE) {
     material_name: row.material_name,
     unit: row.unit,
     theoretical_closing_qty: row.theoretical_closing_qty,
-    safety_qty: row.safety_qty ?? null
+    safety_qty: row.safety_qty ?? null,
+    as_of_business_date: salesBusinessDate,
+    is_current_business_date: salesBusinessDate === businessDate,
+    inventory_available: row.theoretical_closing_qty != null
   }));
   return {
     storeCode,
     storeMaster,
     supervisor: supervisor ? { id:supervisor.id, display_name:supervisor.display_name } : null,
+    businessCalendar,
     safetyStockPolicies: (value.safetyStockPolicies || []).filter((item) => item.store_code === storeCode && item.status !== 'inactive'),
     businessDate,
     task: value.task?.store_code === storeCode ? value.task : null,
@@ -2697,6 +2731,8 @@ async function r2StoreBootstrap(env, storeCode = STORE_CODE) {
     storeTransferRequests,
     transfers: { store_requests: storeTransferRequests },
     ledger,
+    ledger_as_of_business_date: salesBusinessDate,
+    ledger_is_current: Boolean(salesBusinessDate && salesBusinessDate === businessDate),
     materialCatalog: (value.materialCatalog || r2DefaultMaterialCatalog()).filter((item) => item.status !== 'inactive'),
     feishuImport: {
       latest_business_date: salesBusinessDate,
@@ -2793,7 +2829,7 @@ async function r2CreateManualCountPlan(env, body = {}) {
   if (!store) return bad('请选择有效门店。');
   const names = [...new Set((Array.isArray(body.material_names) ? body.material_names : []).map((item) => String(item || '').trim()).filter(Boolean))].slice(0, 80);
   if (!names.length) return bad('请至少选择一个盘点物料。');
-  const businessDate = String(body.business_date || value.feishuImport?.latest_business_date || chinaBusinessDate()).slice(0, 10);
+  const businessDate = String(body.business_date || r2StoreBusinessDate(value, storeCode)).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) return bad('盘点日期格式不正确。');
   const calculated = value.feishuImport?.sales?.length ? r2ImportedFeishuState(value) : { storeViews: [] };
   const view = (calculated.storeViews || []).find((item) => item.store_code === storeCode);
@@ -4081,7 +4117,7 @@ function r2StoreAgentTools() {
     { type: 'function', function: { name: 'create_receipt_order_draft', description: '建立门店收货单草稿。只建立单据，不改变库存；之后必须由店员在单据详情确认收货。', parameters: { type: 'object', properties: { material: { type: 'string' }, qty: { type: 'number' }, unit: { type: 'string', enum: ['kg', 'L', '个'] } }, required: [] } } },
     { type: 'function', function: { name: 'stok_opname', description: '发起门店盘点；用户提到盘点、盘库、清点时调用。', parameters: { type: 'object', properties: { material: { type: 'string', description: '指定物料；全盘时可不传' } }, required: [] } } },
     { type: 'function', function: { name: 'create_purchase_order_draft', description: '建立订货单草稿。用户说订货、补货、缺货、要货或库存不足时调用；只建草稿，不自动提交。', parameters: { type: 'object', properties: { material: { type: 'string' }, qty: { type: 'number' }, unit: { type: 'string', enum: ['kg', 'L', '个'] }, urgency: { type: 'string', enum: ['normal', 'urgent', 'critical'] }, reason: { type: 'string' } }, required: [] } } },
-    { type: 'function', function: { name: 'query_inventory', description: '查询一个或多个物料的当前理论库存。用户提到多个物料时必须全部放入 materials，不得只返回第一个。', parameters: { type: 'object', properties: { material: { type: 'string', description:'单物料查询时使用' }, materials: { type:'array', description:'多物料查询时使用，保留用户提到的全部物料', items:{ type:'string' } } }, required: [] } } }
+    { type: 'function', function: { name: 'query_inventory', description: '查询一个或多个物料的理论库存快照。结果可能是历史营业日快照，必须按返回的截至日期说明，不得把旧快照称为当前库存。用户提到多个物料时必须全部放入 materials。', parameters: { type: 'object', properties: { material: { type: 'string', description:'单物料查询时使用' }, materials: { type:'array', description:'多物料查询时使用，保留用户提到的全部物料', items:{ type:'string' } } }, required: [] } } }
   ];
 }
 
@@ -4108,8 +4144,8 @@ function r2StoreAgentLlmAction(toolName, args, rows) {
   if (toolName === 'query_inventory') {
     const requested = Array.isArray(args.materials) ? args.materials : [args.material || args.material_name || ''];
     const items = [...new Map(requested.flatMap((name) => r2StoreAgentMaterials(rows, name)).map((item) => [item.material_name, item])).values()]
-      .map((item) => ({ material_name:item.material_name, unit:item.unit, theoretical_closing_qty:Number(item.theoretical_closing_qty || 0), safety_qty:item.safety_qty ?? null }));
-    if (!items.length && material) items.push({ material_name:material.material_name, unit:material.unit, theoretical_closing_qty:Number(material.theoretical_closing_qty || 0), safety_qty:material.safety_qty ?? null });
+      .map((item) => ({ material_name:item.material_name, unit:item.unit, theoretical_closing_qty:item.inventory_available === false ? null : Number(item.theoretical_closing_qty), safety_qty:item.safety_qty ?? null, as_of_business_date:item.as_of_business_date || null, is_current_business_date:Boolean(item.is_current_business_date), inventory_available:item.inventory_available !== false && item.theoretical_closing_qty != null }));
+    if (!items.length && material) items.push({ material_name:material.material_name, unit:material.unit, theoretical_closing_qty:material.inventory_available === false ? null : Number(material.theoretical_closing_qty), safety_qty:material.safety_qty ?? null, as_of_business_date:material.as_of_business_date || null, is_current_business_date:Boolean(material.is_current_business_date), inventory_available:material.inventory_available !== false && material.theoretical_closing_qty != null });
     return { type:'show_inventory', data: items.length ? { ...items[0], items } : null };
   }
   return null;
@@ -4123,9 +4159,19 @@ function r2StoreAgentReplyForAction(action) {
   if (action.type === 'open_receipt') return '我已识别到收货需求。请补全信息后建立收货单草稿；草稿不会改变库存，进入详情确认后才入账。';
   if (action.type === 'open_restock') return '我已识别到订货需求。请补全原因后建立订货单草稿；进入详情确认后才正式提交。';
   if (action.type === 'open_count') return value.material_name ? `我会为你打开 ${value.material_name} 的盘点入口，请拍照识别后确认异常项。` : '我已为你打开今日盘点入口，请拍照识别后确认异常项。';
-  if (action.type === 'show_inventory' && Array.isArray(value.items) && value.items.length) return value.items.map((item) => `${item.material_name}：${r2Round(Number(item.theoretical_closing_qty || 0))} ${item.unit || ''}${item.safety_qty != null ? `（安全库存 ${r2Round(item.safety_qty)} ${item.unit || ''}）` : ''}`).join('\n');
-  if (action.type === 'show_inventory' && value.material_name) return `${value.material_name} 当前理论库存为 ${r2Round(Number(value.theoretical_closing_qty || 0))} ${value.unit || ''}。`;
+  if (action.type === 'show_inventory' && Array.isArray(value.items) && value.items.length) return r2StoreInventoryReply(value.items);
+  if (action.type === 'show_inventory' && value.material_name) return r2StoreInventoryReply([value]);
   return null;
+}
+
+function r2StoreInventoryReply(items) {
+  const available = items.filter((item) => item.inventory_available !== false && item.theoretical_closing_qty != null);
+  if (!available.length) return `${items.map((item) => item.material_name).filter(Boolean).join('、') || '所查物料'}当前没有可用的库存台账快照；请先完成营业日数据同步或盘点。`;
+  const lines = available.map((item) => `${item.material_name}：${r2Round(Number(item.theoretical_closing_qty))} ${item.unit || ''}${item.safety_qty != null ? `（安全库存 ${r2Round(item.safety_qty)} ${item.unit || ''}）` : ''}`);
+  const asOfDates = [...new Set(available.map((item) => item.as_of_business_date).filter(Boolean))];
+  const current = available.every((item) => item.is_current_business_date);
+  const prefix = current ? `营业日 ${asOfDates[0] || '当前'} 的理论库存：` : `截至营业日 ${asOfDates.join('、') || '未知'} 的理论库存快照（不是当前实时库存）：`;
+  return `${prefix}\n${lines.join('\n')}`;
 }
 
 function r2StoreAgentActionIntent(action) {
@@ -4171,7 +4217,7 @@ async function r2StoreAgentWithArk(env, message, storeCode, rows, history = [], 
         temperature: 0.1,
         thinking: { type: 'disabled' },
         messages: [
-          { role: 'system', content: `你是 ${storeCode} 的门店运营助手。理解中文、English 和 Bahasa Indonesia，并使用用户当前语言简短回复。仅处理调拨、报损、收货、盘点、订货/补货和查库存。收货必须调用 create_receipt_order_draft；订货、补货、缺货和要货必须调用 create_purchase_order_draft。两个工具都只建立草稿，不改变库存、不自动提交。参数不全时仍调用对应工具并只填写确定字段。查询库存时，用户提到多个物料必须将全部名称放入 query_inventory.materials，不得遗漏。用户问今日待办、帮我完成待办或今天做什么时，先说明当前待办，若第一项是盘点则调用 stok_opname。调拨可一对多：用户提到多个门店时，必须在 destinations 中逐店填入数量；不要合并或猜测数量。门店名称必须换成对应编码：${stores}。不要虚构物料、数量、门店、照片或库存数据，不要执行或承诺已提交；所有操作都要由店员确认后才会提交。当前可选物料：${materials || '暂未加载物料'}。当前今日待办：${todayTasks.length ? todayTasks.map((task) => `${task.title}（${task.detail}）`).join('；') : '无'}。当前未完成草稿：${currentDraft ? JSON.stringify(currentDraft).slice(0, 800) : '无'}。` },
+          { role: 'system', content: `你是 ${storeCode} 的门店运营助手。理解中文、English 和 Bahasa Indonesia，并使用用户当前语言简短回复。仅处理调拨、报损、收货、盘点、订货/补货和查库存。收货必须调用 create_receipt_order_draft；订货、补货、缺货和要货必须调用 create_purchase_order_draft。两个工具都只建立草稿，不改变库存、不自动提交。参数不全时仍调用对应工具并只填写确定字段。查询库存时，用户提到多个物料必须将全部名称放入 query_inventory.materials，不得遗漏；库存工具返回的是带营业日的快照，若 is_current_business_date=false，必须说“截至该营业日”，绝不能称为当前或实时库存。用户问今日待办、帮我完成待办或今天做什么时，先说明当前待办，若第一项是盘点则调用 stok_opname。调拨可一对多：用户提到多个门店时，必须在 destinations 中逐店填入数量；不要合并或猜测数量。门店名称必须换成对应编码：${stores}。不要虚构物料、数量、门店、照片或库存数据，不要执行或承诺已提交；所有操作都要由店员确认后才会提交。当前可选物料：${materials || '暂未加载物料'}。当前今日待办：${todayTasks.length ? todayTasks.map((task) => `${task.title}（${task.detail}）`).join('；') : '无'}。当前未完成草稿：${currentDraft ? JSON.stringify(currentDraft).slice(0, 800) : '无'}。` },
           ...history.slice(-8).map((turn) => ({ role: turn.role === 'assistant' ? 'assistant' : 'user', content: String(turn.content || '').slice(0, 600) })),
           { role: 'user', content: message }
         ],
@@ -4199,7 +4245,7 @@ async function r2StoreAgentDeterministic(env, body) {
   const message = String(body.message || '').trim().slice(0, 600);
   const storeCode = String(body.store_code || body.storeId || STORE_CODE).trim().slice(0, 64) || STORE_CODE;
   const bootstrap = await r2StoreBootstrap(env, storeCode);
-  const rows = bootstrap.ledger?.length ? bootstrap.ledger : (bootstrap.materialCatalog || []).map((item) => ({ material_name: item.material_name, unit: item.base_unit, theoretical_closing_qty: 0, safety_qty: null }));
+  const rows = bootstrap.ledger?.length ? bootstrap.ledger : (bootstrap.materialCatalog || []).map((item) => ({ material_name: item.material_name, unit: item.base_unit, theoretical_closing_qty: null, safety_qty: null, as_of_business_date:null, is_current_business_date:false, inventory_available:false }));
   const todayTasks = r2StoreAgentTodayTasks(bootstrap, storeCode);
   const toolContract = {
     provider: env.DOUBAO_API_KEY ? 'ark_function_calling' : 'deterministic_demo',
@@ -4222,9 +4268,9 @@ async function r2StoreAgentDeterministic(env, body) {
   }
   if (/库存|余量|还有多少|查.*(物料|库存)|查询|inventory|stock|stok|cek stok|berapa.*stok/.test(lower)) {
     if (!matchedMaterials.length) return json({ reply: '请告诉我要查询的物料，例如“查牛奶和黑糖珍珠库存”。', action: { type: 'none' }, tool_contract: toolContract });
-    const items = matchedMaterials.map((item) => ({ material_name:item.material_name, unit:item.unit, theoretical_closing_qty:Number(item.theoretical_closing_qty || 0), safety_qty:item.safety_qty ?? null }));
+    const items = matchedMaterials.map((item) => ({ material_name:item.material_name, unit:item.unit, theoretical_closing_qty:item.inventory_available === false ? null : Number(item.theoretical_closing_qty), safety_qty:item.safety_qty ?? null, as_of_business_date:item.as_of_business_date || null, is_current_business_date:Boolean(item.is_current_business_date), inventory_available:item.inventory_available !== false && item.theoretical_closing_qty != null }));
     return json({
-      reply: items.map((item) => `${item.material_name}：当前理论库存 ${r2Round(item.theoretical_closing_qty)} ${item.unit}${item.safety_qty != null ? `，安全库存 ${r2Round(item.safety_qty)} ${item.unit}` : ''}`).join('\n'),
+      reply: r2StoreInventoryReply(items),
       action: { type: 'show_inventory', data: { ...items[0], items } },
       tool_contract: toolContract
     });
@@ -4309,7 +4355,7 @@ async function r2StoreAgent(env, body) {
   const history = session.messages.slice(-8);
   session.messages.push({ role: 'user', content: message, at: now() });
   const todayTasks = r2StoreAgentTodayTasks(bootstrap, storeCode);
-  const assistantRows = bootstrap.ledger?.length ? bootstrap.ledger : (bootstrap.materialCatalog || []).map((item) => ({ material_name: item.material_name, unit: item.base_unit, theoretical_closing_qty: 0, safety_qty: null }));
+  const assistantRows = bootstrap.ledger?.length ? bootstrap.ledger : (bootstrap.materialCatalog || []).map((item) => ({ material_name: item.material_name, unit: item.base_unit, theoretical_closing_qty: null, safety_qty: null, as_of_business_date:null, is_current_business_date:false, inventory_available:false }));
   const llmResult = await r2StoreAgentWithArk(env, message, storeCode, assistantRows, history, draft, todayTasks);
   const requestedOperation = /调拨|调出|转给|转到|调\s*\d|调.*?(?:去|到|至)|报损|报废|损耗|过期|破损|变质|烂了|坏了|洒|漏|盘点|盘库|清点|收货|入库|到货|补货|缺货|库存不足|要货|库存|余量|还有多少|查询|transfer|move .* to|pindah|pindahkan|scrap|waste|damaged|expired|rusak|kedaluwarsa|kadaluarsa|stock count|inventory count|stok opname|receive|goods receipt|penerimaan|terima barang|restock|replenish|isi ulang stok|tambah stok|inventory|stock|stok/.test(message.toLowerCase());
   if (llmResult && (llmResult.action?.type !== 'none' || !requestedOperation)) {
@@ -4345,7 +4391,7 @@ async function r2CreateStoreAgentEvidence(env, body = {}) {
   if (!intent || !filename) return bad('请提供凭证类型和照片文件名。');
   const labels = { scrap: '报损', count: '盘点', receipt: '收货' };
   const documentType = intent === 'receipt' ? 'receipt' : intent === 'scrap' ? 'scrap' : 'inventory_count';
-  const document = r2AddDocument(value, 'agent-photo', filename, [], `门店 AI 助手收到${labels[intent]}照片，等待门店确认${intent === 'count' ? '实际盘点数量' : '单据数据'}。`, documentType, validPreviewData(body.preview_data), { store_code: storeCode, business_date: value.feishuImport?.latest_business_date || chinaBusinessDate() });
+  const document = r2AddDocument(value, 'agent-photo', filename, [], `门店 AI 助手收到${labels[intent]}照片，等待门店确认${intent === 'count' ? '实际盘点数量' : '单据数据'}。`, documentType, validPreviewData(body.preview_data), { store_code: storeCode, business_date: String(body.business_date || r2StoreBusinessDate(value, storeCode)).slice(0, 10) });
   r2Audit(value, '门店 AI 助手', '提交照片凭证', `${storeCode} · ${labels[intent]} · ${filename}；照片已留档，未自动修改库存数量。`, document.id);
   return json({ document, state: await r2SaveDemoState(env, value, 'store-agent-evidence') }, 201);
 }

@@ -198,15 +198,15 @@
     latestStoreState = state;
     const storeCode = new URLSearchParams(window.location.search).get('store') || state.storeCode || 'STORE001';
     const storeMaster = state.storeMaster || {};
-    const businessDate = state.businessDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+    const businessDate = state.businessDate;
     const headerCode = document.querySelector('#store-header-code'); if (headerCode) headerCode.textContent = storeMaster.store_code || storeCode;
     const headerName = document.querySelector('#store-header-name'); if (headerName) headerName.textContent = storeMaster.store_name || storeCode;
     const headerRole = document.querySelector('#store-header-role'); if (headerRole) headerRole.textContent = storeMaster.store_role || '门店';
     const footerName = document.querySelector('#store-footer-name'); if (footerName) footerName.textContent = `${storeMaster.store_name || storeCode} · ${storeMaster.store_code || storeCode}`;
-    const headerDate = document.querySelector('#store-header-date'); if (headerDate) headerDate.textContent = `营业日 ${businessDate.slice(5).replace('-', '/')}`;
+    const headerDate = document.querySelector('#store-header-date'); if (headerDate) { headerDate.textContent = `营业日 ${businessDate.slice(5).replace('-', '/')}`; headerDate.title = `${state.businessCalendar?.time_zone || 'Asia/Jakarta'} · 每日 ${state.businessCalendar?.cutoff_time || '04:00'} 切换营业日`; }
     const supervisorName = document.querySelector('#store-header-supervisor'); if (supervisorName) supervisorName.textContent = state.supervisor?.display_name || '尚未配置';
     const storeOperationTasks = (state.operationTasks || []).filter((item) => (item.store_code || item.assigned_store_code || storeCode) === storeCode);
-    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+    const today = businessDate;
     const overdueTasks = storeOperationTasks.filter((item) => item.status === 'pending_store_submission' && item.due_date && item.due_date < today);
     const riskCount = document.querySelector('#header-risk-count'); if (riskCount) riskCount.textContent = String(overdueTasks.length);
     const planCount = document.querySelector('#header-plan-count'); if (planCount) planCount.textContent = String((state.countPlans || []).filter((plan) => plan.store_code === storeCode && plan.business_date === today).length);
@@ -241,7 +241,7 @@
       const summarySalesLabel = document.querySelector('#summary-sales-label'); if (summarySalesLabel) summarySalesLabel.textContent = salesAvailable ? '销量' : '销量数据';
       const summaryDataNote = document.querySelector('#summary-data-note'); if (summaryDataNote) summaryDataNote.textContent = salesAvailable
         ? `销售数据已回传，统计营业日为 ${businessDate}；库存与损耗使用同一营业日口径。`
-        : `营业日 ${businessDate} 尚无销售回传${importState.latest_business_date ? `；最近一次销售快照为 ${importState.latest_business_date}，本简报不沿用旧销量` : ''}。库存任务和流水仍按各自营业日展示。`;
+        : `营业日 ${businessDate} 尚无销售回传${importState.latest_business_date ? `；最近一次销售快照为 ${importState.latest_business_date}，本简报不沿用旧销量` : ''}。门店按 ${latestStoreState?.businessCalendar?.time_zone || 'Asia/Jakarta'} 时间、${latestStoreState?.businessCalendar?.cutoff_time || '04:00'} 切日。`;
       const activeRisks = (latestStoreState?.materialAnomalies || []).filter((item) => !['closed','auto_closed'].includes(item.status));
       const summaryRisk = document.querySelector('#summary-risk'); if (summaryRisk) summaryRisk.textContent = `${activeRisks.length} 项`;
       const scrapQty = (latestStoreState?.materialEvents || []).filter((event) => event.type === 'scrap' && event.status === 'active').reduce((sum, event) => sum + Number(event.qty || 0), 0);
