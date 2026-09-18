@@ -460,7 +460,7 @@
       <button type="button" class="agent-chip" data-agent-prompt="我要申请补货">📦 申请补货</button>
       <button type="button" class="agent-chip" data-agent-prompt="查牛奶库存">🔎 查库存</button>
     </div>
-    <div class="agent-voice-settings"><span>语音语言 · <a id="store-agent-voice-qa" href="/voice-qa/?store=STORE001" style="color:#3370ff;text-decoration:none">语音验收</a></span><select id="store-agent-language" aria-label="语音识别语言"><option value="auto" selected>自动识别</option><option value="zh-CN">中文（普通话）</option><option value="en-US">English</option><option value="id-ID">Bahasa Indonesia</option></select></div>
+    <div class="agent-voice-settings" hidden aria-hidden="true"><a id="store-agent-voice-qa" href="/voice-qa/?store=STORE001">语音验收</a><select id="store-agent-language" aria-label="语音识别语言"><option value="auto" selected>自动识别</option><option value="zh-CN">中文（普通话）</option><option value="en-US">English</option><option value="id-ID">Bahasa Indonesia</option></select></div>
     <div class="agent-voice-note" id="store-agent-voice-note">正在录音…松开后转写</div>
     <div class="agent-input-area">
       <textarea id="store-agent-input" class="agent-input" rows="1" maxlength="600" placeholder="直接说：调 2kg 黑糖珍珠去 STORE002"></textarea>
@@ -468,7 +468,7 @@
       <button type="button" id="store-agent-send" class="agent-icon-btn send" aria-label="发送"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 17 8-17 8 3-8-3-8Z"></path><path d="M7 12h14"></path></svg></button>
     </div>
     <div class="agent-voice-overlay" id="store-agent-voice-overlay" aria-live="polite" role="dialog" aria-modal="true"><div class="agent-voice-orb">🎙️</div><strong id="store-agent-voice-overlay-title">正在聆听</strong><span id="store-agent-voice-overlay-text">请对着麦克风说话，完成后点击下方按钮</span><div class="agent-voice-actions"><button class="agent-voice-cancel" id="store-agent-voice-cancel" type="button">取消</button><button class="agent-voice-finish" id="store-agent-voice-finish" type="button">完成录音</button></div></div>
-    <div class="agent-helper">AI 会先识别并预填表单；库存与单据仍需由门店确认提交。</div>
+    <div class="agent-helper">语音自动识别中文、English 和 Bahasa Indonesia；AI 只预填表单，库存与单据仍需门店确认提交。</div>
   </section>
 </div>
 
