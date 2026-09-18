@@ -87,12 +87,21 @@ await check('master data quality gate distinguishes core readiness from brand pr
 });
 
 await check('new pages are served', async () => {
-  const paths = ['/count-plans/', '/documents/', '/flows/', '/purchase-orders/', '/receipt-orders/', '/procurement-detail/?type=purchase&id=preview', '/voice-qa/?store=STORE001', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001', '/work-order/'];
+  const paths = ['/login/', '/hq-login/', '/count-plans/', '/documents/', '/flows/', '/purchase-orders/', '/receipt-orders/', '/procurement-detail/?type=purchase&id=preview', '/voice-qa/?store=STORE001', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001', '/work-order/'];
   for (const path of paths) {
     const response = await fetch(`${base}${path}`);
     if (!response.ok) throw new Error(`${path}: ${response.status}`);
   }
   return paths;
+});
+
+await check('mobile login has a dedicated touch layout', async () => {
+  const page = await fetch(`${base}/login/`).then((r) => r.text());
+  for (const token of ['viewport-fit=cover', '@media(max-width:720px)', 'min-height:100dvh', 'grid-template-columns:1fr', 'env(safe-area-inset-bottom)', 'font-size:16px', '移动端登录', '登录移动工作台']) {
+    if (!page.includes(token)) throw new Error(`missing mobile login token: ${token}`);
+  }
+  if (!page.includes('touch-action:manipulation')) throw new Error('mobile login choices and submit action must be touch-friendly');
+  return { breakpoint:720, account_layout:'single-column', ios_input_zoom_prevented:true, safe_area:true };
 });
 
 await check('store mobile header identifies the assistant', async () => {
