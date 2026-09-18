@@ -233,6 +233,11 @@
   window.storeAgentTabOpened = welcome;
   window.storeOpsRefresh = loadLedger;
   window.storeOperationOpen = async (action) => {
+    if (action === 'inventory') {
+      window.switchStoreTab?.('agent');
+      await welcome();
+      return ask('查看当前库存');
+    }
     const intent = ({ transfer: 'transfer', scrap: 'scrap', count: 'count', receipt: 'receipt', restock: 'restock' })[action];
     if (!intent) return;
     await loadLedger();

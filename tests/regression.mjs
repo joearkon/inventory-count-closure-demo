@@ -102,6 +102,20 @@ await check('store mobile header identifies the assistant', async () => {
   return { header:'STORE001 · 门店助手' };
 });
 
+await check('store vNext keeps reminders, operations and conversational assistant together', async () => {
+  const [page, storeScript, appScript] = await Promise.all([
+    fetch(`${base}/store/?store=STORE001`).then((r) => r.text()),
+    fetch(`${base}/store-agent.js`).then((r) => r.text()),
+    fetch(`${base}/app.js`).then((r) => r.text())
+  ]);
+  for (const token of ['今天最重要', '需要你处理', '经营简报', '最近结果', 'data-reminder-filter="mine"', 'data-reminder-filter="result"']) if (!page.includes(token)) throw new Error(`missing store reminder token: ${token}`);
+  for (const action of ['restock', 'receipt', 'count', 'transfer', 'scrap', 'inventory']) if (!page.includes(`data-common-action="${action}"`)) throw new Error(`missing store operation: ${action}`);
+  if (!page.includes('id="store-agent-chat"') || !page.includes('id="store-agent-input"') || !page.includes('id="store-agent-mic"')) throw new Error('conversational assistant must be preserved');
+  if (!storeScript.includes("action === 'inventory'") || !storeScript.includes("ask('查看当前库存')")) throw new Error('inventory query must enter the assistant flow');
+  if (!appScript.includes("status === 'pending_store_submission'") || !appScript.includes('查看原工单')) throw new Error('priority reminders must be store-actionable and traceable to the original work order');
+  return { reminder_sections:4, operation_entries:6, conversation_preserved:true, work_order_traceable:true };
+});
+
 await check('follow-up work orders use a traceable full detail page', async () => {
   const [hqPage, hqScript, page, script] = await Promise.all([fetch(`${base}/`).then((r) => r.text()), fetch(`${base}/app.js`).then((r) => r.text()), fetch(`${base}/work-order/`).then((r) => r.text()), fetch(`${base}/work-order-page.js`).then((r) => r.text())]);
   for (const token of ['审计记录与处理时间线', '新增处理记录', '当前操作人', '工单基础信息与判断来源', '关联单据与业务记录']) if (!`${page}\n${script}`.includes(token)) throw new Error(`missing work order detail token: ${token}`);

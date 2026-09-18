@@ -167,13 +167,13 @@
     if (!task) return '';
     const isPending = task.status === 'pending_store_submission';
     const isReview = task.status === 'pending_hq_review';
-    return `<div class="task-item count-task operation-task demo-flow ${task.status === 'closed' ? 'closed-task' : ''}"><span class="store-demo-float">DEMO</span>
+    return `<div class="task-item count-task operation-task demo-flow ${task.status === 'closed' ? 'closed-task' : ''}"><span class="store-demo-float">优先处理</span>
       <div class="task-icon ${task.status === 'closed' ? 'green' : 'blue'}">${task.status === 'closed' ? '✓' : '📌'}</div>
-      <div class="task-body"><div class="task-title">总部主动任务：${esc(task.title)}<span class="badge-direct">${operationStatusText(task.status)}</span></div>
-      <div class="task-code">任务编号：${esc(task.id)}${task.source_anomaly_id ? ` · 关联研判：${esc(task.source_anomaly_id)}` : ''}</div>
+      <div class="task-body"><div class="task-title">${esc(task.title)}<span class="badge-direct">${operationStatusText(task.status)}</span></div>
+      <div class="task-code">工单 ${esc(task.id)}${task.source_anomaly_id ? ` · 来源研判 ${esc(task.source_anomaly_id)}` : ' · 来源：总部运营任务'}</div>
       <div class="task-meta">${esc(task.instruction)}<br>责任人：${esc(task.assigned_to)}</div>
-      <details class="task-detail"><summary>查看任务详情</summary><p>下发时间：${esc(formatDate(task.created_at))}。完成后将同步更新总部任务状态；如需凭证，请上传现场照片或核查单。</p></details>
-      ${isPending ? '<div class="task-action"><button class="btn btn-primary" id="operation-submit-btn">上传核查凭证</button></div>' : ''}
+      <details class="task-detail" open><summary>系统已核对</summary><p>下发时间：${esc(formatDate(task.created_at))}。任务来自后台统一工单；提交处理凭证后进入总部验收，并在同一条时间线保留操作人与结果。</p></details>
+      ${isPending ? `<div class="task-action"><button class="btn btn-primary" id="operation-submit-btn">开始核对</button><a class="btn btn-outline" href="/work-order/?id=${encodeURIComponent(task.id)}">查看原工单</a></div>` : ''}
       ${isReview ? `<div class="task-action"><span class="pending-copy">已提交凭证：${esc(task.proof_filename)}；等待总部验收。</span></div>` : ''}
       ${task.status === 'closed' ? `<div class="task-action"><span class="closed-copy">${esc(task.resolution)} · ${formatDuration(task.created_at, task.closed_at)}</span></div>` : ''}
       </div></div>`;
@@ -210,7 +210,8 @@
     const planCount = document.querySelector('#header-plan-count'); if (planCount) planCount.textContent = String((state.countPlans || []).filter((plan) => plan.store_code === storeCode && plan.business_date === today).length);
     const taskArea = document.querySelector('#count-task-area');
     if (taskArea) taskArea.innerHTML = taskCard(state.task);
-    document.querySelector('#operation-task-area').innerHTML = operationStoreTask(state.operationTask);
+    const actionableOperationTask = storeOperationTasks.find((item) => item.status === 'pending_store_submission') || null;
+    document.querySelector('#operation-task-area').innerHTML = operationStoreTask(actionableOperationTask);
     renderDocuments(state.documents);
     const todoCount = document.querySelector('#todo-count');
     if (!state.task) {

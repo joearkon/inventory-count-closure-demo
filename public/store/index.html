@@ -260,7 +260,7 @@
   .manual-count-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:3px; }
   .manual-count-status { font-size:12px; color:#646a73; }
   .count-stage{display:grid;gap:10px;margin-top:12px;padding:11px;border:1px solid #d8e5ff;border-radius:10px;background:#fafcff}.count-stage-head{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:8px;align-items:start}.count-stage-dot{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3370ff;color:#fff;font-size:12px;font-weight:700}.count-stage-head b{display:block;color:#1f2329;font-size:14px;line-height:1.35}.count-stage-head small{display:block;margin-top:2px;color:#646a73;font-size:12px;line-height:1.45}.count-stage-head em{padding:3px 6px;border-radius:6px;background:#eaf1ff;color:#245bdb;font-size:11px;font-style:normal;white-space:nowrap}.count-stage.state-warning{border-color:#ffe0a3;background:#fffaf0}.count-stage.state-warning .count-stage-dot{background:#d48806}.count-stage.state-warning .count-stage-head em{background:#fff1d6;color:#ad6800}.count-stage.state-ready{border-color:#b7ebc3;background:#f6ffed}.count-stage.state-ready .count-stage-dot{background:#2a9d3f}.count-stage.state-ready .count-stage-head em{background:#e5f8e9;color:#237b42}.count-photo-primary{display:grid;gap:8px}.count-photo-picker{display:grid;grid-template-columns:30px 1fr;gap:2px 8px;align-items:center;padding:12px;border:1.5px dashed #7ca5ff;border-radius:10px;background:#f5f8ff;color:#245bdb;cursor:pointer}.count-photo-picker input{display:none}.count-photo-picker span{grid-row:span 2;font-size:22px}.count-photo-picker b{font-size:14px}.count-photo-picker small{font-size:12px;color:#646a73;line-height:1.45}.count-photo-picker.is-uploading{opacity:.65;pointer-events:none}.manual-count-hint{font-size:12px;color:#646a73;line-height:1.5}
-  #sop-card,#summary-card { display:none; }
+  #sop-card { display:none; }
   @media(max-width:360px){.common-grid{grid-template-columns:1fr}}
   /* 参考门店移动端原型：核心页面用底部三栏导航，助手始终可一键进入。 */
   .store-tab-bar { position:fixed; bottom:0; left:50%; transform:translateX(-50%); z-index:100; display:grid; grid-template-columns:repeat(3,1fr); gap:0; width:100%; max-width:414px; margin:0; padding:6px 6px calc(8px + env(safe-area-inset-bottom)); border:0; border-top:1px solid #e5e6eb; border-radius:0; background:rgba(255,255,255,.98); box-shadow:0 -5px 18px rgba(31,35,41,.08); backdrop-filter:blur(12px); }
@@ -314,30 +314,73 @@
   .agent-photo { display:grid; place-items:center; min-height:126px; padding:18px; border:2px dashed #c9cdd4; border-radius:10px; color:#646a73; text-align:center; cursor:pointer; }.agent-photo input{display:none}.agent-photo span{font-size:28px}.agent-photo small{display:block;margin-top:6px;font-size:13px}.agent-photo.has-file{border-color:#52c41a;background:#f6ffed;color:#237b42}
   .agent-transfer-target{display:grid;grid-template-columns:minmax(0,1fr) 95px 32px;gap:7px;align-items:center;margin-bottom:7px}.agent-transfer-target input{min-width:0}.agent-target-remove{height:40px;border:0;border-radius:8px;background:#fff1f0;color:#cf1322;font-size:19px;cursor:pointer}.agent-add-target{margin-top:1px;padding:8px 10px;font-size:12px}
   .agent-sheet-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 16px calc(16px + env(safe-area-inset-bottom));border-top:1px solid #f0f1f3}.agent-sheet-actions .btn{padding:13px;font-size:15px}.agent-sheet-status{min-height:18px;padding:0 16px 8px;color:#d4380d;font-size:12px}
+
+  /* 门店经营提醒 vNext：保留原有业务能力，重组首页的信息优先级。 */
+  body{background:#f4f6fa;color:#172033}
+  .header{padding:22px 18px 28px;border-radius:0 0 26px 26px;margin-bottom:16px;box-shadow:0 12px 30px rgba(36,81,209,.18)}
+  .header h1{font-size:20px;font-weight:750}.store-header-name{margin-left:27px;color:#dbe5ff}
+  .header-session{align-self:flex-start;flex-wrap:wrap;justify-content:flex-end}.header-user{font-weight:650}.header-logout{cursor:pointer}
+  .stats-row{gap:10px}.stat-pill{padding:12px 6px;border:1px solid rgba(255,255,255,.1);border-radius:15px}.stat-number{font-size:23px}.stat-label{font-size:11px}
+  .store-section-row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:18px 3px 10px}.store-section-row h2{font-size:18px;line-height:1.25;margin:0}.store-section-row small{color:#7a8597;font-size:12px;text-align:right}
+  .reminder-filters{display:flex;gap:8px;overflow:auto;margin:0 0 12px;padding:0 1px 2px;scrollbar-width:none}.reminder-filters::-webkit-scrollbar{display:none}.reminder-filter{flex:none;border:1px solid #e2e7f0;border-radius:999px;background:#fff;color:#68758a;padding:7px 12px;font:12px inherit;cursor:pointer}.reminder-filter.active{border-color:#3370ff;background:#3370ff;color:#fff;font-weight:700}
+  .today-card{border:1px solid #d8e4ff;border-radius:18px;box-shadow:0 10px 28px rgba(35,55,92,.07)}.today-card>.card-header{display:none}.today-card .task-section{padding:0}
+  .priority-zone{border-top:4px solid #3370ff;background:#fff}.priority-zone #operation-task-area:empty::after{content:'当前没有总部下发的优先事项';display:block;padding:22px;color:#8f959e;text-align:center;font-size:13px}
+  .priority-zone .operation-task{border:0!important;border-radius:0!important;margin:0!important;padding:18px!important;background:#fff!important}.priority-zone .operation-task .task-icon{display:none}.priority-zone .operation-task .store-demo-float{position:static;margin:0 8px 7px 0;background:#fff0f0;color:#d72a2a}.priority-zone .operation-task .task-title{font-size:18px;font-weight:750;line-height:1.45}.priority-zone .operation-task .task-meta{font-size:14px;line-height:1.7;color:#46536a}.priority-zone .operation-task .task-code{margin:7px 0;color:#61708a}
+  .priority-zone .operation-task .task-detail{margin-top:13px;border:0;border-radius:12px;background:#f5f8ff;color:#4d5e79}.priority-zone .operation-task .task-detail summary{padding:11px 12px;font-weight:650;color:#245bdb}.priority-zone .operation-task .task-detail p{padding:0 12px 12px}
+  .priority-zone .operation-task .task-action{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px}.priority-zone .operation-task .task-action .btn{min-height:42px;border-radius:10px;text-align:center;text-decoration:none;display:grid;place-items:center}
+  .secondary-task-zone{padding:4px 16px 8px}.secondary-task-zone .task-item{border:1px solid #e5eaf2;border-radius:15px;margin:0 0 10px;padding:14px;background:#fff}.secondary-task-zone .store-demo-float{display:none}.secondary-task-zone .task-title{font-weight:700}
+  .store-brief-card{border-radius:16px}.store-brief-card .card-header{display:flex;align-items:center;justify-content:space-between}.store-brief-card .summary{background:#fff;padding:14px 16px}.brief-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.brief-metric{padding:12px;border-radius:12px;background:#f7f9fc}.brief-metric span{display:block;color:#7c8799;font-size:11px}.brief-metric b{display:block;margin-top:5px;font-size:15px}.brief-note{margin-top:10px;color:#68758a;font-size:12px;line-height:1.6}
+  #completed-card{border-radius:16px}#completed-card .card-header{font-size:16px}
+  #common-ops-card{border-radius:18px}#common-ops-card .card-header{font-size:17px;padding:16px}.common-grid{gap:11px}.common-action{min-height:122px;border-radius:16px;text-align:left;padding:15px}.common-action .common-icon{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#eef4ff;font-size:20px}.common-action strong{margin-top:11px}.common-action span:last-child{margin-top:3px}
+  #store-recent-card{border-radius:16px}.agent-card{border-radius:18px;overflow:visible}.agent-card>.card-header{border-radius:18px 18px 0 0;background:#fff}
+  .store-tab-bar{border-radius:18px 18px 0 0}.store-tab-bar .tab-btn{font-size:12px}
+  @media(min-width:415px){body{border-left:1px solid #e2e7f0;border-right:1px solid #e2e7f0;min-height:100vh}}
 </style>
 <script src="/loading.js"></script>
 </head>
 <body data-view="store">
 
 <div class="header">
-  <div class="header-top"><div><h1>🤖 <span id="store-header-code">STORE001</span><span id="store-header-title"> · 门店助手</span><span class="badge-direct" id="store-header-role">普通门店</span></h1><div class="store-header-name" id="store-header-name">小茶日记</div></div><div class="header-session"><span class="header-user" id="store-header-user">读取身份…</span><button class="header-logout" id="store-logout" type="button">退出</button><div class="header-date" id="store-header-date">今日</div></div></div>
-  <div class="stats-row" id="today-stats"><div class="stat-pill"><span class="stat-number" id="header-todo-count">0</span><span class="stat-label">未完成</span></div><div class="stat-pill"><span class="stat-number" id="header-risk-count">0</span><span class="stat-label">逾期</span></div><div class="stat-pill"><span class="stat-number" id="header-plan-count">0</span><span class="stat-label">每日 SOP</span></div></div>
+  <div class="header-top"><div><h1>🏪 <span id="store-header-code">STORE001</span><span id="store-header-title"> · 门店助手</span><span class="badge-direct" id="store-header-role">普通门店</span></h1><div class="store-header-name" id="store-header-name">小茶日记</div></div><div class="header-session"><span class="header-user" id="store-header-user">读取身份…</span><button class="header-logout" id="store-logout" type="button">退出</button><div class="header-date" id="store-header-date">今日</div></div></div>
+  <div class="stats-row" id="today-stats"><div class="stat-pill"><span class="stat-number" id="header-todo-count">0</span><span class="stat-label">未完成</span></div><div class="stat-pill"><span class="stat-number" id="header-risk-count">0</span><span class="stat-label">逾期</span></div><div class="stat-pill"><span class="stat-number" id="header-plan-count">0</span><span class="stat-label">盘点计划</span></div></div>
 </div>
 
 <nav class="store-tab-bar" aria-label="门店运营页面切换">
-  <button class="tab-btn active" type="button" data-store-tab="tasks"><span class="tab-icon">📋</span>任务</button>
+  <button class="tab-btn active" type="button" data-store-tab="tasks"><span class="tab-icon">🔔</span>提醒</button>
   <button class="tab-btn" type="button" data-store-tab="ops"><span class="tab-icon">🏪</span>运营</button>
   <button class="tab-btn" type="button" data-store-tab="agent"><span class="tab-icon">🤖</span>助手</button>
 </nav>
 
 <!-- 今日任务：只展示门店今天必须完成并可追溯的任务。 -->
 <div class="tab-content active" id="store-tab-tasks">
-<div class="card today-card">
-  <div class="card-header">⏰ 今日任务 <span class="today-count">待完成 <span id="todo-count">0</span> 项</span></div>
-  <div class="task-section" id="today-task-list"><div id="operation-task-area"></div><div id="daily-count-task"></div><div id="store-transfer-receipt-tasks"></div><div id="today-task-empty" class="today-empty"><span class="today-loading-dot" aria-hidden="true"></span><span>正在同步今日任务…</span></div></div>
+<div class="reminder-filters" aria-label="经营提醒筛选">
+  <button class="reminder-filter active" type="button" data-reminder-filter="all">全部 <span id="todo-count">0</span></button>
+  <button class="reminder-filter" type="button" data-reminder-filter="mine">待我处理</button>
+  <button class="reminder-filter" type="button" data-reminder-filter="result">处理结果</button>
+</div>
+<div class="store-section-row reminder-open"><h2>今天最重要</h2><small>按影响与可执行性排序</small></div>
+<div class="card today-card priority-zone reminder-open">
+  <div class="task-section"><div id="operation-task-area"></div></div>
 </div>
 
-<div class="card" id="completed-card">
+<div class="store-section-row reminder-open"><h2>需要你处理</h2><small>只保留今天可执行的事项</small></div>
+<div class="card today-card reminder-open">
+  <div class="task-section secondary-task-zone" id="today-task-list"><div id="daily-count-task"></div><div id="store-transfer-receipt-tasks"></div><div id="today-task-empty" class="today-empty"><span class="today-loading-dot" aria-hidden="true"></span><span>正在同步今日任务…</span></div></div>
+</div>
+
+<div class="store-section-row reminder-brief"><h2>经营简报</h2><small>帮助判断，不制造额外待办</small></div>
+<div class="card store-brief-card reminder-brief" id="summary-card">
+  <div class="card-header"><span>昨日经营与库存</span><span class="today-count">系统汇总</span></div>
+  <div class="summary"><div class="brief-grid">
+    <div class="brief-metric"><span>销量</span><b id="summary-sales">读取中</b></div>
+    <div class="brief-metric"><span>预警物料</span><b id="summary-risk" style="color:#d68a00">读取中</b></div>
+    <div class="brief-metric"><span>损耗</span><b id="summary-loss">读取中</b></div>
+    <div class="brief-metric"><span>台账状态</span><b id="summary-health">读取中</b></div>
+  </div><div class="brief-note">简报只使用现有销售快照、库存流水和盘点数据；数据不完整时会明确提示，不推算“潜在经营损失”。</div></div>
+</div>
+
+<div class="store-section-row reminder-result"><h2>最近结果</h2><small>完成动作与关联单据可追溯</small></div>
+<div class="card reminder-result" id="completed-card">
   <div class="card-header">✅ 最近完成</div>
   <div class="task-section" id="recent-completed-list"><div class="task-item"><div class="task-icon green">✓</div><div class="task-body"><div class="task-title">暂无最近完成记录</div><div class="task-meta">完成盘点、收货确认和总部任务后，可在这里回看关联单号。</div></div></div></div>
 </div>
@@ -346,12 +389,14 @@
 <!-- 常用运营：由门店主动发起，不混入今日待办。 -->
 <div class="tab-content" id="store-tab-ops">
 <div class="card" id="common-ops-card">
-  <div class="card-header">🏪 快捷运营</div>
+  <div class="card-header">门店日常运营</div>
   <div class="common-grid">
+    <button class="common-action" type="button" data-common-action="restock"><span class="common-icon">🛒</span><strong>订货</strong><span>建立订货草稿</span></button>
+    <button class="common-action" type="button" data-common-action="receipt"><span class="common-icon">📥</span><strong>收货</strong><span>关联订单并确认</span></button>
+    <button class="common-action" type="button" data-common-action="count"><span class="common-icon">📷</span><strong>盘点</strong><span>拍照识别并复核</span></button>
     <button class="common-action" type="button" data-common-action="transfer"><span class="common-icon">🔄</span><strong>调拨</strong><span>发货/接收</span></button>
     <button class="common-action" type="button" data-common-action="scrap"><span class="common-icon">🗑️</span><strong>报损</strong><span>破损/过期</span></button>
-    <button class="common-action" type="button" data-common-action="count"><span class="common-icon">📷</span><strong>盘点</strong><span>拍照&上传</span></button>
-    <button class="common-action" type="button" data-common-action="restock"><span class="common-icon">📦</span><strong>申请补货</strong><span>向总部申请</span></button>
+    <button class="common-action" type="button" data-common-action="inventory"><span class="common-icon">🔎</span><strong>查库存</strong><span>通过助手查询多种物料</span></button>
   </div>
 </div>
 
@@ -450,16 +495,6 @@
   </div>
 </div>
 
-<details class="card" id="summary-card">
-  <summary class="card-header">📊 昨日概况</summary>
-  <div class="summary">
-    <div class="summary-row"><span>销量</span><span class="summary-value" id="summary-sales">读取中</span></div>
-    <div class="summary-row"><span>预警物料</span><span class="summary-value" id="summary-risk" style="color:#d68a00;">读取中</span></div>
-    <div class="summary-row"><span>损耗</span><span class="summary-value" id="summary-loss">读取中</span></div>
-    <div class="summary-row"><span>台账状态</span><span class="summary-value" id="summary-health">读取中</span></div>
-  </div>
-</details>
-
 <div class="footer-note" data-store-secondary>
   门店库存运营闭环 MVP · <span id="store-footer-name">小茶日记 · STORE001</span>
 </div>
@@ -472,9 +507,16 @@
 <script>
 (() => {
   const tabs = { tasks: document.querySelector('#store-tab-tasks'), ops: document.querySelector('#store-tab-ops'), agent: document.querySelector('#store-tab-agent') };
-  function switchStoreTab(name) { Object.entries(tabs).forEach(([key, node]) => node?.classList.toggle('active', key === name)); document.querySelectorAll('[data-store-tab]').forEach((button) => button.classList.toggle('active', button.dataset.storeTab === name)); ['sop-card','summary-card'].forEach((id) => { const node = document.getElementById(id); if (node) node.style.display = name === 'tasks' ? '' : 'none'; }); document.querySelectorAll('[data-store-secondary]').forEach((node) => { node.style.display = name === 'tasks' ? '' : 'none'; }); if (name === 'agent') window.storeAgentTabOpened?.(); if (name === 'ops') window.storeOpsRefresh?.(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  function switchStoreTab(name) { Object.entries(tabs).forEach(([key, node]) => node?.classList.toggle('active', key === name)); document.querySelectorAll('[data-store-tab]').forEach((button) => button.classList.toggle('active', button.dataset.storeTab === name)); ['sop-card'].forEach((id) => { const node = document.getElementById(id); if (node) node.style.display = name === 'tasks' ? '' : 'none'; }); document.querySelectorAll('[data-store-secondary]').forEach((node) => { node.style.display = name === 'tasks' ? '' : 'none'; }); if (name === 'agent') window.storeAgentTabOpened?.(); if (name === 'ops') window.storeOpsRefresh?.(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   window.switchStoreTab = switchStoreTab;
   document.querySelectorAll('[data-store-tab]').forEach((button) => button.addEventListener('click', () => switchStoreTab(button.dataset.storeTab)));
+  document.querySelectorAll('[data-reminder-filter]').forEach((button) => button.addEventListener('click', () => {
+    const filter = button.dataset.reminderFilter;
+    document.querySelectorAll('[data-reminder-filter]').forEach((item) => item.classList.toggle('active', item === button));
+    document.querySelectorAll('.reminder-open').forEach((node) => { node.style.display = filter === 'result' ? 'none' : ''; });
+    document.querySelectorAll('.reminder-brief').forEach((node) => { node.style.display = filter === 'all' ? '' : 'none'; });
+    document.querySelectorAll('.reminder-result').forEach((node) => { node.style.display = filter === 'mine' ? 'none' : ''; });
+  }));
   switchStoreTab('tasks');
 })();
 </script>
