@@ -80,6 +80,9 @@ try {
 
     & node (Join-Path $projectRoot 'tests\accounts-config.mjs')
     if ($LASTEXITCODE -ne 0) { throw "Account and role configuration scenario failed with exit code $LASTEXITCODE" }
+
+    & node (Join-Path $projectRoot 'tests\role-workflow-regression.mjs')
+    if ($LASTEXITCODE -ne 0) { throw "Role work-order workflow scenario failed with exit code $LASTEXITCODE" }
   } finally {
     $env:BASE_URL = $previousBaseUrl
     $env:MUTATION_TESTS = $previousMutationTests

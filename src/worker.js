@@ -4542,6 +4542,8 @@ async function r2AuthorizeApi(env, request, url, account) {
   if (request.method !== 'GET' && hqPath && !r2HasRole(account, 'hq_operations', 'hq_admin')) return bad('该操作需要总部运营权限。', 403);
   const dispatchPath = request.method !== 'GET' && (url.pathname.startsWith('/api/count-plans/') || url.pathname.startsWith('/api/diagnosis-cases/'));
   if (dispatchPath && !r2HasRole(account, 'area_supervisor', 'hq_operations', 'hq_admin')) return bad('该下发或研判动作需要督导或总部权限。', 403);
+  const operationDispatchPath = request.method === 'POST' && url.pathname === '/api/operation-tasks';
+  if (operationDispatchPath && !r2HasRole(account, 'area_supervisor', 'hq_operations', 'hq_admin')) return bad('主动运营任务只能由督导或总部下发。', 403);
   const managerPath = /\/(confirm|receive|revert)$/.test(url.pathname) || url.pathname === '/api/material-events' || url.pathname === '/api/material-transfers';
   if (request.method !== 'GET' && managerPath && !r2HasRole(account, 'store_manager', 'area_supervisor', 'hq_operations', 'hq_admin')) return bad('该操作需要店长、督导或总部权限。', 403);
   let body = {};
