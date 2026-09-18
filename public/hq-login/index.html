@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>总部后台登录 · 小笼包门店运营</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#eef2f8;color:#172033;font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}.shell{width:min(980px,calc(100% - 32px));display:grid;grid-template-columns:1.08fr .92fr;background:#fff;border:1px solid #e1e6ef;border-radius:18px;overflow:hidden;box-shadow:0 22px 70px rgba(28,44,76,.14)}.intro{padding:52px;background:linear-gradient(145deg,#112442,#1f4c95);color:#fff}.brand{font-size:16px;font-weight:750}.intro h1{margin:72px 0 13px;font-size:35px;line-height:1.22}.intro p{max-width:430px;color:#c9d6eb;font-size:15px}.scope{margin-top:34px;padding-top:22px;border-top:1px solid rgba(255,255,255,.18);color:#dce6f5}.scope span{display:block;margin:9px 0}.login{padding:44px}.login h2{margin:0;font-size:25px}.sub{margin:7px 0 22px;color:#68758a}.accounts{display:grid;gap:8px;margin-bottom:18px}.account{display:flex;align-items:center;gap:11px;width:100%;padding:12px;border:1px solid #e1e6ef;border-radius:10px;background:#fff;text-align:left;cursor:pointer}.account:hover,.account.selected{border-color:#3370ff;background:#f3f7ff}.avatar{display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:#e8f0ff;color:#2468e8;font-weight:750}.account b{display:block}.account small{color:#8a95a7}.field{display:block;margin:12px 0;color:#68758a;font-size:12px}.field input{display:block;width:100%;margin-top:5px;padding:11px 12px;border:1px solid #d7dde7;border-radius:8px;font:14px inherit}.hint{padding:10px 11px;border-radius:8px;background:#f5f7fa;color:#68758a;font-size:12px}.btn{width:100%;margin-top:16px;padding:12px;border:0;border-radius:8px;background:#2468e8;color:#fff;font:650 14px inherit;cursor:pointer}.btn:disabled{opacity:.6}.message{min-height:21px;margin-top:8px;color:#d4380d;font-size:12px}.switch{margin:14px 0 0;text-align:center;font-size:12px}.switch a{color:#2468e8;text-decoration:none}@media(max-width:720px){.shell{grid-template-columns:1fr}.intro{padding:25px}.intro h1{margin:25px 0 8px;font-size:27px}.scope{display:none}.login{padding:25px}}
+  </style>
+</head>
+<body data-portal="hq">
+  <main class="shell">
+    <section class="intro">
+      <div class="brand">◈ 小笼包总部运营</div>
+      <h1>总部运营控制台</h1>
+      <p>面向总部运营和系统管理员，统一查看区域风险、规则研判、跨店工单与最终闭环。</p>
+      <div class="scope"><span>品牌全局 → 区域、门店与规则聚合</span><span>运营治理 → 研判、分派、重算与关闭</span><span>系统配置 → 账号、主数据与外部同步</span></div>
+    </section>
+    <section class="login">
+      <h2>总部人员登录</h2>
+      <p class="sub">此入口仅接受总部运营与总部管理员账号。</p>
+      <div class="accounts" id="accounts">正在读取总部账号…</div>
+      <form id="form">
+        <label class="field">总部账号邮箱<input id="email" type="email" required autocomplete="username"></label>
+        <label class="field">密码<input id="password" type="password" minlength="8" required autocomplete="current-password"></label>
+        <div class="hint">非总部账号将被拒绝；登录后仍由服务端校验角色与数据范围。</div>
+        <button class="btn" id="submit">登录总部后台</button>
+        <div class="message" id="message"></div>
+      </form>
+      <p class="switch"><a href="/login/">门店／加盟商／督导登录</a></p>
+    </section>
+  </main>
+  <script src="/login-page.js"></script>
+</body>
+</html>

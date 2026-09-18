@@ -15,7 +15,7 @@ const R2_STORE_MASTERS = Object.freeze([
 const R2_STORE_CODES = Object.freeze(R2_STORE_MASTERS.map((item) => item.store_code));
 const R2_ROLE_DEFINITIONS = Object.freeze([
   { id: 'store_staff', name: '门店店员', level: 'store', description: '处理授权门店的任务、草稿和库存查询；正式写入仍需人工确认。', permissions: ['store.read', 'task.handle', 'draft.create', 'inventory.read'] },
-  { id: 'store_manager', name: '门店店长', level: 'store', description: '负责门店单据确认、工单提交和日常库存操作。', permissions: ['store.read', 'task.handle', 'draft.create', 'document.confirm', 'work_order.submit'] },
+  { id: 'store_manager', name: '加盟商（门店负责人）', level: 'store', description: '负责门店单据确认、工单提交和日常库存操作。', permissions: ['store.read', 'task.handle', 'draft.create', 'document.confirm', 'work_order.submit'] },
   { id: 'area_supervisor', name: '区域督导', level: 'region', description: '查看所辖门店、接受协助、派发巡店并升级总部。', permissions: ['region.read', 'task.assist', 'task.assign', 'inspection.dispatch', 'work_order.escalate'] },
   { id: 'hq_operations', name: '总部运营', level: 'brand', description: '查看全部区域、处理治理问题、确认闭环和配置运营规则。', permissions: ['brand.read', 'work_order.review', 'work_order.close', 'rule.read', 'master_data.read'] },
   { id: 'hq_admin', name: '总部管理员', level: 'brand', description: '配置账户、角色、组织范围和系统主数据。', permissions: ['account.manage', 'role.manage', 'scope.manage', 'master_data.manage', 'system.configure'] }
@@ -458,7 +458,7 @@ function r2StateView(value, view = '') {
   if (view === 'count-plans') return { countPlans: value.countPlans || [], materialCatalog: value.materialCatalog || [], storeMasters: value.storeMasters || [], feishuImport: importSummary, storage: value.storage };
   if (view === 'documents') return { storeMasters: value.storeMasters || [], materialEvents: value.materialEvents || [], transferOrders: value.transferOrders || [], purchaseOrders: value.purchaseOrders || [], receiptOrders: value.receiptOrders || [], storage: value.storage };
   if (view === 'procurement') return { storeMasters: value.storeMasters || [], materialCatalog: value.materialCatalog || [], purchaseOrders: value.purchaseOrders || [], receiptOrders: value.receiptOrders || [], storage: value.storage };
-  if (view === 'accounts') return { accounts: r2NormalizeAccounts(value.accounts).map(r2SafeAccount), roleDefinitions: value.roleDefinitions || r2DefaultRoleDefinitions(), organizationUnits: value.organizationUnits || r2DefaultOrganizationUnits(), activeAccountId: value.activeAccountId || 'ACC-HQ-WANG', storeMasters: value.storeMasters || r2DefaultStoreMasters(), storage: value.storage };
+  if (view === 'accounts') return { accounts: r2NormalizeAccounts(value.accounts).map(r2SafeAccount), roleDefinitions: r2DefaultRoleDefinitions(), organizationUnits: value.organizationUnits || r2DefaultOrganizationUnits(), activeAccountId: value.activeAccountId || 'ACC-HQ-WANG', storeMasters: value.storeMasters || r2DefaultStoreMasters(), storage: value.storage };
   if (view === 'materials-evidence') return { countPlans: value.countPlans || [], documents: (value.documents || []).map(({ preview_data, ...item }) => item), storage: value.storage };
   return {
     ...value,
@@ -4365,7 +4365,7 @@ async function r2TokenHash(token) {
 async function r2PasswordHash(salt, password) { return r2TokenHash(`${salt}:${password}`); }
 
 function r2AuthHome(account) {
-  if (account.role_ids.some((role) => role === 'store_staff' || role === 'store_manager')) return `/store/?store=${encodeURIComponent(account.store_codes[0] || STORE_CODE)}`;
+  if (!r2HasRole(account, 'hq_operations', 'hq_admin')) return `/store/?store=${encodeURIComponent(account.store_codes[0] || STORE_CODE)}`;
   return '/';
 }
 function r2SafeAccount(account) {
@@ -4391,25 +4391,35 @@ function r2AuthResponse(payload, status = 200, cookie = null) {
   return Response.json(payload, { status, headers });
 }
 
-async function r2AuthOptions(env) {
+function r2PortalAllowsAccount(account, portal = '') {
+  const isHq = r2HasRole(account, 'hq_operations', 'hq_admin');
+  if (portal === 'hq') return isHq;
+  if (portal === 'mobile') return !isHq;
+  return true;
+}
+
+async function r2AuthOptions(env, portal = '') {
   const value = await r2DemoState(env);
   return json({
     mode: 'demo_password',
-    accounts: r2NormalizeAccounts(value.accounts).filter((item) => item.status === 'active').map((item) => ({
+    portal: ['hq', 'mobile'].includes(portal) ? portal : 'all',
+    accounts: r2NormalizeAccounts(value.accounts).filter((item) => item.status === 'active' && item.source === 'demo_seed' && r2PortalAllowsAccount(item, portal)).map((item) => ({
       id:item.id, display_name:item.display_name, email:item.email, identity_label:item.identity_label,
       role_ids:item.role_ids, store_codes:item.store_codes, home:r2AuthHome(item), login_ready:Boolean(item.password_hash)
     })),
-    roles: value.roleDefinitions || r2DefaultRoleDefinitions()
+    roles: r2DefaultRoleDefinitions()
   });
 }
 
 async function r2AuthLogin(env, body = {}) {
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
+  const portal = ['hq', 'mobile'].includes(body.portal) ? body.portal : '';
   const value = await r2DemoState(env);
   const account = r2NormalizeAccounts(value.accounts).find((item) => item.email === email && item.status === 'active');
   const matches = account?.password_hash && password && await r2PasswordHash(account.password_salt, password) === account.password_hash;
   if (!matches) return bad('账号或密码不正确。', 401);
+  if (!r2PortalAllowsAccount(account, portal)) return bad(portal === 'hq' ? '该账号不是总部人员，请从移动端入口登录。' : '总部人员请从总部后台入口登录。', 403);
   const token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
   const createdAt = now();
   const expiresAt = new Date(Date.now() + R2_SESSION_MAX_AGE * 1000).toISOString();
@@ -4500,9 +4510,15 @@ function r2ScopePayload(payload, account) {
 }
 
 function r2PageAllowed(pathname, account) {
+  const isHq = r2HasRole(account, 'hq_operations', 'hq_admin');
+  if (!isHq) return ['/store', '/voice-qa', '/procurement-detail', '/work-order'].some((prefix) => pathname.startsWith(prefix));
   if (pathname.startsWith('/accounts')) return r2HasRole(account, 'hq_admin');
-  if (pathname.startsWith('/notifications') || pathname.startsWith('/sync')) return r2HasRole(account, 'hq_operations', 'hq_admin');
+  if (pathname.startsWith('/notifications') || pathname.startsWith('/sync')) return isHq;
   return true;
+}
+
+function r2IsMobilePage(pathname) {
+  return ['/store', '/voice-qa', '/procurement-detail', '/work-order'].some((prefix) => pathname.startsWith(prefix));
 }
 
 function r2AccountConfigView(value) {
@@ -4512,7 +4528,7 @@ function r2AccountConfigView(value) {
   const safeActiveAccount = activeAccount ? (({ password_hash, password_salt, ...account }) => ({ ...account, login_ready:Boolean(password_hash) }))(activeAccount) : null;
   return {
     accounts: accounts.map(({ password_hash, password_salt, ...account }) => ({ ...account, login_ready:Boolean(password_hash) })),
-    roles: value.roleDefinitions || r2DefaultRoleDefinitions(),
+    roles: r2DefaultRoleDefinitions(),
     organizations: value.organizationUnits || r2DefaultOrganizationUnits(),
     stores: value.storeMasters || r2DefaultStoreMasters(),
     active_account_id: activeAccount?.id || null,
@@ -4588,19 +4604,22 @@ export default {
     const url = new URL(request.url);
     let authContext = null;
     if (!url.pathname.startsWith('/api/')) {
-      const isLoginAsset = url.pathname === '/login/' || url.pathname === '/login' || url.pathname === '/login-page.js';
+      const isLoginAsset = url.pathname === '/login/' || url.pathname === '/login' || url.pathname === '/hq-login/' || url.pathname === '/hq-login' || url.pathname === '/login-page.js';
       const lastPart = url.pathname.split('/').pop() || '';
       const isPageRequest = request.method === 'GET' && (url.pathname === '/' || url.pathname.endsWith('/') || !lastPart.includes('.'));
       if (env.DEMO_STATE && isPageRequest && !isLoginAsset) {
         authContext = await r2AuthContext(env, request);
-        if (!authContext) return Response.redirect(`${url.origin}/login/?next=${encodeURIComponent(url.pathname + url.search)}`, 302);
+        if (!authContext) {
+          const loginPath = r2IsMobilePage(url.pathname) ? '/login/' : '/hq-login/';
+          return Response.redirect(`${url.origin}${loginPath}?next=${encodeURIComponent(url.pathname + url.search)}`, 302);
+        }
         if (!r2PageAllowed(url.pathname, authContext.account)) return Response.redirect(`${url.origin}${r2AuthHome(authContext.account)}`, 302);
         const requestedStore = url.searchParams.get('store');
         if (requestedStore && !r2AllowedStores(authContext.account).includes(requestedStore)) return Response.redirect(`${url.origin}${r2AuthHome(authContext.account)}`, 302);
       }
       return env.ASSETS.fetch(request);
     }
-    if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/auth/options') return r2AuthOptions(env);
+    if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/auth/options') return r2AuthOptions(env, url.searchParams.get('portal') || '');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/auth/login') return r2AuthLogin(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/auth/session') return r2AuthSession(env, request);
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/auth/logout') return r2AuthLogout(env, request);

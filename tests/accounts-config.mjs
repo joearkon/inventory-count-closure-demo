@@ -4,6 +4,19 @@ const base = (process.env.BASE_URL || 'http://127.0.0.1:8788').replace(/\/$/, ''
 const nativeFetch = globalThis.fetch;
 const unauthenticated = await nativeFetch(`${base}/api/state`);
 assert.equal(unauthenticated.status, 401, 'API must reject unauthenticated requests');
+const unauthHqPage = await nativeFetch(`${base}/`, { redirect:'manual' });
+assert.equal(unauthHqPage.status, 302, 'HQ page must redirect unauthenticated users');
+assert.match(unauthHqPage.headers.get('location') || '', /\/hq-login\//, 'HQ page must use the HQ login portal');
+const unauthStorePage = await nativeFetch(`${base}/store/?store=STORE001`, { redirect:'manual' });
+assert.equal(unauthStorePage.status, 302, 'store page must redirect unauthenticated users');
+assert.match(unauthStorePage.headers.get('location') || '', /\/login\//, 'store page must use the mobile login portal');
+const [hqOptions, mobileOptions] = await Promise.all([
+  nativeFetch(`${base}/api/auth/options?portal=hq`).then((response) => response.json()),
+  nativeFetch(`${base}/api/auth/options?portal=mobile`).then((response) => response.json())
+]);
+assert.ok(hqOptions.accounts.length > 0 && hqOptions.accounts.every((account) => account.role_ids.some((role) => ['hq_operations','hq_admin'].includes(role))), 'HQ login leaked a non-HQ account');
+assert.ok(mobileOptions.accounts.length >= 3 && mobileOptions.accounts.every((account) => !account.role_ids.some((role) => ['hq_operations','hq_admin'].includes(role))), 'mobile login leaked an HQ account');
+assert.ok(mobileOptions.roles.some((role) => role.id === 'store_manager' && role.name.includes('加盟商')), 'franchisee role label missing');
 const credentials = [
   ['xiaoli@demo.local', 'Store001!'],
   ['manager.store001@demo.local', 'Manager001!'],
@@ -16,6 +29,10 @@ for (const [email, password] of credentials) {
 }
 const wrongPassword = await nativeFetch(`${base}/api/auth/login`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ email:'wangmin@demo.local', password:'wrong-password' }) });
 assert.equal(wrongPassword.status, 401, 'wrong password must be rejected');
+const storeAtHqPortal = await nativeFetch(`${base}/api/auth/login`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ email:'xiaoli@demo.local', password:'Store001!', portal:'hq' }) });
+assert.equal(storeAtHqPortal.status, 403, 'store account must be rejected by HQ login');
+const hqAtMobilePortal = await nativeFetch(`${base}/api/auth/login`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ email:'wangmin@demo.local', password:'HqAdmin123!', portal:'mobile' }) });
+assert.equal(hqAtMobilePortal.status, 403, 'HQ account must be rejected by mobile login');
 const publicOptions = await nativeFetch(`${base}/api/auth/options`).then((response) => response.json());
 assert.ok(!JSON.stringify(publicOptions).includes('password_hash') && !JSON.stringify(publicOptions).includes('password_salt'), 'credential hash leaked from login options');
 let authCookie = '';
@@ -70,6 +87,9 @@ await post('/api/accounts/active', { account_id:initial.active_account_id });
 await login('xiaoli@demo.local', 'Store001!');
 const storeState = await call('/api/state');
 assert.ok(storeState.storeMasters.every((item) => item.store_code === 'STORE001'), 'store account leaked another store');
+const storeBackend = await fetch(`${base}/`, { redirect:'manual' });
+assert.equal(storeBackend.status, 302, 'store account must not enter HQ desktop');
+assert.match(storeBackend.headers.get('location') || '', /\/store\//, 'store account must return to mobile home');
 await call('/api/accounts/config', {}, 403);
 await post('/api/material-events', { store_code:'STORE001', business_date:'2026-09-18', material_name:'牛奶', unit:'L', qty:1, type:'receipt' }, 403);
 

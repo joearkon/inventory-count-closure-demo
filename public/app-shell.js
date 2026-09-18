@@ -29,14 +29,14 @@
     const side = document.createElement('aside'); side.className = 'app-shell-side';
     side.innerHTML = `<div class="app-shell-group"><div class="app-shell-group-title">业务总览</div><a class="app-shell-link${active('/')}" href="/"><i>◈</i>运营中心</a></div><div class="app-shell-group"><div class="app-shell-group-title">库存管理</div><a class="app-shell-link${active('/ledger')}" href="/ledger/"><i>▤</i>库存台账</a><a class="app-shell-link${active('/flows')}" href="/flows/"><i>⇅</i>库存流水</a><a class="app-shell-link${active('/diagnosis')}" href="/diagnosis/"><i>◎</i>库存研判</a><a class="app-shell-link${active('/simulator')}" href="/simulator/"><i>↹</i>库存模拟器</a></div><div class="app-shell-group"><div class="app-shell-group-title">日常运营</div><a class="app-shell-link${active('/count-plans')}" href="/count-plans/"><i>□</i>盘点计划</a><a class="app-shell-link${active('/purchase-orders')}" href="/purchase-orders/"><i>🛒</i>订货管理</a><a class="app-shell-link${active('/receipt-orders')}" href="/receipt-orders/"><i>▣</i>收货管理</a><a class="app-shell-link${active('/documents')}" href="/documents/"><i>▧</i>库存单据</a><a class="app-shell-link${active('/transfers')}" href="/transfers/"><i>⇄</i>调拨管理</a></div><div class="app-shell-group"><div class="app-shell-group-title">第三方外部工具</div><a class="app-shell-link${active('/sync')}" href="/sync/"><i>↗</i>飞书同步</a><a class="app-shell-link${active('/notifications')}" href="/notifications/"><i>◌</i>机器人推送</a></div><div class="app-shell-group"><div class="app-shell-group-title">系统配置</div><a class="app-shell-link${active('/accounts')}" href="/accounts/"><i>♙</i>账户与角色</a></div>`;
     document.body.append(header, side);
-    header.querySelector('.app-shell-logout').onclick = async () => { await fetch('/api/auth/logout', { method:'POST' }).catch(() => null); location.href = '/login/'; };
+    header.querySelector('.app-shell-logout').onclick = async () => { await fetch('/api/auth/logout', { method:'POST' }).catch(() => null); location.href = '/hq-login/'; };
     updateIdentity();
   };
   const updateIdentity = async () => {
     const target = document.querySelector('.app-shell-identity'); if (!target) return;
     try {
       const response = await fetch('/api/auth/session');
-      if (response.status === 401) { location.href = `/login/?next=${encodeURIComponent(location.pathname + location.search)}`; return; }
+      if (response.status === 401) { location.href = `/hq-login/?next=${encodeURIComponent(location.pathname + location.search)}`; return; }
       if (!response.ok) throw Error('unavailable');
       const payload = await response.json();
       const account = payload.account;

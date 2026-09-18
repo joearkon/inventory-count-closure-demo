@@ -13,7 +13,18 @@
   fetch('/api/auth/session').then(async (response) => {
     if (response.status === 401) { location.href = `/login/?next=${encodeURIComponent(location.pathname + location.search)}`; return null; }
     return response.json();
-  }).then((session) => { if (session?.account && by('store-header-user')) by('store-header-user').textContent = session.account.display_name; }).catch(() => { if (by('store-header-user')) by('store-header-user').textContent = '已登录'; });
+  }).then((session) => {
+    const account = session?.account; if (!account) return;
+    if (by('store-header-user')) by('store-header-user').textContent = account.display_name;
+    const roles = new Set(account.role_ids || []), roleLabel = roles.has('area_supervisor') ? '区域督导' : roles.has('store_manager') ? '加盟商' : '门店店员';
+    if (by('store-header-role')) by('store-header-role').textContent = roleLabel;
+    const switcher = by('store-scope-switcher'), stores = account.store_codes || [];
+    if (switcher && stores.length > 1) {
+      switcher.innerHTML = stores.map((code) => `<option value="${esc(code)}" ${code === storeCode ? 'selected' : ''}>${esc(code)}</option>`).join('');
+      switcher.style.display = 'block';
+      switcher.onchange = () => { location.href = `/store/?store=${encodeURIComponent(switcher.value)}`; };
+    }
+  }).catch(() => { if (by('store-header-user')) by('store-header-user').textContent = '已登录'; });
   if (by('store-logout')) by('store-logout').onclick = async () => { await fetch('/api/auth/logout', { method:'POST' }).catch(() => null); location.href = '/login/'; };
 
   function addMessage(text, role = 'assistant', html = false) {
