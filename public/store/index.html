@@ -336,27 +336,30 @@
   .store-tab-bar{border-radius:18px 18px 0 0}.store-tab-bar .tab-btn{font-size:12px}
   @media(min-width:415px){body{border-left:1px solid #e2e7f0;border-right:1px solid #e2e7f0;min-height:100vh}}
 </style>
+<link rel="stylesheet" href="../store-vnext.css">
 <script src="/loading.js"></script>
 </head>
 <body data-view="store">
 
 <div class="header">
-  <div class="header-top"><div><h1>🏪 <span id="store-header-code">STORE001</span><span id="store-header-title"> · 门店助手</span><span class="badge-direct" id="store-header-role">门店</span></h1><div class="store-header-name" id="store-header-name">小茶日记</div></div><div class="header-session"><span class="header-user" id="store-header-user">读取身份…</span><select class="store-scope-switcher" id="store-scope-switcher" aria-label="切换授权门店"></select><button class="header-logout" id="store-logout" type="button">退出</button><div class="header-date" id="store-header-date">今日</div></div></div>
-  <div class="stats-row" id="today-stats"><div class="stat-pill"><span class="stat-number" id="header-todo-count">0</span><span class="stat-label">未完成</span></div><div class="stat-pill"><span class="stat-number" id="header-risk-count">0</span><span class="stat-label">逾期</span></div><div class="stat-pill"><span class="stat-number" id="header-plan-count">0</span><span class="stat-label">盘点计划</span></div></div>
+  <div class="header-top"><div><h1><span id="store-header-code">STORE001</span><span id="store-header-title"> · 门店助手</span></h1><div class="store-header-name" id="store-header-name">小茶日记</div><div class="header-identity"><span class="identity-dot"></span><span id="store-header-user">读取身份…</span><span class="badge-direct" id="store-header-role">门店</span></div></div><div class="header-session"><select class="store-scope-switcher" id="store-scope-switcher" aria-label="切换授权门店"></select><button class="header-logout" id="store-logout" type="button">退出</button><div class="header-date" id="store-header-date">今日</div></div></div>
+  <div class="focus-summary" id="today-stats"><strong>今天只需处理 <span id="header-todo-count">0</span> 件事</strong><span><b id="header-risk-count">0</b> 项已逾期，<b id="header-plan-count">0</b> 项盘点等待执行</span></div>
 </div>
 
 <nav class="store-tab-bar" aria-label="门店运营页面切换">
-  <button class="tab-btn active" type="button" data-store-tab="tasks"><span class="tab-icon">🔔</span>提醒</button>
-  <button class="tab-btn" type="button" data-store-tab="ops"><span class="tab-icon">🏪</span>运营</button>
-  <button class="tab-btn" type="button" data-store-tab="agent"><span class="tab-icon">🤖</span>助手</button>
+  <button class="tab-btn active" type="button" data-store-tab="tasks"><span class="nav-mark"></span>任务</button>
+  <button class="tab-btn" type="button" data-store-tab="ops"><span class="nav-mark"></span>运营</button>
+  <button class="tab-btn" type="button" data-store-tab="agent"><span class="nav-mark"></span>助手</button>
 </nav>
 
 <!-- 今日任务：只展示门店今天必须完成并可追溯的任务。 -->
 <div class="tab-content active" id="store-tab-tasks">
+<div class="selection-note"><span><b>系统信号已整理</b>，这里只展示今天真正可执行的事项</span><button type="button" data-store-go-agent data-agent-prompt="为什么今天只有这些任务？">查看口径</button></div>
 <div class="reminder-filters" aria-label="经营提醒筛选">
   <button class="reminder-filter active" type="button" data-reminder-filter="all">全部 <span id="todo-count">0</span></button>
   <button class="reminder-filter" type="button" data-reminder-filter="mine">待我处理</button>
   <button class="reminder-filter" type="button" data-reminder-filter="result">处理结果</button>
+  <button class="reminder-filter" type="button" data-reminder-filter="brief">经营简报</button>
 </div>
 <div class="store-section-row reminder-open"><h2>今天最重要</h2><small>按影响与可执行性排序</small></div>
 <div class="card today-card priority-zone reminder-open">
@@ -388,15 +391,17 @@
 
 <!-- 常用运营：由门店主动发起，不混入今日待办。 -->
 <div class="tab-content" id="store-tab-ops">
-<div class="card" id="common-ops-card">
-  <div class="card-header">门店日常运营</div>
+<div class="store-section-row ops-title"><h2>日常运营</h2><small>主动发起门店业务</small></div>
+<div class="quick-status"><span>待收货</span><span>调拨途中</span><span>盘点草稿</span><span>待提交报损</span></div>
+<div id="common-ops-card">
   <div class="common-grid">
-    <button class="common-action" type="button" data-common-action="restock"><span class="common-icon">🛒</span><strong>订货</strong><span>建立订货草稿</span></button>
-    <button class="common-action" type="button" data-common-action="receipt"><span class="common-icon">📥</span><strong>收货</strong><span>关联订单并确认</span></button>
-    <button class="common-action" type="button" data-common-action="count"><span class="common-icon">📷</span><strong>盘点</strong><span>拍照识别并复核</span></button>
-    <button class="common-action" type="button" data-common-action="transfer"><span class="common-icon">🔄</span><strong>调拨</strong><span>发货/接收</span></button>
-    <button class="common-action" type="button" data-common-action="scrap"><span class="common-icon">🗑️</span><strong>报损</strong><span>破损/过期</span></button>
-    <button class="common-action" type="button" data-common-action="inventory"><span class="common-icon">🔎</span><strong>查库存</strong><span>通过助手查询多种物料</span></button>
+    <button class="common-action" type="button" data-common-action="restock"><span class="common-icon">订</span><strong>订货</strong><span>查看建议量、建立并跟踪订货单</span></button>
+    <button class="common-action" type="button" data-common-action="receipt"><span class="common-icon">收</span><strong>收货</strong><span>按订货单确认实收数量与差异</span></button>
+    <button class="common-action" type="button" data-common-action="transfer"><span class="common-icon">调</span><strong>调拨</strong><span>发起调拨、出库与目标门店签收</span></button>
+    <button class="common-action" type="button" data-common-action="count"><span class="common-icon">盘</span><strong>盘点</strong><span>执行计划盘点或发起临时盘点</span></button>
+    <button class="common-action" type="button" data-common-action="scrap"><span class="common-icon">损</span><strong>报损／报废</strong><span>登记原因、数量与现场凭证</span></button>
+    <button class="common-action" type="button" data-common-action="inventory"><span class="common-icon">查</span><strong>查库存</strong><span>按商品或物料查看库存与流水</span></button>
+    <button class="common-action common-action-wide" type="button" data-store-go-agent><span class="common-icon">问</span><span><strong>不确定怎么操作？问门店助手</strong><span>可以直接说“帮我订 2 箱黑糖珍珠”或“这批牛奶怎么报废”</span></span></button>
   </div>
 </div>
 
@@ -445,8 +450,8 @@
 
 <!-- AI 助手：只生成可确认的表单草稿，实际库存写入仍沿用现有门店单据流程。 -->
 <div class="tab-content" id="store-tab-agent">
-  <section class="card agent-card" aria-label="门店 AI 助手">
-    <div class="card-header"><span>🤖 门店 AI 助手</span><span class="agent-online">● 在线</span></div>
+  <section class="agent-card" aria-label="门店 AI 助手">
+    <div class="assistant-intro"><div class="assistant-avatar">AI</div><div><h2>门店助手</h2><p>可以连续提问，也可以查询或发起业务动作</p></div><span class="agent-online">在线</span></div>
     <div class="agent-chat" id="store-agent-chat" aria-live="polite"></div>
     <div class="agent-chips" aria-label="快捷操作">
       <button type="button" class="agent-chip" data-agent-prompt="我要发起调拨">↔️ 发起调拨</button>
@@ -510,12 +515,13 @@
   function switchStoreTab(name) { Object.entries(tabs).forEach(([key, node]) => node?.classList.toggle('active', key === name)); document.querySelectorAll('[data-store-tab]').forEach((button) => button.classList.toggle('active', button.dataset.storeTab === name)); ['sop-card'].forEach((id) => { const node = document.getElementById(id); if (node) node.style.display = name === 'tasks' ? '' : 'none'; }); document.querySelectorAll('[data-store-secondary]').forEach((node) => { node.style.display = name === 'tasks' ? '' : 'none'; }); if (name === 'agent') window.storeAgentTabOpened?.(); if (name === 'ops') window.storeOpsRefresh?.(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   window.switchStoreTab = switchStoreTab;
   document.querySelectorAll('[data-store-tab]').forEach((button) => button.addEventListener('click', () => switchStoreTab(button.dataset.storeTab)));
+  document.querySelectorAll('[data-store-go-agent]').forEach((button) => button.addEventListener('click', () => switchStoreTab('agent')));
   document.querySelectorAll('[data-reminder-filter]').forEach((button) => button.addEventListener('click', () => {
     const filter = button.dataset.reminderFilter;
     document.querySelectorAll('[data-reminder-filter]').forEach((item) => item.classList.toggle('active', item === button));
-    document.querySelectorAll('.reminder-open').forEach((node) => { node.style.display = filter === 'result' ? 'none' : ''; });
-    document.querySelectorAll('.reminder-brief').forEach((node) => { node.style.display = filter === 'all' ? '' : 'none'; });
-    document.querySelectorAll('.reminder-result').forEach((node) => { node.style.display = filter === 'mine' ? 'none' : ''; });
+    document.querySelectorAll('.reminder-open').forEach((node) => { node.style.display = filter === 'all' || filter === 'mine' ? '' : 'none'; });
+    document.querySelectorAll('.reminder-brief').forEach((node) => { node.style.display = filter === 'all' || filter === 'brief' ? '' : 'none'; });
+    document.querySelectorAll('.reminder-result').forEach((node) => { node.style.display = filter === 'all' || filter === 'result' ? '' : 'none'; });
   }));
   switchStoreTab('tasks');
 })();
