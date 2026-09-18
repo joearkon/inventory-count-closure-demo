@@ -19,15 +19,14 @@
     by('count-scope').textContent = new Set(data.accounts.flatMap((item) => item.org_scope_type === 'all' ? data.stores.map((store) => store.store_code) : item.store_codes)).size;
   }
   function renderCurrent() {
-    const account = data.active_account;
-    by('current').innerHTML = account ? `<span class="muted">当前演示身份</span><strong>${esc(account.display_name)}</strong><span>${account.role_ids.map((id) => esc(roleName(id))).join(' / ')} · ${esc(scopeText(account))}</span>` : '暂无可用的当前身份';
+    const account = data.session?.account;
+    by('current').innerHTML = account ? `<span class="muted">当前登录身份</span><strong>${esc(account.display_name)}</strong><span>${account.role_ids.map((id) => esc(roleName(id))).join(' / ')} · ${esc(scopeText(account))}</span>` : '暂无可用的当前身份';
   }
   function renderAccounts() {
     const result = window.ListPager.slice(data.accounts, page, pageSize); page = result.page;
-    by('accounts').innerHTML = result.items.length ? result.items.map((account) => `<tr><td><div class="person">${esc(account.display_name)}${account.id === data.active_account_id ? ' <span class="tag active">当前</span>' : ''}</div><div class="muted">${esc(account.email)}</div></td><td>${esc(account.identity_label)}</td><td>${account.role_ids.map((id) => `<span class="tag">${esc(roleName(id))}</span>`).join('')}</td><td><span class="tag scope">${esc(scopeText(account))}</span></td><td><span class="tag ${account.status}">${account.status === 'active' ? '启用' : '停用'}</span></td><td><div class="row-actions"><button class="btn secondary small" data-edit="${esc(account.id)}">编辑</button><button class="btn small" data-active="${esc(account.id)}" ${account.status !== 'active' || account.id === data.active_account_id ? 'disabled' : ''}>设为当前</button></div></td></tr>`).join('') : '<tr><td colspan="6" class="empty">暂无账号</td></tr>';
+    by('accounts').innerHTML = result.items.length ? result.items.map((account) => `<tr><td><div class="person">${esc(account.display_name)}${account.id === data.session?.account?.id ? ' <span class="tag active">当前登录</span>' : ''}</div><div class="muted">${esc(account.email)}</div></td><td>${esc(account.identity_label)}</td><td>${account.role_ids.map((id) => `<span class="tag">${esc(roleName(id))}</span>`).join('')}</td><td><span class="tag scope">${esc(scopeText(account))}</span></td><td><span class="tag ${account.status}">${account.status === 'active' ? '启用' : '停用'}</span></td><td><div class="row-actions"><button class="btn secondary small" data-edit="${esc(account.id)}">编辑</button></div></td></tr>`).join('') : '<tr><td colspan="6" class="empty">暂无账号</td></tr>';
     window.ListPager.render('pager', result, (next) => { page = next; renderAccounts(); });
     document.querySelectorAll('[data-edit]').forEach((button) => button.onclick = () => editAccount(button.dataset.edit));
-    document.querySelectorAll('[data-active]').forEach((button) => button.onclick = () => setActive(button.dataset.active, button));
   }
   function renderDefinitions() {
     by('role-checks').innerHTML = data.roles.map((role) => `<label class="check-option"><input type="checkbox" name="role" value="${esc(role.id)}">${esc(role.name)}</label>`).join('');
@@ -52,11 +51,6 @@
     document.querySelectorAll('[name=store]').forEach((node) => { node.checked = account.store_codes.includes(node.value); });
     by('form-title').textContent = `编辑 · ${account.display_name}`; by('message').textContent = ''; syncScope(); window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  async function setActive(id, button) {
-    button.disabled = true;
-    try { data = await api('/api/accounts/active', { method:'POST', body:JSON.stringify({ account_id:id }) }); render(); window.dispatchEvent(new CustomEvent('demo-account-changed', { detail:data.active_account })); }
-    catch (error) { alert(error.message); button.disabled = false; }
-  }
   by('scope').onchange = syncScope; by('clear').onclick = resetForm; by('create').onclick = resetForm;
   by('form').onsubmit = async (event) => {
     event.preventDefault(); const save = by('save'); save.disabled = true; by('message').textContent = '保存中…'; by('message').className = 'message';
@@ -66,7 +60,7 @@
     finally { save.disabled = false; }
   };
   async function load() {
-    try { data = await api('/api/accounts/config'); renderDefinitions(); render(); resetForm(); }
+    try { const [config, session] = await Promise.all([api('/api/accounts/config'), api('/api/auth/session')]); data = { ...config, session }; document.querySelector('.notice').innerHTML = '<b>轻量演示鉴权已启用。</b> 登录会话、角色和门店范围由服务端校验；正式飞书 OAuth、邮箱验证码发送及生产密钥管理将在下一阶段启用。'; renderDefinitions(); render(); resetForm(); }
     catch (error) { by('accounts').innerHTML = `<tr><td colspan="6" class="empty">${esc(error.message)}</td></tr>`; by('current').textContent = '账户配置暂不可用'; }
   }
   load();

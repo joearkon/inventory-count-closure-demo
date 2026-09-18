@@ -193,6 +193,7 @@ function r2DemoInitialState() {
     restockRequests: [],
     purchaseOrders: [],
     receiptOrders: [],
+    authSessions: [],
     storeAgentSessions: [],
     transferArchives: [],
     countPlans: [],
@@ -350,6 +351,7 @@ function normalizeR2DemoState(value) {
     restockRequests: Array.isArray(source.restockRequests) ? source.restockRequests : [],
     purchaseOrders: Array.isArray(source.purchaseOrders) ? source.purchaseOrders : [],
     receiptOrders: Array.isArray(source.receiptOrders) ? source.receiptOrders : [],
+    authSessions: Array.isArray(source.authSessions) ? source.authSessions.filter((item) => new Date(item.expires_at).getTime() > Date.now()).slice(0, 80) : [],
     storeAgentSessions: Array.isArray(source.storeAgentSessions) ? source.storeAgentSessions.slice(0, 80) : [],
     transferArchives: Array.isArray(source.transferArchives) ? source.transferArchives : [],
     countPlans: Array.isArray(source.countPlans) ? source.countPlans : [],
@@ -4335,6 +4337,160 @@ async function r2CreateStoreAgentEvidence(env, body = {}) {
   return json({ document, state: await r2SaveDemoState(env, value, 'store-agent-evidence') }, 201);
 }
 
+const R2_DEMO_LOGIN_CODE = '123456';
+const R2_SESSION_COOKIE = 'xlb_demo_session';
+const R2_SESSION_MAX_AGE = 12 * 60 * 60;
+
+function r2Cookie(request, name) {
+  const source = request.headers.get('cookie') || '';
+  for (const item of source.split(';')) {
+    const [key, ...parts] = item.trim().split('=');
+    if (key === name) return decodeURIComponent(parts.join('='));
+  }
+  return '';
+}
+
+async function r2TokenHash(token) {
+  const bytes = new TextEncoder().encode(token);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+function r2AuthHome(account) {
+  if (account.role_ids.some((role) => role === 'store_staff' || role === 'store_manager')) return `/store/?store=${encodeURIComponent(account.store_codes[0] || STORE_CODE)}`;
+  return '/';
+}
+
+async function r2AuthContext(env, request) {
+  const token = r2Cookie(request, R2_SESSION_COOKIE);
+  if (!token) return null;
+  const value = await r2DemoState(env);
+  const tokenHash = await r2TokenHash(token);
+  const session = (value.authSessions || []).find((item) => item.token_hash === tokenHash && new Date(item.expires_at).getTime() > Date.now());
+  if (!session) return null;
+  const account = r2NormalizeAccounts(value.accounts).find((item) => item.id === session.account_id && item.status === 'active');
+  return account ? { account, session, value } : null;
+}
+
+function r2AuthResponse(payload, status = 200, cookie = null) {
+  const headers = { 'Cache-Control':'no-store' };
+  if (cookie) headers['Set-Cookie'] = cookie;
+  return Response.json(payload, { status, headers });
+}
+
+async function r2AuthOptions(env) {
+  const value = await r2DemoState(env);
+  return json({
+    mode: 'demo_code', code_hint: R2_DEMO_LOGIN_CODE,
+    accounts: r2NormalizeAccounts(value.accounts).filter((item) => item.status === 'active').map((item) => ({
+      id:item.id, display_name:item.display_name, email:item.email, identity_label:item.identity_label,
+      role_ids:item.role_ids, store_codes:item.store_codes, home:r2AuthHome(item)
+    })),
+    roles: value.roleDefinitions || r2DefaultRoleDefinitions()
+  });
+}
+
+async function r2AuthLogin(env, body = {}) {
+  const email = String(body.email || '').trim().toLowerCase();
+  const code = String(body.code || '').trim();
+  const value = await r2DemoState(env);
+  const account = r2NormalizeAccounts(value.accounts).find((item) => item.email === email && item.status === 'active');
+  if (!account || code !== String(env.DEMO_LOGIN_CODE || R2_DEMO_LOGIN_CODE)) return bad('账号或演示验证码不正确。', 401);
+  const token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+  const createdAt = now();
+  const expiresAt = new Date(Date.now() + R2_SESSION_MAX_AGE * 1000).toISOString();
+  value.authSessions = (value.authSessions || []).filter((item) => new Date(item.expires_at).getTime() > Date.now() && item.account_id !== account.id);
+  value.authSessions.unshift({ id:id('SES'), account_id:account.id, token_hash:await r2TokenHash(token), created_at:createdAt, expires_at:expiresAt });
+  value.activeAccountId = account.id;
+  r2Audit(value, account.display_name, '演示账号登录', `${account.email} · ${account.role_ids.join('、')}`, account.id);
+  await r2SaveDemoState(env, value, 'auth-login');
+  return r2AuthResponse({ account, expires_at:expiresAt, home:r2AuthHome(account) }, 200, `${R2_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${R2_SESSION_MAX_AGE}`);
+}
+
+async function r2AuthSession(env, request) {
+  const context = await r2AuthContext(env, request);
+  if (!context) return bad('登录已失效，请重新登录。', 401);
+  return json({ account:context.account, expires_at:context.session.expires_at, home:r2AuthHome(context.account) });
+}
+
+async function r2AuthLogout(env, request) {
+  const token = r2Cookie(request, R2_SESSION_COOKIE);
+  if (token) {
+    const value = await r2DemoState(env), tokenHash = await r2TokenHash(token);
+    value.authSessions = (value.authSessions || []).filter((item) => item.token_hash !== tokenHash);
+    await r2SaveDemoState(env, value, 'auth-logout');
+  }
+  return r2AuthResponse({ ok:true }, 200, `${R2_SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+}
+
+function r2HasRole(account, ...roles) { return roles.some((role) => account.role_ids.includes(role)); }
+function r2AllowedStores(account) { return account.org_scope_type === 'all' ? [...R2_STORE_CODES] : [...account.store_codes]; }
+function r2RequestedStoreCodes(url, body = {}) {
+  const values = [url.searchParams.get('store'), url.searchParams.get('store_code'), body.store_code, body.storeCode, body.from_store_code, body.target_store_code];
+  return [...new Set(values.filter(Boolean).map(String))];
+}
+
+function r2ResourceStoreCodes(value, url) {
+  const parts = url.pathname.split('/').filter(Boolean), resource = parts[1], resourceId = parts[2];
+  if (!resourceId) return [];
+  const collections = {
+    'operation-tasks':value.operationTasks, 'purchase-orders':value.purchaseOrders,
+    'receipt-orders':value.receiptOrders, 'material-events':value.materialEvents,
+    'store-transfer-requests':value.storeTransferRequests, 'diagnosis-cases':value.diagnosisCases,
+    anomalies:value.materialAnomalies
+  };
+  const record = (collections[resource] || []).find((item) => item.id === decodeURIComponent(resourceId) || item.order_no === decodeURIComponent(resourceId) || item.receipt_no === decodeURIComponent(resourceId));
+  const storeCode = resource === 'store-transfer-requests' && url.pathname.endsWith('/receive') ? record?.to_store_code : record?.store_code || record?.storeCode || record?.from_store_code;
+  return storeCode ? [String(storeCode)] : [];
+}
+
+async function r2AuthorizeApi(env, request, url, account) {
+  const adminPath = url.pathname.startsWith('/api/accounts');
+  if (adminPath && !r2HasRole(account, 'hq_admin')) return bad('仅总部管理员可以配置账户和角色。', 403);
+  const adminConfigPath = request.method !== 'GET' && ['/api/store-masters', '/api/product-catalog', '/api/material-catalog', '/api/safety-stock-policies'].some((prefix) => url.pathname.startsWith(prefix));
+  if (adminConfigPath && !r2HasRole(account, 'hq_admin')) return bad('该配置需要总部管理员权限。', 403);
+  const hqPath = url.pathname.startsWith('/api/notifications') || url.pathname === '/api/feishu/alert-test' || url.pathname.startsWith('/api/feishu-sync/refresh') || url.pathname.startsWith('/api/diagnosis-knowhow') || url.pathname.startsWith('/api/governance-tasks') || url.pathname.startsWith('/api/demo') || url.pathname.startsWith('/api/transfer-orders') || url.pathname.startsWith('/api/anomalies/') || (url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close'));
+  if (request.method !== 'GET' && hqPath && !r2HasRole(account, 'hq_operations', 'hq_admin')) return bad('该操作需要总部运营权限。', 403);
+  const dispatchPath = request.method !== 'GET' && (url.pathname.startsWith('/api/count-plans/') || url.pathname.startsWith('/api/diagnosis-cases/'));
+  if (dispatchPath && !r2HasRole(account, 'area_supervisor', 'hq_operations', 'hq_admin')) return bad('该下发或研判动作需要督导或总部权限。', 403);
+  const managerPath = /\/(confirm|receive|revert)$/.test(url.pathname) || url.pathname === '/api/material-events' || url.pathname === '/api/material-transfers';
+  if (request.method !== 'GET' && managerPath && !r2HasRole(account, 'store_manager', 'area_supervisor', 'hq_operations', 'hq_admin')) return bad('该操作需要店长、督导或总部权限。', 403);
+  let body = {};
+  if (request.method !== 'GET') body = await request.clone().json().catch(() => ({}));
+  const allowed = new Set(r2AllowedStores(account));
+  const value = account.org_scope_type === 'all' ? null : await r2DemoState(env);
+  const requestedStores = [...r2RequestedStoreCodes(url, body), ...(value ? r2ResourceStoreCodes(value, url) : [])];
+  const forbidden = [...new Set(requestedStores)].filter((storeCode) => !allowed.has(storeCode));
+  return forbidden.length ? bad(`无权访问门店：${forbidden.join('、')}`, 403) : null;
+}
+
+function r2ScopePayload(payload, account) {
+  if (!payload || typeof payload !== 'object' || account.org_scope_type === 'all') return payload;
+  const allowed = new Set(r2AllowedStores(account));
+  const clone = JSON.parse(JSON.stringify(payload));
+  const itemAllowed = (item) => {
+    const code = item?.store_code || item?.storeCode || item?.owner_store_code || item?.from_store_code;
+    return !code || allowed.has(String(code));
+  };
+  for (const [key, value] of Object.entries(clone)) {
+    if (Array.isArray(value)) clone[key] = value.filter(itemAllowed);
+  }
+  if (Array.isArray(clone.storeMasters)) clone.storeMasters = clone.storeMasters.filter((item) => allowed.has(item.store_code));
+  if (Array.isArray(clone.store_masters)) clone.store_masters = clone.store_masters.filter((item) => allowed.has(item.store_code));
+  if (Array.isArray(clone.storeViews)) clone.storeViews = clone.storeViews.filter((item) => allowed.has(item.store_code));
+  if (clone.r2Import?.sales) clone.r2Import.sales = clone.r2Import.sales.filter(itemAllowed);
+  if (clone.selectedStore && !allowed.has(clone.selectedStore)) clone.selectedStore = [...allowed][0] || null;
+  if (clone.latestGroup?.store_code && !allowed.has(clone.latestGroup.store_code)) clone.latestGroup = null;
+  clone.hqSummary = null;
+  return clone;
+}
+
+function r2PageAllowed(pathname, account) {
+  if (pathname.startsWith('/accounts')) return r2HasRole(account, 'hq_admin');
+  if (pathname.startsWith('/notifications') || pathname.startsWith('/sync')) return r2HasRole(account, 'hq_operations', 'hq_admin');
+  return true;
+}
+
 function r2AccountConfigView(value) {
   const accounts = r2NormalizeAccounts(value.accounts);
   const activeAccount = accounts.find((item) => item.id === value.activeAccountId && item.status === 'active')
@@ -4348,8 +4504,8 @@ function r2AccountConfigView(value) {
     active_account: activeAccount,
     enforcement: {
       mode: 'preview',
-      api_authorization_enabled: false,
-      note: '当前用于演示身份、组织范围和工单责任流转；业务 API 尚未按角色强制拦截。'
+      api_authorization_enabled: true,
+      note: '已启用演示登录、会话、角色与门店范围校验；正式 OAuth、验证码发送和生产密钥管理尚未启用。'
     }
   };
 }
@@ -4410,7 +4566,24 @@ async function r2SetActiveAccount(env, body = {}) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+    let authContext = null;
+    if (!url.pathname.startsWith('/api/')) {
+      const isLoginAsset = url.pathname === '/login/' || url.pathname === '/login' || url.pathname === '/login-page.js';
+      const lastPart = url.pathname.split('/').pop() || '';
+      const isPageRequest = request.method === 'GET' && (url.pathname === '/' || url.pathname.endsWith('/') || !lastPart.includes('.'));
+      if (env.DEMO_STATE && isPageRequest && !isLoginAsset) {
+        authContext = await r2AuthContext(env, request);
+        if (!authContext) return Response.redirect(`${url.origin}/login/?next=${encodeURIComponent(url.pathname + url.search)}`, 302);
+        if (!r2PageAllowed(url.pathname, authContext.account)) return Response.redirect(`${url.origin}${r2AuthHome(authContext.account)}`, 302);
+        const requestedStore = url.searchParams.get('store');
+        if (requestedStore && !r2AllowedStores(authContext.account).includes(requestedStore)) return Response.redirect(`${url.origin}${r2AuthHome(authContext.account)}`, 302);
+      }
+      return env.ASSETS.fetch(request);
+    }
+    if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/auth/options') return r2AuthOptions(env);
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/auth/login') return r2AuthLogin(env, await request.json().catch(() => ({})));
+    if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/auth/session') return r2AuthSession(env, request);
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/auth/logout') return r2AuthLogout(env, request);
     if (url.pathname === '/api/feishu/events' && request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' } });
     }
@@ -4419,6 +4592,13 @@ export default {
       return json(challenge ? { challenge } : { status: 'ready' });
     }
     if (request.method === 'POST' && url.pathname === '/api/feishu/events') return receiveFeishuEvent(request, env);
+    const publicApi = url.pathname === '/api/system/storage-health' || url.pathname === '/api/internal/feishu-sync';
+    if (env.DEMO_STATE && !publicApi) {
+      authContext = authContext || await r2AuthContext(env, request);
+      if (!authContext) return bad('请先登录。', 401);
+      const denied = await r2AuthorizeApi(env, request, url, authContext.account);
+      if (denied) return denied;
+    }
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/feishu/alert-test') return r2SendFeishuAlertTest(env);
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/notifications/config') return r2NotificationConfig(env);
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/notifications/config') return r2UpdateNotificationConfig(env, await request.json().catch(() => ({})));
@@ -4428,7 +4608,8 @@ export default {
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/accounts/active') return r2SetActiveAccount(env, await request.json().catch(() => ({})));
     if (request.method === 'GET' && url.pathname === '/api/feishu-sync/state') {
       const value = env.DEMO_STATE ? await r2FeishuSyncState(env) : await feishuSyncState(env.DB);
-      return json(env.DEMO_STATE ? r2FeishuStateView(value, url.searchParams.get('view') || '') : value);
+      const responseValue = env.DEMO_STATE ? r2FeishuStateView(value, url.searchParams.get('view') || '') : value;
+      return json(env.DEMO_STATE ? r2ScopePayload(responseValue, authContext.account) : responseValue);
     }
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/diagnosis-v2/shadow') {
       const state = await r2DemoState(env);
@@ -4437,7 +4618,7 @@ export default {
     }
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/store-masters') {
       const value = await r2DemoState(env);
-      return json({ store_masters: value.storeMasters || r2DefaultStoreMasters() });
+      return json(r2ScopePayload({ store_masters: value.storeMasters || r2DefaultStoreMasters() }, authContext.account));
     }
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/store-masters/sync') return r2SyncStoreMasters(env);
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/product-catalog') {
@@ -4519,7 +4700,7 @@ export default {
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo-day/reset') return r2ResetStoreBusinessDay(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo-day/initialize') return r2InitializeStoreBusinessDay(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo-day/run') return r2RunStoreDayDemo(env, await request.json().catch(() => ({})));
-    if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/state') return json(r2StateView(await r2DemoState(env), url.searchParams.get('view') || ''));
+    if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/state') return json(r2ScopePayload(r2StateView(await r2DemoState(env), url.searchParams.get('view') || ''), authContext.account));
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/diagnosis-knowhow') {
       const value = await r2DemoState(env);
       return json({ knowhow: r2DiagnosisKnowhowList(value), storage: value.storage });

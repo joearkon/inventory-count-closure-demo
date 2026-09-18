@@ -1,4 +1,13 @@
 const base = (process.env.BASE_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
+const nativeFetch = globalThis.fetch;
+let authCookie = '';
+const loginResponse = await nativeFetch(`${base}/api/auth/login`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ email:'wangmin@demo.local', code:'123456' }) });
+if (!loginResponse.ok) throw new Error(`QA login failed: ${loginResponse.status}`);
+authCookie = (loginResponse.headers.get('set-cookie') || '').split(';')[0];
+globalThis.fetch = (input, options = {}) => {
+  const headers = new Headers(options.headers || {}); if (authCookie) headers.set('cookie', authCookie);
+  return nativeFetch(input, { ...options, headers });
+};
 const mutationTests = process.env.MUTATION_TESTS === '1';
 const results = [];
 let manualPlan = null;

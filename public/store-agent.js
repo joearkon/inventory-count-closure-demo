@@ -10,6 +10,11 @@
   if (voiceQa) voiceQa.href = `/voice-qa/?store=${encodeURIComponent(storeCode)}`;
   const sheet = by('agent-sheet'), sheetTitle = by('agent-sheet-title'), sheetForm = by('agent-sheet-form'), sheetStatus = by('agent-sheet-status'), sheetSubmit = by('agent-sheet-submit');
   let welcomed = false, busy = false, speaking = false, voicePermissionPending = false, discardVoice = false, mediaRecorder = null, activeVoiceStream = null, voiceChunks = [], ledger = [], draft = null, latestStoreState = null;
+  fetch('/api/auth/session').then(async (response) => {
+    if (response.status === 401) { location.href = `/login/?next=${encodeURIComponent(location.pathname + location.search)}`; return null; }
+    return response.json();
+  }).then((session) => { if (session?.account && by('store-header-user')) by('store-header-user').textContent = session.account.display_name; }).catch(() => { if (by('store-header-user')) by('store-header-user').textContent = '已登录'; });
+  if (by('store-logout')) by('store-logout').onclick = async () => { await fetch('/api/auth/logout', { method:'POST' }).catch(() => null); location.href = '/login/'; };
 
   function addMessage(text, role = 'assistant', html = false) {
     const node = document.createElement('div'); node.className = `agent-message ${role}`;

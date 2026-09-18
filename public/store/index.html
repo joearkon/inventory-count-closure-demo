@@ -53,6 +53,7 @@
   }
   .header-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:14px; }
   .header-date { font-size:12px; padding:3px 9px; border-radius:12px; background:rgba(255,255,255,.16); color:rgba(255,255,255,.9); white-space:nowrap; }
+  .header-session { display:flex;align-items:center;gap:6px }.header-user{font-size:11px;color:rgba(255,255,255,.9)}.header-logout{border:1px solid rgba(255,255,255,.35);border-radius:9px;background:transparent;color:#fff;padding:3px 7px;font:11px inherit}
   .stats-row { display:flex; gap:8px; }
   .stat-pill { flex:1; text-align:center; padding:8px 5px; border-radius:11px; background:rgba(255,255,255,.16); }
   .stat-number { display:block; font-size:20px; font-weight:700; }
@@ -319,7 +320,7 @@
 <body data-view="store">
 
 <div class="header">
-  <div class="header-top"><div><h1>🤖 <span id="store-header-code">STORE001</span><span id="store-header-title"> · 门店助手</span><span class="badge-direct" id="store-header-role">普通门店</span></h1><div class="store-header-name" id="store-header-name">小茶日记</div></div><div class="header-date" id="store-header-date">今日</div></div>
+  <div class="header-top"><div><h1>🤖 <span id="store-header-code">STORE001</span><span id="store-header-title"> · 门店助手</span><span class="badge-direct" id="store-header-role">普通门店</span></h1><div class="store-header-name" id="store-header-name">小茶日记</div></div><div class="header-session"><span class="header-user" id="store-header-user">读取身份…</span><button class="header-logout" id="store-logout" type="button">退出</button><div class="header-date" id="store-header-date">今日</div></div></div>
   <div class="stats-row" id="today-stats"><div class="stat-pill"><span class="stat-number" id="header-todo-count">0</span><span class="stat-label">未完成</span></div><div class="stat-pill"><span class="stat-number" id="header-risk-count">0</span><span class="stat-label">逾期</span></div><div class="stat-pill"><span class="stat-number" id="header-plan-count">0</span><span class="stat-label">每日 SOP</span></div></div>
 </div>
 
