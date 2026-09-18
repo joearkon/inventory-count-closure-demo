@@ -2644,6 +2644,7 @@ async function r2StoreBootstrap(env, storeCode = STORE_CODE) {
   const operationTasks = (value.operationTasks || [])
     .filter((item) => (item.store_code || item.assigned_store_code || STORE_CODE) === storeCode
       && !item.source_case_id && item.task_type !== 'receipt_evidence')
+    .map((item) => ({ ...item, business_date:item.business_date || String(item.created_at || '').slice(0, 10) || businessDate }))
     .slice(0, 20);
   const countPlans = (value.countPlans || [])
     .filter((item) => item.store_code === storeCode && item.business_date === businessDate)
@@ -2699,7 +2700,7 @@ async function r2StoreBootstrap(env, storeCode = STORE_CODE) {
     materialCatalog: (value.materialCatalog || r2DefaultMaterialCatalog()).filter((item) => item.status !== 'inactive'),
     feishuImport: {
       latest_business_date: salesBusinessDate,
-      latest_sales_qty: view?.sales_qty ?? null,
+      latest_sales_qty: salesBusinessDate === businessDate && value.feishuImport?.imported_at ? (view?.sales_qty ?? null) : null,
       imported_at: value.feishuImport?.imported_at || null,
       available_for_business_date: Boolean(salesBusinessDate && salesBusinessDate === businessDate && value.feishuImport?.imported_at)
     },
