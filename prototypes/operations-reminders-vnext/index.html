@@ -37,18 +37,19 @@
     .issue-row{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:12px;padding:15px 0;border-bottom:1px solid #edf0f5;cursor:pointer}.issue-row:last-child{border-bottom:0}.rank{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--red-weak);color:var(--red);font-weight:800}.rank.orange{background:var(--orange-weak);color:#b56809}.issue-row h3{font-size:14px;margin:0 0 5px}.issue-row p{font-size:12px;color:var(--muted);line-height:1.55;margin:0}.issue-meta{text-align:right}.issue-meta b{display:block;font-size:13px}.issue-meta small{color:var(--muted)}
     .quality-item{padding:14px 0;border-bottom:1px solid #edf0f5}.quality-item:last-child{border:0}.quality-top{display:flex;justify-content:space-between;gap:10px}.quality-item h3{font-size:14px;margin:0}.quality-item p{font-size:12px;line-height:1.55;color:var(--muted);margin:6px 0 0}.progress{height:6px;background:#edf0f5;border-radius:999px;margin-top:10px;overflow:hidden}.progress i{display:block;height:100%;background:var(--orange);border-radius:inherit}
     .work-table{width:100%;border-collapse:collapse}.work-table th,.work-table td{padding:12px 9px;border-bottom:1px solid #edf0f5;text-align:left;font-size:12px}.work-table th{color:#8994a5;font-weight:600}.work-table td b{font-size:13px}.wide-panel{grid-column:1/-1}
+    .supervisor-main{max-width:1200px;margin:auto;padding:26px 30px 54px}.supervisor-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:15px}.store-risk{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:12px;padding:16px 0;border-bottom:1px solid #edf0f5;cursor:pointer}.store-risk:last-child{border-bottom:0}.store-avatar{width:38px;height:38px;border-radius:12px;background:#edf3ff;color:var(--blue);display:grid;place-items:center;font-size:12px;font-weight:850}.store-risk h3{font-size:14px;margin:0 0 5px}.store-risk p{font-size:12px;color:var(--muted);line-height:1.55;margin:0}.sla{text-align:right}.sla b{display:block;font-size:12px;color:var(--red)}.sla small{color:var(--muted);font-size:11px}.policy-note{padding:14px;border-radius:13px;background:#f6f8fc;margin:12px 0;color:#536279;font-size:12px;line-height:1.65}.state-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px}.state-line span{font-size:11px;color:#637087}.state-line i{width:18px;height:1px;background:#cbd3df}.state-line .current{color:var(--blue);font-weight:800}
 
     /* assistant and detail overlays */
     .overlay{position:fixed;inset:0;background:rgba(18,30,51,.42);z-index:40;display:none;align-items:stretch;justify-content:flex-end}.overlay.open{display:flex}.drawer{width:min(520px,100%);height:100%;background:#fff;padding:22px;overflow:auto;box-shadow:-18px 0 55px rgba(18,30,51,.2)}.drawer-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding-bottom:18px;border-bottom:1px solid var(--line)}.drawer-head h2{margin:4px 0 5px;font-size:21px}.close{border:0;background:#f0f3f8;width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:18px}.chat{padding:18px 0}.bubble{max-width:88%;padding:13px 15px;border-radius:14px;background:#f1f4f9;line-height:1.65;font-size:14px;margin-bottom:10px}.bubble.user{margin-left:auto;background:var(--blue);color:#fff}.explain-block{border:1px solid var(--line);border-radius:14px;padding:15px;margin:12px 0}.explain-block h3{font-size:14px;margin:0 0 9px}.explain-block p,.explain-block li{font-size:13px;color:#536279;line-height:1.65}.chips{display:flex;flex-wrap:wrap;gap:7px}.chips button{border:1px solid #ccdaf7;background:#f6f9ff;color:#2e61d5;border-radius:999px;padding:8px 10px;font-size:12px;cursor:pointer}
     .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#16243b;color:#fff;padding:11px 16px;border-radius:10px;z-index:80;font-size:13px;display:none}.toast.show{display:block}
-    @media(max-width:880px){.hq-shell{grid-template-columns:1fr}.hq-side{display:none}.hq-main{padding:20px 14px}.stats{grid-template-columns:1fr 1fr}.hq-grid{grid-template-columns:1fr}.wide-panel{grid-column:auto}.signal-funnel{overflow:auto}.funnel-note{display:none}}
+    @media(max-width:880px){.hq-shell{grid-template-columns:1fr}.hq-side{display:none}.hq-main,.supervisor-main{padding:20px 14px}.stats{grid-template-columns:1fr 1fr}.hq-grid,.supervisor-grid{grid-template-columns:1fr}.wide-panel{grid-column:auto}.signal-funnel{overflow:auto}.funnel-note{display:none}}
     @media(max-width:540px){.prototype-bar{padding:9px 10px;gap:8px}.prototype-note{display:none}.view-switch button{padding:7px 10px}.store-stage{margin:0 auto;border:0;border-radius:0;min-height:calc(100vh - 51px)}.stats{grid-template-columns:1fr 1fr}.hq-head{display:block}.head-actions{margin-top:12px}.work-table th:nth-child(3),.work-table td:nth-child(3){display:none}}
   </style>
 </head>
 <body>
   <header class="prototype-bar">
     <div><strong>经营提醒 vNext</strong> <span class="prototype-note">独立交互原型 · Mock 数据 · 不连接业务接口</span></div>
-    <div class="view-switch"><button class="active" data-view-target="store">门店端</button><button data-view-target="hq">总部端</button></div>
+    <div class="view-switch"><button class="active" data-view-target="store">门店端</button><button data-view-target="supervisor">督导端</button><button data-view-target="hq">总部端</button></div>
   </header>
 
   <section class="view active" data-view="store">
@@ -67,6 +68,7 @@
             <div class="reason-box"><b>系统已核对</b><ul><li>近 3 日没有可信收货入库</li><li>存在一笔调拨出库，目标门店签收证据待补</li><li>销售 BOM 消耗持续发生，规则置信度较高</li></ul></div>
             <div class="card-actions"><button class="btn primary" data-toast="已进入核对流程（原型不提交）">开始核对</button><button class="btn" data-open="assistant">问门店助手</button></div>
             <div class="micro-actions"><button data-toast="已设置 2 小时后提醒">稍后提醒</button><button data-toast="已记录：需要督导帮助">需要帮助</button><button data-toast="已记录反馈，等待总部复核">与实际不符</button></div>
+            <div class="state-line"><span>提醒：已查看</span><i></i><span class="current">工单：待处理</span><i></i><span>V2：仍触发</span></div>
           </div>
         </article>
 
@@ -75,9 +77,26 @@
 
         <div class="section-row"><h2>今日经营简报</h2><small>每天只生成 1 次</small></div>
         <article class="brief-card"><span class="eyebrow">截至昨日完整营业日</span><div class="brief-grid"><div class="metric"><small>销售杯数</small><b>318</b></div><div class="metric"><small>较前一周</small><b style="color:var(--green)">+6.2%</b></div><div class="metric"><small>待办完成</small><b>4 / 5</b></div></div><div class="brief-footer">销售总体稳定。今天优先完成库存核对，不额外推送普通销售波动。</div></article>
+        <article class="task-card" data-open="result"><div class="task-top"><div class="task-icon" style="background:var(--green-weak);color:var(--green)">✓</div><div class="task-copy"><h3>昨日问题已有处理结果</h3><p>牛奶安全库存已恢复。系统保留了处理前后两次 V2，本条只通知一次。</p></div><span class="tag green">已恢复</span></div></article>
       </main>
       <nav class="store-bottom"><button><span class="nav-mark"></span>任务</button><button class="active"><span class="nav-mark"></span>提醒</button><button data-open="assistant"><span class="nav-mark"></span>助手</button></nav>
     </div>
+  </section>
+
+  <section class="view" data-view="supervisor">
+    <main class="supervisor-main">
+      <header class="hq-head"><div><span class="eyebrow">区域督导 · 雅加达北区</span><h1>7 家门店中，3 家需要介入</h1><p>只有门店超时、连续未恢复或主动求助的事项进入这里。</p></div><div class="head-actions"><select class="filter"><option>雅加达北区</option><option>全部区域</option></select><select class="filter"><option>按介入优先级</option><option>按 SLA</option></select></div></header>
+      <div class="signal-funnel"><div class="funnel-step"><span class="funnel-number">36</span> 门店提醒</div><span class="funnel-arrow">→</span><div class="funnel-step"><span class="funnel-number">8</span> 正在处理</div><span class="funnel-arrow">→</span><div class="funnel-step"><span class="funnel-number">3</span> 需要督导</div><span class="funnel-note">门店自行完成 5 项，不进入督导队列</span></div>
+      <section class="stats"><article class="stat alert"><small>需要介入</small><strong>3</strong><span>1 项超时 · 2 项求助</span></article><article class="stat warn"><small>4 小时内到期</small><strong>2</strong><span>均已通知门店</span></article><article class="stat good"><small>区域按时完成率</small><strong>86%</strong><span>近 7 日</span></article><article class="stat"><small>连续未恢复</small><strong>1</strong><span>已重算两次</span></article></section>
+      <div class="supervisor-grid">
+        <section class="panel"><div class="panel-head"><h2>区域待介入</h2><span class="tag blue">仅显示可执行事项</span></div><div class="panel-body">
+          <article class="store-risk" data-open="supervisor"><div class="store-avatar">S01</div><div><h3>STORE001 · 黑糖珍珠库存核对</h3><p>门店已查看但 1 小时未开始。调拨签收证据缺失，门店可以补齐。</p><div style="margin-top:7px"><span class="tag red">已超时 18 分钟</span> <span class="tag">库存准确性</span></div></div><div class="sla"><b>立即介入</b><small>责任：店长</small></div></article>
+          <article class="store-risk" data-open="supervisor"><div class="store-avatar">S03</div><div><h3>STORE003 · 请求现场盘点帮助</h3><p>门店反馈实物标签不清晰，主动请求督导协助；工单仍为处理中。</p><div style="margin-top:7px"><span class="tag orange">门店求助</span></div></div><div class="sla"><b style="color:var(--orange)">4 小时内</b><small>责任：督导</small></div></article>
+          <article class="store-risk" data-open="supervisor"><div class="store-avatar">S05</div><div><h3>STORE005 · 收货后仍低于安全库存</h3><p>已确认收货并自动重算两次，仍未恢复。建议复核订货数量或发起紧急调拨。</p><div style="margin-top:7px"><span class="tag">连续未恢复</span></div></div><div class="sla"><b style="color:var(--orange)">2 小时内</b><small>责任：督导</small></div></article>
+        </div></section>
+        <section class="panel"><div class="panel-head"><h2>升级策略</h2></div><div class="panel-body"><div class="policy-note"><b>不会每次轮询都提醒</b><br>首次需要介入时通知一次；SLA 超时或 V2 结论变化时再更新原提醒。</div><div class="quality-item"><div class="quality-top"><h3>门店已读但未行动</h3><span class="tag red">1 项</span></div><p>已读不等于处理，工单状态保持待处理。</p></div><div class="quality-item"><div class="quality-top"><h3>门店无法补证据</h3><span class="tag">已抑制 4 项</span></div><p>系统同步和主数据问题直接转总部，不要求门店反复操作。</p></div></div></section>
+      </div>
+    </main>
   </section>
 
   <section class="view" data-view="hq">
@@ -110,6 +129,8 @@
   <div class="overlay" id="assistant-overlay"><aside class="drawer"><div class="drawer-head"><div><span class="eyebrow">门店助手</span><h2>为什么优先处理库存核对？</h2><p class="muted">LLM 只解释结构化事实，不替代规则。</p></div><button class="close" data-close>×</button></div><div class="chat"><div class="bubble user">为什么这是今天最重要的事情？</div><div class="bubble">因为黑糖珍珠的理论库存已经为负，而销售仍在发生。如果实际有货，说明至少有一笔入库、调拨签收或盘点没有正确记录。先把库存事实核对清楚，后面的成本和补货建议才不会继续偏差。</div><div class="explain-block"><h3>建议先做</h3><ol><li>确认最近到货是否已经收货入库；</li><li>核对调拨目标门店是否已经签收；</li><li>仍无法解释时，发起一次黑糖珍珠盘点。</li></ol></div><div class="chips"><button data-toast="已打开收货记录（原型）">查看收货记录</button><button data-toast="已打开调拨记录（原型）">查看调拨</button><button data-toast="已生成盘点草稿（原型）">建立盘点草稿</button></div></div></aside></div>
 
   <div class="overlay" id="detail-overlay"><aside class="drawer"><div class="drawer-head"><div><span class="eyebrow">总部聚合问题</span><h2>黑糖珍珠单位映射冲突</h2><p class="muted">一个总部问题，关联 3 家门店的 6 个独立工单。</p></div><button class="close" data-close>×</button></div><div class="explain-block"><h3>为什么交给总部</h3><p>多家门店在同一物料、同一规则版本下同时触发，且门店重复盘点不能解决。系统已将门店执行问题降级，把包装单位与基础单位换算列为首要原因。</p></div><div class="explain-block"><h3>处理后如何验证</h3><p>总部确认换算版本后，系统对 6 个工单重新运行 V2。恢复的工单等待人工结论；仍触发的工单回到门店继续核对业务事实。</p></div><button class="btn primary" style="width:100%" data-toast="已打开主数据治理任务（原型）">进入主数据治理</button></aside></div>
+  <div class="overlay" id="supervisor-overlay"><aside class="drawer"><div class="drawer-head"><div><span class="eyebrow">督导介入</span><h2>同一工单，不复制异常</h2><p class="muted">提醒 NTF-018 · 工单 OPT-2FBCCD16</p></div><button class="close" data-close>×</button></div><div class="explain-block"><h3>当前状态</h3><p>门店已查看提醒，但尚未建立业务动作。工单仍为“待处理”，最新 V2 仍触发。提醒投递成功不改变工单状态。</p><div class="state-line"><span>提醒：已查看</span><i></i><span class="current">工单：待处理</span><i></i><span>V2：仍触发</span></div></div><div class="explain-block"><h3>督导可做</h3><p>联系门店、协助核对、派发现场复核或升级总部。督导不能通过“已处理”隐藏未恢复工单。</p></div><div class="card-actions"><button class="btn primary" data-toast="已记录督导介入（原型）">记录介入</button><button class="btn" data-toast="已打开原工单（原型）">查看原工单</button></div></aside></div>
+  <div class="overlay" id="result-overlay"><aside class="drawer"><div class="drawer-head"><div><span class="eyebrow">处理结果</span><h2>牛奶安全库存已恢复</h2><p class="muted">状态变化只通知一次，历史仍可追溯。</p></div><button class="close" data-close>×</button></div><div class="explain-block"><h3>处理前后</h3><p>首次 V2：低于安全库存；收货确认后自动重算；最新 V2：不再触发。工单仍需人工填写最终原因和解决方式后关闭。</p></div><button class="btn primary" style="width:100%" data-toast="已打开闭环结论（原型）">填写闭环结论</button></aside></div>
   <div class="toast" id="toast"></div>
   <script>
     const views=[...document.querySelectorAll('[data-view]')];
@@ -118,7 +139,7 @@
       views.forEach(view=>view.classList.toggle('active',view.dataset.view===button.dataset.viewTarget));
       window.scrollTo({top:0,behavior:'smooth'});
     }));
-    const overlays={assistant:document.getElementById('assistant-overlay'),detail:document.getElementById('detail-overlay')};
+    const overlays={assistant:document.getElementById('assistant-overlay'),detail:document.getElementById('detail-overlay'),supervisor:document.getElementById('supervisor-overlay'),result:document.getElementById('result-overlay')};
     document.querySelectorAll('[data-open]').forEach(button=>button.addEventListener('click',()=>overlays[button.dataset.open]?.classList.add('open')));
     document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>button.closest('.overlay').classList.remove('open')));
     document.querySelectorAll('.overlay').forEach(overlay=>overlay.addEventListener('click',event=>{if(event.target===overlay)overlay.classList.remove('open')}));
