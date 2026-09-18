@@ -29,6 +29,7 @@
     document.querySelectorAll('[data-edit]').forEach((button) => button.onclick = () => editAccount(button.dataset.edit));
   }
   function renderDefinitions() {
+    if (!by('password')) by('provider').closest('label').insertAdjacentHTML('afterend', '<label class="field full">设置／重置密码<input id="password" type="password" minlength="8" autocomplete="new-password" placeholder="新账号必填；编辑时留空表示不修改"></label>');
     by('role-checks').innerHTML = data.roles.map((role) => `<label class="check-option"><input type="checkbox" name="role" value="${esc(role.id)}">${esc(role.name)}</label>`).join('');
     by('org-checks').innerHTML = data.organizations.filter((item) => item.type === 'region').map((org) => `<label class="check-option"><input type="checkbox" name="org" value="${esc(org.id)}">${esc(org.name)}</label>`).join('') || '<span class="muted">暂无区域</span>';
     by('store-checks').innerHTML = data.stores.map((store) => `<label class="check-option"><input type="checkbox" name="store" value="${esc(store.store_code)}">${esc(store.store_code)} · ${esc(store.store_name)}</label>`).join('');
@@ -45,7 +46,7 @@
   }
   function editAccount(id) {
     const account = data.accounts.find((item) => item.id === id); if (!account) return;
-    by('account-id').value = account.id; by('display-name').value = account.display_name; by('email').value = account.email; by('provider').value = account.identity_provider; by('scope').value = account.org_scope_type; by('status').value = account.status;
+    by('account-id').value = account.id; by('display-name').value = account.display_name; by('email').value = account.email; by('password').value = ''; by('provider').value = account.identity_provider; by('scope').value = account.org_scope_type; by('status').value = account.status;
     document.querySelectorAll('[name=role]').forEach((node) => { node.checked = account.role_ids.includes(node.value); });
     document.querySelectorAll('[name=org]').forEach((node) => { node.checked = account.org_ids.includes(node.value); });
     document.querySelectorAll('[name=store]').forEach((node) => { node.checked = account.store_codes.includes(node.value); });
@@ -54,7 +55,7 @@
   by('scope').onchange = syncScope; by('clear').onclick = resetForm; by('create').onclick = resetForm;
   by('form').onsubmit = async (event) => {
     event.preventDefault(); const save = by('save'); save.disabled = true; by('message').textContent = '保存中…'; by('message').className = 'message';
-    const payload = { id:by('account-id').value || undefined, display_name:by('display-name').value, email:by('email').value, identity_provider:by('provider').value, status:by('status').value, org_scope_type:by('scope').value, role_ids:[...document.querySelectorAll('[name=role]:checked')].map((node) => node.value), org_ids:[...document.querySelectorAll('[name=org]:checked')].map((node) => node.value), store_codes:[...document.querySelectorAll('[name=store]:checked')].map((node) => node.value) };
+    const payload = { id:by('account-id').value || undefined, display_name:by('display-name').value, email:by('email').value, password:by('password').value, identity_provider:by('provider').value, status:by('status').value, org_scope_type:by('scope').value, role_ids:[...document.querySelectorAll('[name=role]:checked')].map((node) => node.value), org_ids:[...document.querySelectorAll('[name=org]:checked')].map((node) => node.value), store_codes:[...document.querySelectorAll('[name=store]:checked')].map((node) => node.value) };
     try { data = await api('/api/accounts', { method:'POST', body:JSON.stringify(payload) }); by('message').textContent = '已保存'; render(); resetForm(); }
     catch (error) { by('message').textContent = error.message; by('message').className = 'message error'; }
     finally { save.disabled = false; }

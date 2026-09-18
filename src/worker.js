@@ -28,10 +28,10 @@ const R2_ORGANIZATION_UNITS = Object.freeze([
   { id: 'STORE005', name: 'STORE005 · MOMOYO CILEDUG', type: 'store', parent_id: 'REGION-JKT-N' }
 ]);
 const R2_DEMO_ACCOUNTS = Object.freeze([
-  { id: 'ACC-STORE-LI', display_name: '小李', email: 'xiaoli@demo.local', identity_provider: 'email_demo', identity_label: '门店邮箱（演示）', role_ids: ['store_staff'], org_scope_type: 'stores', org_ids: ['STORE001'], store_codes: ['STORE001'], status: 'active', source: 'demo_seed' },
-  { id: 'ACC-STORE-MANAGER', display_name: '陈店长', email: 'manager.store001@demo.local', identity_provider: 'email_demo', identity_label: '门店邮箱（演示）', role_ids: ['store_manager'], org_scope_type: 'stores', org_ids: ['STORE001'], store_codes: ['STORE001'], status: 'active', source: 'demo_seed' },
-  { id: 'ACC-SUP-RINA', display_name: 'Rina', email: 'rina@demo.local', identity_provider: 'feishu_demo', identity_label: '飞书账号（演示）', role_ids: ['area_supervisor'], org_scope_type: 'region', org_ids: ['REGION-JKT-N'], store_codes: ['STORE001', 'STORE003', 'STORE005'], status: 'active', source: 'demo_seed' },
-  { id: 'ACC-HQ-WANG', display_name: '王敏', email: 'wangmin@demo.local', identity_provider: 'feishu_demo', identity_label: '飞书账号（演示）', role_ids: ['hq_operations', 'hq_admin'], org_scope_type: 'all', org_ids: ['ORG-HQ'], store_codes: [], status: 'active', source: 'demo_seed' }
+  { id: 'ACC-STORE-LI', display_name: '小李', email: 'xiaoli@demo.local', identity_provider: 'email_demo', identity_label: '门店邮箱（演示）', role_ids: ['store_staff'], org_scope_type: 'stores', org_ids: ['STORE001'], store_codes: ['STORE001'], status: 'active', source: 'demo_seed', password_salt:'store-li-2026', password_hash:'a2acf55322eab006cca8c8061b70902769dc4d64adfc98ce297a0cd6bef40b06' },
+  { id: 'ACC-STORE-MANAGER', display_name: '陈店长', email: 'manager.store001@demo.local', identity_provider: 'email_demo', identity_label: '门店邮箱（演示）', role_ids: ['store_manager'], org_scope_type: 'stores', org_ids: ['STORE001'], store_codes: ['STORE001'], status: 'active', source: 'demo_seed', password_salt:'store-manager-2026', password_hash:'8aeb005965836de39071aa5205cbe7321d3e4ad91b5cbab06e842ebbffd6995f' },
+  { id: 'ACC-SUP-RINA', display_name: 'Rina', email: 'rina@demo.local', identity_provider: 'feishu_demo', identity_label: '飞书账号（演示）', role_ids: ['area_supervisor'], org_scope_type: 'region', org_ids: ['REGION-JKT-N'], store_codes: ['STORE001', 'STORE003', 'STORE005'], status: 'active', source: 'demo_seed', password_salt:'supervisor-rina-2026', password_hash:'a80d5882d7a551fc023a844c4c262f37869268d9a2d3d5e9723cedb227e98cf5' },
+  { id: 'ACC-HQ-WANG', display_name: '王敏', email: 'wangmin@demo.local', identity_provider: 'feishu_demo', identity_label: '飞书账号（演示）', role_ids: ['hq_operations', 'hq_admin'], org_scope_type: 'all', org_ids: ['ORG-HQ'], store_codes: [], status: 'active', source: 'demo_seed', password_salt:'hq-wang-2026', password_hash:'9aa709b9926509a19cd23bc6a02dc3528012130f17b89e228e8e41cc9e1b8ef4' }
 ]);
 // 耗材只参与库存流水，不纳入每日逐项实盘；需要时仍可由报损、调拨或定向盘点处理。
 const R2_DAILY_COUNT_EXCLUDED_MATERIALS = Object.freeze(['半成品奶茶', '杯子', '冰块', '勺子', '双杯袋', '四杯袋', '塑料杯', '吸管']);
@@ -219,20 +219,26 @@ function r2DefaultOrganizationUnits() { return R2_ORGANIZATION_UNITS.map((item) 
 function r2DefaultAccounts() { return R2_DEMO_ACCOUNTS.map((item) => ({ ...item, role_ids: [...item.role_ids], org_ids: [...item.org_ids], store_codes: [...item.store_codes] })); }
 function r2NormalizeAccounts(items) {
   const source = Array.isArray(items) && items.length ? items : r2DefaultAccounts();
-  return source.map((item) => ({
-    id: String(item.id || id('ACC')).trim().slice(0, 80),
-    display_name: String(item.display_name || '未命名账号').trim().slice(0, 80),
-    email: String(item.email || '').trim().toLowerCase().slice(0, 160),
-    identity_provider: ['feishu_demo', 'email_demo', 'oauth_demo'].includes(item.identity_provider) ? item.identity_provider : 'email_demo',
-    identity_label: String(item.identity_label || '演示身份').trim().slice(0, 80),
-    role_ids: Array.isArray(item.role_ids) ? item.role_ids.filter((role) => R2_ROLE_DEFINITIONS.some((definition) => definition.id === role)) : [],
-    org_scope_type: ['stores', 'region', 'all'].includes(item.org_scope_type) ? item.org_scope_type : 'stores',
-    org_ids: Array.isArray(item.org_ids) ? item.org_ids.map((value) => String(value).slice(0, 80)) : [],
-    store_codes: Array.isArray(item.store_codes) ? item.store_codes.filter((code) => R2_STORE_CODES.includes(code)) : [],
-    status: item.status === 'disabled' ? 'disabled' : 'active',
-    source: String(item.source || 'manual_demo').slice(0, 40),
-    updated_at: item.updated_at || null
-  }));
+  return source.map((item) => {
+    const seed = R2_DEMO_ACCOUNTS.find((candidate) => candidate.id === item.id || candidate.email === item.email);
+    const passwordHash = String(item.password_hash || seed?.password_hash || '');
+    return {
+      id: String(item.id || id('ACC')).trim().slice(0, 80),
+      display_name: String(item.display_name || '未命名账号').trim().slice(0, 80),
+      email: String(item.email || '').trim().toLowerCase().slice(0, 160),
+      identity_provider: ['feishu_demo', 'email_demo', 'oauth_demo'].includes(item.identity_provider) ? item.identity_provider : 'email_demo',
+      identity_label: String(item.identity_label || '演示身份').trim().slice(0, 80),
+      role_ids: Array.isArray(item.role_ids) ? item.role_ids.filter((role) => R2_ROLE_DEFINITIONS.some((definition) => definition.id === role)) : [],
+      org_scope_type: ['stores', 'region', 'all'].includes(item.org_scope_type) ? item.org_scope_type : 'stores',
+      org_ids: Array.isArray(item.org_ids) ? item.org_ids.map((value) => String(value).slice(0, 80)) : [],
+      store_codes: Array.isArray(item.store_codes) ? item.store_codes.filter((code) => R2_STORE_CODES.includes(code)) : [],
+      status: item.status === 'disabled' ? 'disabled' : 'active',
+      source: String(item.source || 'manual_demo').slice(0, 40),
+      password_salt: String(item.password_salt || seed?.password_salt || '').slice(0, 100),
+      password_hash: /^[a-f0-9]{64}$/.test(passwordHash) ? passwordHash : '',
+      updated_at: item.updated_at || null
+    };
+  });
 }
 function r2ProductDataClassification(skuCode) { return R2_REAL_PRODUCT_SKU_SET.has(skuCode) ? 'brand_real' : 'mvp_mock'; }
 function r2DefaultProductCatalog() {
@@ -452,10 +458,12 @@ function r2StateView(value, view = '') {
   if (view === 'count-plans') return { countPlans: value.countPlans || [], materialCatalog: value.materialCatalog || [], storeMasters: value.storeMasters || [], feishuImport: importSummary, storage: value.storage };
   if (view === 'documents') return { storeMasters: value.storeMasters || [], materialEvents: value.materialEvents || [], transferOrders: value.transferOrders || [], purchaseOrders: value.purchaseOrders || [], receiptOrders: value.receiptOrders || [], storage: value.storage };
   if (view === 'procurement') return { storeMasters: value.storeMasters || [], materialCatalog: value.materialCatalog || [], purchaseOrders: value.purchaseOrders || [], receiptOrders: value.receiptOrders || [], storage: value.storage };
-  if (view === 'accounts') return { accounts: value.accounts || r2DefaultAccounts(), roleDefinitions: value.roleDefinitions || r2DefaultRoleDefinitions(), organizationUnits: value.organizationUnits || r2DefaultOrganizationUnits(), activeAccountId: value.activeAccountId || 'ACC-HQ-WANG', storeMasters: value.storeMasters || r2DefaultStoreMasters(), storage: value.storage };
+  if (view === 'accounts') return { accounts: r2NormalizeAccounts(value.accounts).map(r2SafeAccount), roleDefinitions: value.roleDefinitions || r2DefaultRoleDefinitions(), organizationUnits: value.organizationUnits || r2DefaultOrganizationUnits(), activeAccountId: value.activeAccountId || 'ACC-HQ-WANG', storeMasters: value.storeMasters || r2DefaultStoreMasters(), storage: value.storage };
   if (view === 'materials-evidence') return { countPlans: value.countPlans || [], documents: (value.documents || []).map(({ preview_data, ...item }) => item), storage: value.storage };
   return {
     ...value,
+    accounts: r2NormalizeAccounts(value.accounts).map(r2SafeAccount),
+    authSessions: [],
     feishuImport: importSummary,
     documents: (value.documents || []).map((item, index) => index < 5 ? item : (({ preview_data, ...rest }) => rest)(item)),
     countPhotoReviews: (value.countPhotoReviews || []).map(({ preview_data, ...item }) => item),
@@ -4337,7 +4345,6 @@ async function r2CreateStoreAgentEvidence(env, body = {}) {
   return json({ document, state: await r2SaveDemoState(env, value, 'store-agent-evidence') }, 201);
 }
 
-const R2_DEMO_LOGIN_CODE = '123456';
 const R2_SESSION_COOKIE = 'xlb_demo_session';
 const R2_SESSION_MAX_AGE = 12 * 60 * 60;
 
@@ -4355,10 +4362,16 @@ async function r2TokenHash(token) {
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
 }
+async function r2PasswordHash(salt, password) { return r2TokenHash(`${salt}:${password}`); }
 
 function r2AuthHome(account) {
   if (account.role_ids.some((role) => role === 'store_staff' || role === 'store_manager')) return `/store/?store=${encodeURIComponent(account.store_codes[0] || STORE_CODE)}`;
   return '/';
+}
+function r2SafeAccount(account) {
+  if (!account) return null;
+  const { password_hash, password_salt, ...safe } = account;
+  return { ...safe, login_ready:Boolean(password_hash) };
 }
 
 async function r2AuthContext(env, request) {
@@ -4381,10 +4394,10 @@ function r2AuthResponse(payload, status = 200, cookie = null) {
 async function r2AuthOptions(env) {
   const value = await r2DemoState(env);
   return json({
-    mode: 'demo_code', code_hint: R2_DEMO_LOGIN_CODE,
+    mode: 'demo_password',
     accounts: r2NormalizeAccounts(value.accounts).filter((item) => item.status === 'active').map((item) => ({
       id:item.id, display_name:item.display_name, email:item.email, identity_label:item.identity_label,
-      role_ids:item.role_ids, store_codes:item.store_codes, home:r2AuthHome(item)
+      role_ids:item.role_ids, store_codes:item.store_codes, home:r2AuthHome(item), login_ready:Boolean(item.password_hash)
     })),
     roles: value.roleDefinitions || r2DefaultRoleDefinitions()
   });
@@ -4392,10 +4405,11 @@ async function r2AuthOptions(env) {
 
 async function r2AuthLogin(env, body = {}) {
   const email = String(body.email || '').trim().toLowerCase();
-  const code = String(body.code || '').trim();
+  const password = String(body.password || '');
   const value = await r2DemoState(env);
   const account = r2NormalizeAccounts(value.accounts).find((item) => item.email === email && item.status === 'active');
-  if (!account || code !== String(env.DEMO_LOGIN_CODE || R2_DEMO_LOGIN_CODE)) return bad('账号或演示验证码不正确。', 401);
+  const matches = account?.password_hash && password && await r2PasswordHash(account.password_salt, password) === account.password_hash;
+  if (!matches) return bad('账号或密码不正确。', 401);
   const token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
   const createdAt = now();
   const expiresAt = new Date(Date.now() + R2_SESSION_MAX_AGE * 1000).toISOString();
@@ -4404,13 +4418,13 @@ async function r2AuthLogin(env, body = {}) {
   value.activeAccountId = account.id;
   r2Audit(value, account.display_name, '演示账号登录', `${account.email} · ${account.role_ids.join('、')}`, account.id);
   await r2SaveDemoState(env, value, 'auth-login');
-  return r2AuthResponse({ account, expires_at:expiresAt, home:r2AuthHome(account) }, 200, `${R2_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${R2_SESSION_MAX_AGE}`);
+  return r2AuthResponse({ account:r2SafeAccount(account), expires_at:expiresAt, home:r2AuthHome(account) }, 200, `${R2_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${R2_SESSION_MAX_AGE}`);
 }
 
 async function r2AuthSession(env, request) {
   const context = await r2AuthContext(env, request);
   if (!context) return bad('登录已失效，请重新登录。', 401);
-  return json({ account:context.account, expires_at:context.session.expires_at, home:r2AuthHome(context.account) });
+  return json({ account:r2SafeAccount(context.account), expires_at:context.session.expires_at, home:r2AuthHome(context.account) });
 }
 
 async function r2AuthLogout(env, request) {
@@ -4445,7 +4459,7 @@ function r2ResourceStoreCodes(value, url) {
 }
 
 async function r2AuthorizeApi(env, request, url, account) {
-  const adminPath = url.pathname.startsWith('/api/accounts');
+  const adminPath = url.pathname.startsWith('/api/accounts') || (url.pathname === '/api/state' && url.searchParams.get('view') === 'accounts');
   if (adminPath && !r2HasRole(account, 'hq_admin')) return bad('仅总部管理员可以配置账户和角色。', 403);
   const adminConfigPath = request.method !== 'GET' && ['/api/store-masters', '/api/product-catalog', '/api/material-catalog', '/api/safety-stock-policies'].some((prefix) => url.pathname.startsWith(prefix));
   if (adminConfigPath && !r2HasRole(account, 'hq_admin')) return bad('该配置需要总部管理员权限。', 403);
@@ -4495,13 +4509,14 @@ function r2AccountConfigView(value) {
   const accounts = r2NormalizeAccounts(value.accounts);
   const activeAccount = accounts.find((item) => item.id === value.activeAccountId && item.status === 'active')
     || accounts.find((item) => item.status === 'active') || null;
+  const safeActiveAccount = activeAccount ? (({ password_hash, password_salt, ...account }) => ({ ...account, login_ready:Boolean(password_hash) }))(activeAccount) : null;
   return {
-    accounts,
+    accounts: accounts.map(({ password_hash, password_salt, ...account }) => ({ ...account, login_ready:Boolean(password_hash) })),
     roles: value.roleDefinitions || r2DefaultRoleDefinitions(),
     organizations: value.organizationUnits || r2DefaultOrganizationUnits(),
     stores: value.storeMasters || r2DefaultStoreMasters(),
     active_account_id: activeAccount?.id || null,
-    active_account: activeAccount,
+    active_account: safeActiveAccount,
     enforcement: {
       mode: 'preview',
       api_authorization_enabled: true,
@@ -4532,6 +4547,11 @@ async function r2SaveAccount(env, body = {}) {
   const accountId = String(body.id || id('ACC')).trim().slice(0, 80);
   if (accounts.some((item) => item.email === email && item.id !== accountId)) return bad('该邮箱已绑定其他账号。');
   const previous = accounts.find((item) => item.id === accountId);
+  const password = String(body.password || '');
+  if (!previous && password.length < 8) return bad('新账号密码至少需要 8 位。');
+  if (password && password.length < 8) return bad('密码至少需要 8 位。');
+  const passwordSalt = password ? crypto.randomUUID() : previous?.password_salt || '';
+  const passwordHash = password ? await r2PasswordHash(passwordSalt, password) : previous?.password_hash || '';
   const status = body.status === 'disabled' ? 'disabled' : 'active';
   if (value.activeAccountId === accountId && status === 'disabled') return bad('不能停用当前演示身份，请先切换身份。');
   const provider = ['feishu_demo', 'email_demo', 'oauth_demo'].includes(body.identity_provider) ? body.identity_provider : 'email_demo';
@@ -4541,7 +4561,7 @@ async function r2SaveAccount(env, body = {}) {
     identity_label: identityLabels[provider], role_ids: roleIds, org_scope_type: scopeType,
     org_ids: scopeType === 'all' ? ['ORG-HQ'] : orgIds,
     store_codes: scopeType === 'all' ? [] : storeCodes,
-    status, source: previous?.source || 'manual_demo', updated_at: now()
+    status, source: previous?.source || 'manual_demo', password_salt:passwordSalt, password_hash:passwordHash, updated_at: now()
   };
   const index = accounts.findIndex((item) => item.id === accountId);
   if (index >= 0) accounts[index] = account; else accounts.unshift(account);

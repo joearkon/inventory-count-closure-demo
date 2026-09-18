@@ -1,7 +1,7 @@
 const base = (process.env.BASE_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
 const nativeFetch = globalThis.fetch;
 let authCookie = '';
-const loginResponse = await nativeFetch(`${base}/api/auth/login`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ email:'wangmin@demo.local', code:'123456' }) });
+const loginResponse = await nativeFetch(`${base}/api/auth/login`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ email:'wangmin@demo.local', password:'HqAdmin123!' }) });
 if (!loginResponse.ok) throw new Error(`QA login failed: ${loginResponse.status}`);
 authCookie = (loginResponse.headers.get('set-cookie') || '').split(';')[0];
 globalThis.fetch = (input, options = {}) => {

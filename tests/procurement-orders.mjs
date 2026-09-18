@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 const base = (process.env.BASE_URL || 'http://127.0.0.1:8788').replace(/\/$/, '');
 const nativeFetch = globalThis.fetch;
-const loginResponse = await nativeFetch(`${base}/api/auth/login`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ email:'wangmin@demo.local', code:'123456' }) });
+const loginResponse = await nativeFetch(`${base}/api/auth/login`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ email:'wangmin@demo.local', password:'HqAdmin123!' }) });
 assert.equal(loginResponse.status, 200, 'HQ login failed');
 const authCookie = (loginResponse.headers.get('set-cookie') || '').split(';')[0];
 globalThis.fetch = (input, options = {}) => { const headers = new Headers(options.headers || {}); headers.set('cookie', authCookie); return nativeFetch(input, { ...options, headers }); };
