@@ -74,6 +74,9 @@ try {
 
     & node (Join-Path $projectRoot 'tests\procurement-orders.mjs')
     if ($LASTEXITCODE -ne 0) { throw "Procurement and receipt scenario failed with exit code $LASTEXITCODE" }
+
+    & node (Join-Path $projectRoot 'tests\accounts-config.mjs')
+    if ($LASTEXITCODE -ne 0) { throw "Account and role configuration scenario failed with exit code $LASTEXITCODE" }
   } finally {
     $env:BASE_URL = $previousBaseUrl
     $env:MUTATION_TESTS = $previousMutationTests
