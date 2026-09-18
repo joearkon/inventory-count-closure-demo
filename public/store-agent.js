@@ -200,6 +200,16 @@
     return '当前语音识别不可用，请直接输入文字。';
   }
   function releaseVoiceStream() { activeVoiceStream?.getTracks().forEach((track) => track.stop()); activeVoiceStream = null; mediaRecorder = null; voiceChunks = []; }
+  function requestMicrophone(timeoutMs = 12000) {
+    let timer = 0, expired = false;
+    const request = navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } }).then((stream) => {
+      if (!expired) return stream;
+      stream.getTracks().forEach((track) => track.stop());
+      throw new DOMException('microphone permission timeout', 'TimeoutError');
+    });
+    const timeout = new Promise((_, reject) => { timer = window.setTimeout(() => { expired = true; reject(new DOMException('microphone permission timeout', 'TimeoutError')); }, timeoutMs); });
+    return Promise.race([request, timeout]).finally(() => window.clearTimeout(timer));
+  }
   async function transcribeVoice(blob) {
     voiceNote.textContent = '正在转写并理解…'; mic.classList.remove('recording'); voiceOverlay?.classList.remove('recording'); if (voiceOverlayTitle) voiceOverlayTitle.textContent = '正在识别'; if (voiceOverlayText) voiceOverlayText.textContent = '请稍候，正在转写并理解你的操作';
     const controller = new AbortController(), timeoutId = setTimeout(() => controller.abort(), 45000);
@@ -222,7 +232,7 @@
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { addMessage(voiceErrorText('unsupported')); return; }
     speaking = true; voicePermissionPending = true; discardVoice = false; mic.classList.add('recording'); voiceNote.classList.add('show'); voiceNote.textContent = '正在请求麦克风权限…';
     try {
-      activeVoiceStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
+      activeVoiceStream = await requestMicrophone();
       voicePermissionPending = false;
       const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
       mediaRecorder = new MediaRecorder(activeVoiceStream, mimeType ? { mimeType } : undefined); voiceChunks = [];
@@ -230,7 +240,7 @@
       mediaRecorder.onerror = (event) => { addMessage(`录音错误：${event.error?.message || 'unknown'}`); speaking = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); };
       mediaRecorder.onstop = () => { const blob = new Blob(voiceChunks, { type:mediaRecorder?.mimeType || mimeType || 'audio/webm' }); if (discardVoice) { speaking = false; discardVoice = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); return; } if (blob.size < 512) { speaking = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); return addMessage(voiceErrorText('no-speech')); } transcribeVoice(blob); };
       const languageLabel = language?.value === 'auto' ? '中文、English 或 Bahasa Indonesia' : (language?.selectedOptions?.[0]?.textContent || language?.value || '中文'); mediaRecorder.start(250); voiceOverlay?.classList.add('show','recording'); if (voiceOverlayTitle) voiceOverlayTitle.textContent = '正在聆听'; if (voiceOverlayText) voiceOverlayText.textContent = `请说${languageLabel}，完成后点击下方按钮`; voiceNote.textContent = `正在录音（${languageLabel}）…`;
-    } catch (error) { speaking = false; voicePermissionPending = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); addMessage(voiceErrorText(error.name === 'NotAllowedError' ? 'not-allowed' : 'unavailable')); }
+    } catch (error) { speaking = false; voicePermissionPending = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); addMessage(error.name === 'TimeoutError' ? '麦克风授权等待超时，请再次点击麦克风，或直接输入文字。' : voiceErrorText(error.name === 'NotAllowedError' ? 'not-allowed' : 'unavailable')); }
   }
   function stopVoice() { if (!speaking || voicePermissionPending) return; if (mediaRecorder?.state === 'recording') mediaRecorder.stop(); }
   function cancelVoice() { if (!speaking) return; discardVoice = true; voicePermissionPending = false; if (mediaRecorder?.state === 'recording') mediaRecorder.stop(); else { speaking = false; voiceNote.classList.remove('show'); voiceOverlay?.classList.remove('show','recording'); mic.classList.remove('recording'); releaseVoiceStream(); } }
@@ -238,7 +248,7 @@
   send.addEventListener('click', () => ask(input.value)); input.addEventListener('input', resizeInput); input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); ask(input.value); } });
   document.querySelectorAll('[data-agent-prompt]').forEach((button) => button.addEventListener('click', () => ask(button.dataset.agentPrompt)));
   chat.addEventListener('click', (event) => { if (event.target.closest('[data-agent-open-sheet]')) { openSheet(); return; } const taskButton = event.target.closest('[data-agent-task-action]'); if (!taskButton) return; const type = taskButton.dataset.agentTaskAction; if (type === 'open_task_tab') { window.switchStoreTab?.('tasks'); return; } const intent = intentFromAction({ type }); if (!intent) return; startDraft(intent, { plan_no: taskButton.dataset.agentTaskPlan || '', request_id: taskButton.dataset.agentTaskRequest || '', direction: taskButton.dataset.agentTaskDirection || '' }, '', false); openSheet(); });
-  mic.addEventListener('click', (event) => { event.preventDefault(); if (speaking && !voicePermissionPending) stopVoice(); else startVoice(); });
+  mic.addEventListener('click', (event) => { event.preventDefault(); if (speaking) { if (voicePermissionPending) cancelVoice(); else stopVoice(); } else startVoice(); });
   voiceFinish?.addEventListener('click', stopVoice); voiceCancel?.addEventListener('click', cancelVoice);
   [by('agent-sheet-close'), by('agent-sheet-cancel')].forEach((button) => button?.addEventListener('click', closeSheet)); sheetForm.addEventListener('submit', submitSheet);
   window.storeAgentTabOpened = welcome;

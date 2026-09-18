@@ -152,6 +152,8 @@ await check('dense operation pages use focused tabs and voice has an immersive o
   if (!/\.agent-voice-overlay\.show\s*\{[^}]*pointer-events:auto/s.test(store)) throw new Error('voice overlay must intercept touches while visible');
   if (!/store-agent-voice-cancel/.test(store) || !/store-agent-voice-finish/.test(store)) throw new Error('voice overlay needs explicit cancel and finish actions');
   if (!/voicePermissionPending/.test(storeScript) || /stopVoiceRequested/.test(storeScript)) throw new Error('voice permission flow can stop recording prematurely');
+  if (!/requestMicrophone\(timeoutMs = 12000\)/.test(storeScript) || !/TimeoutError/.test(storeScript)) throw new Error('microphone permission request must have a timeout fallback');
+  if (!/if \(speaking\) \{ if \(voicePermissionPending\) cancelVoice\(\); else stopVoice\(\); \}/.test(storeScript)) throw new Error('pending microphone permission must be cancellable from the microphone control');
   if (/mic\.addEventListener\('pointerdown'/.test(storeScript)) throw new Error('voice recording should not rely on press-and-release timing');
   if ((store.match(/class="agent-icon-btn/g) || []).length < 2 || (store.match(/class="agent-icon-btn[^>]*>[\s\S]*?<svg/g) || []).length < 2) throw new Error('voice and send controls must share the same icon system');
   if (!/voiceOverlay\?\.classList\.remove\('show','recording'\); releaseVoiceStream\(\);\s*await ask\(transcript,/s.test(storeScript)) throw new Error('voice overlay must close before waiting for the assistant response');
