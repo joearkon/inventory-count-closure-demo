@@ -316,6 +316,7 @@ function normalizeR2DemoState(value) {
   const source = value && typeof value === 'object' ? value : {};
   const accounts = r2NormalizeAccounts(source.accounts);
   const activeAccountId = accounts.find((item) => item.id === source.activeAccountId && item.status === 'active')?.id
+    || accounts.find((item) => item.id === initial.activeAccountId && item.status === 'active')?.id
     || accounts.find((item) => item.status === 'active')?.id || null;
   const diagnosisCases = (Array.isArray(source.diagnosisCases) ? source.diagnosisCases : []).map((caseItem) => {
     const variances = caseItem.status === 'needs_hq_action' ? (caseItem.last_count_result?.variances || []).filter((line) => line.exceeded) : [];
