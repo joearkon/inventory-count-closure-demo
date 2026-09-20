@@ -35,7 +35,7 @@
   window.invalidateStoreBootstrap = () => { storeBootstrapPromise = null; };
   const esc = (value) => String(value == null ? '' : value).replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[c]));
   const statusText = (status) => ({ pending_hq_decision: '待总部决策', pending_store_recount: '待门店复盘', pending_hq_review: '待总部复核', closed: '已闭环' }[status] || '待处理');
-  const operationStatusText = (status) => ({ pending_store_submission: '待门店执行', pending_hq_review: '待总部验收', closed: '已完成' }[status] || '待处理');
+  const operationStatusText = (status, task = null) => task?.escalation_level === 'escalate_supervisor' ? '督导处理中' : ({ pending_store_submission: '待门店执行', pending_hq_review: '待总部验收', closed: '已完成' }[status] || '待处理');
   const typeLabel = (type) => documentTypes[type]?.label || (type === 'operation_proof' ? '任务凭证' : '盘点单');
 
   function formatDate(value) {
@@ -130,7 +130,7 @@
     const proofDocument = task.proof_document_id && (state.documents || []).find((item) => item.id === task.proof_document_id);
     if (proofDocument) return openDocumentDrawer(proofDocument);
     document.querySelector('#document-drawer-content').innerHTML = `<div class="drawer-head"><div><div class="live-eyebrow">门店上传凭证 · 历史归档</div><h2 id="document-drawer-title">${esc(task.proof_filename || '门店核查凭证')}</h2></div><button class="drawer-close" data-close-document-drawer aria-label="关闭凭证">×</button></div>
-      <div class="drawer-block"><div class="drawer-grid"><div class="drawer-field"><span>关联任务</span>${esc(task.id)}</div><div class="drawer-field"><span>提交时间</span>${esc(formatDate(task.submitted_at))}</div><div class="drawer-field"><span>当前状态</span>${esc(operationStatusText(task.status))}</div><div class="drawer-field"><span>凭证类型</span>门店核查凭证</div></div></div>
+      <div class="drawer-block"><div class="drawer-grid"><div class="drawer-field"><span>关联任务</span>${esc(task.id)}</div><div class="drawer-field"><span>提交时间</span>${esc(formatDate(task.submitted_at))}</div><div class="drawer-field"><span>当前状态</span>${esc(operationStatusText(task.status, task))}</div><div class="drawer-field"><span>凭证类型</span>门店核查凭证</div></div></div>
       <div class="drawer-block"><h3>归档说明</h3><div class="document-preview"><div class="document-no-preview">该历史任务只保留了凭证登记信息；后续新上传的凭证会显示缩略图与 OCR 识别结果。</div></div></div>
       ${task.resolution ? `<div class="drawer-block"><h3>总部验收结论</h3><p style="font-size:14px;color:#2a9d3f;line-height:1.7">${esc(task.resolution)}</p></div>` : ''}`;
     const drawer = document.querySelector('#document-drawer'); drawer.classList.add('open'); drawer.setAttribute('aria-hidden', 'false');
@@ -170,7 +170,7 @@
     const isReview = task.status === 'pending_hq_review';
     return `<div class="task-item count-task operation-task demo-flow ${task.status === 'closed' ? 'closed-task' : ''}" data-store-operation-task="${esc(task.id)}"><span class="store-demo-float">${primary ? '优先处理' : '待处理'}</span>
       <div class="task-icon ${task.status === 'closed' ? 'green' : 'blue'}">${task.status === 'closed' ? '✓' : '📌'}</div>
-      <div class="task-body"><div class="task-title">${esc(task.title)}<span class="badge-direct">${operationStatusText(task.status)}</span></div>
+      <div class="task-body"><div class="task-title">${esc(task.title)}<span class="badge-direct">${operationStatusText(task.status, task)}</span></div>
       <div class="task-code">工单 ${esc(task.id)} · 营业日 ${esc(task.business_date || String(task.created_at || '').slice(0, 10) || fallbackBusinessDate || '未标注')}${task.source_anomaly_id ? ` · 来源研判 ${esc(task.source_anomaly_id)}` : ' · 来源：总部运营任务'}</div>
       <div class="task-meta">${esc(task.instruction)}<br>责任人：${esc(task.assigned_to)}</div>
       <details class="task-detail" open><summary>系统已核对</summary><p>下发时间：${esc(formatDate(task.created_at))}。任务来自后台统一工单；提交处理凭证后进入总部验收，并在同一条时间线保留操作人与结果。</p></details>
@@ -285,11 +285,11 @@
     const task = tasks.find((item) => item.id === selectedOperationTaskId) || tasks[0] || null;
     const activeTask = tasks.find((item) => item.status !== 'closed');
     const rows = tasks.length ? tasks.slice(0, 5).map((item) => `<tr>
-      <td>${esc(item.id)}</td><td>${esc(item.title)}</td><td>STORE001</td><td><span class="status-tag ${item.status === 'closed' ? 'closed' : item.status === 'pending_hq_review' ? 'assigned' : 'pending'}">${operationStatusText(item.status)}</span></td><td>${formatDate(item.created_at)}</td>
+      <td>${esc(item.id)}</td><td>${esc(item.title)}</td><td>STORE001</td><td><span class="status-tag ${item.status === 'closed' ? 'closed' : item.status === 'pending_hq_review' ? 'assigned' : 'pending'}">${operationStatusText(item.status, item)}</span></td><td>${formatDate(item.created_at)}</td>
       <td><div class="btn-row"><a class="btn" href="/work-order/?id=${encodeURIComponent(item.id)}">查看详情</a>${operationTaskAction(item)}</div></td></tr>`).join('') : '<tr><td colspan="6" class="operation-empty">暂无主动运营任务。创建后会同步出现在门店待办。</td></tr>';
     const linkedDocuments = task ? (task.linked_document_ids || []).map((id) => documents.find((item) => item.id === id)).filter(Boolean) : [];
     const linkedDocumentHtml = linkedDocuments.length ? `<div style="margin-top:10px"><b style="font-size:13px">关联单据</b><div class="btn-row" style="margin-top:6px">${linkedDocuments.map((document) => `<button class="btn" data-open-operation-document="${document.id}">${esc(document.original_filename || document.id)}</button>`).join('')}</div></div>` : '';
-    const detail = task ? `<div class="operation-detail" id="operation-detail-panel"><div class="live-eyebrow">任务详情 · ${operationStatusText(task.status)}</div><h3>${esc(task.title)}</h3><p>${esc(task.instruction)}</p><p style="margin-top:7px">责任人：${esc(task.assigned_to)} · 下发时间：${formatDate(task.created_at)}${task.proof_filename ? `<br>门店凭证：${esc(task.proof_filename)} · 提交时间：${formatDate(task.submitted_at)}` : ''}${task.resolution ? `<br><span style="color:#2a9d3f">${esc(task.resolution)} · ${formatDuration(task.created_at, task.closed_at)}</span>` : ''}</p>${linkedDocumentHtml}<div class="live-task-actions" style="margin-top:10px">${operationTaskAction(task)}</div></div>` : '';
+    const detail = task ? `<div class="operation-detail" id="operation-detail-panel"><div class="live-eyebrow">任务详情 · ${operationStatusText(task.status, task)}</div><h3>${esc(task.title)}</h3><p>${esc(task.instruction)}</p><p style="margin-top:7px">责任人：${esc(task.assigned_to)} · 下发时间：${formatDate(task.created_at)}${task.proof_filename ? `<br>门店凭证：${esc(task.proof_filename)} · 提交时间：${formatDate(task.submitted_at)}` : ''}${task.resolution ? `<br><span style="color:#2a9d3f">${esc(task.resolution)} · ${formatDuration(task.created_at, task.closed_at)}</span>` : ''}</p>${linkedDocumentHtml}<div class="live-task-actions" style="margin-top:10px">${operationTaskAction(task)}</div></div>` : '';
     return `<div class="operation-workspace">
       <form class="operation-create" id="operation-create-form">
         <div class="operation-create-head"><div class="operation-create-title">创建门店运营任务</div><span class="status-tag ${activeTask ? 'pending' : 'closed'}">${activeTask ? '当前有进行中任务' : '可下发'}</span></div>
@@ -539,7 +539,7 @@
         ...anomaly,
         status: task.status === 'pending_hq_review' ? 'pending_hq_review' : 'store_task_in_progress',
         action: task.status === 'pending_hq_review' ? '门店已提交凭证，等待总部验收。' : `门店核查任务已下发：${task.title}`,
-        evidence: `关联门店任务 ${task.id} · 状态：${operationStatusText(task.status)}`,
+        evidence: `关联门店任务 ${task.id} · 状态：${operationStatusText(task.status, task)}`,
         operationTask: task,
         timeline: [...anomaly.timeline, ...timeline]
       };
@@ -555,7 +555,7 @@
           : [{ title: operationTask.status === 'pending_hq_review' ? `门店已提交 ${operationTask.id} 凭证，等待总部验收` : `已下发门店核查任务 ${operationTask.id}，等待门店提交凭证`, time: formatDate(operationTask.submitted_at || operationTask.created_at) }];
         return operationTask.status === 'closed'
           ? { ...anomaly, status: 'closed', action: '关联门店核查任务已完成，SKU 异常自动闭环。', evidence: `${operationTask.id} · ${operationTask.proof_filename || '门店核查凭证'} · ${operationTask.resolution || '总部已验收'}`, duration: formatDuration(operationTask.created_at, operationTask.closed_at), operationTask, timeline: [...anomaly.timeline, ...taskTimeline] }
-          : { ...anomaly, status: operationTask.status === 'pending_hq_review' ? 'pending_hq_review' : 'store_task_in_progress', action: operationTask.status === 'pending_hq_review' ? '门店已提交凭证，等待总部验收。' : `门店核查任务已下发：${operationTask.title}`, evidence: `关联门店任务 ${operationTask.id} · 状态：${operationStatusText(operationTask.status)}`, operationTask, timeline: [...anomaly.timeline, ...taskTimeline] };
+          : { ...anomaly, status: operationTask.status === 'pending_hq_review' ? 'pending_hq_review' : 'store_task_in_progress', action: operationTask.status === 'pending_hq_review' ? `${operationStatusText(operationTask.status, operationTask)}：${operationTask.assigned_to || '待分配'}` : `门店核查任务已下发：${operationTask.title}`, evidence: `关联门店任务 ${operationTask.id} · 状态：${operationStatusText(operationTask.status, operationTask)}`, operationTask, timeline: [...anomaly.timeline, ...taskTimeline] };
       }
       const task = governanceTaskFor(anomaly, state);
       if (!task) return anomaly;
@@ -587,7 +587,7 @@
       const flowing = operationTask ? {
         status: operationTask.status === 'pending_hq_review' ? 'pending_hq_review' : 'store_task_in_progress',
         action: operationTask.status === 'pending_hq_review' ? `门店已提交 ${operationTask.id}，等待总部验收。` : `关联执行任务 ${operationTask.id} 已下发，等待门店处理。`,
-        evidence: `关联执行任务 ${operationTask.id} · 状态：${operationStatusText(operationTask.status)}`
+        evidence: `关联执行任务 ${operationTask.id} · 状态：${operationStatusText(operationTask.status, operationTask)}`
       } : {};
       return {
         id: item.id, task_no: item.judgment_task_no || `JDG-${item.id}`, created_at: item.created_at, store_code: item.store_code, subject: item.material_name, type: meta.type, severity: item.severity, root: meta.root, owner: item.owner,

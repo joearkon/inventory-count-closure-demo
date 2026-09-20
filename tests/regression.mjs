@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 const base = (process.env.BASE_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
 const nativeFetch = globalThis.fetch;
 let authCookie = '';
@@ -101,6 +103,20 @@ await check('Feishu sync page exposes a non-blocking manual pipeline', async () 
     if (!page.includes(token)) throw new Error(`missing manual sync token: ${token}`);
   }
   return { route:'/sync/', mode:'async_job', polling:true };
+});
+
+await check('two-case showcase supports supervisor escalation and guarded preparation', async () => {
+  const [worker, workOrder] = await Promise.all([
+    readFile(new URL('../src/worker.js', import.meta.url), 'utf8'),
+    fetch(`${base}/work-order-page.js`).then((response) => response.text())
+  ]);
+  for (const token of ['prepare-two-case-showcase', 'PREPARE:', 'SHOWCASE-TWO-CASE', 'escalate_supervisor', '区域督导 Rina']) {
+    if (!worker.includes(token)) throw new Error(`missing showcase worker token: ${token}`);
+  }
+  for (const token of ['升级至区域督导', '督导处理中']) {
+    if (!workOrder.includes(token)) throw new Error(`missing supervisor work-order token: ${token}`);
+  }
+  return { cases:2, closed:1, supervisor_pending:1 };
 });
 
 await check('mobile login has a dedicated touch layout', async () => {
