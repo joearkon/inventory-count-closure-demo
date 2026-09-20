@@ -1729,14 +1729,14 @@ async function r2RunStoreDayDemo(env, body = {}) {
   }
 }
 
-// 双工单演示：使用指定营业日的飞书真实销售与规则异常，只保留一条已闭环、
-// 一条升级督导的未闭环工单。历史工单先备份到独立 R2 对象，不在业务首页展示。
-async function r2PrepareTwoCaseShowcase(env, body = {}) {
+// 四类库存演示：D2 使用真实销售触发并完成闭环；D1/S1/T2 使用明确标记的
+// Demo 业务动作补齐证据，并保持待处理。历史工单先备份到独立 R2 对象。
+async function r2PrepareFourCaseShowcase(env, body = {}) {
   const storeCode = String(body.store_code || STORE_CODE).trim().slice(0, 64);
   const businessDate = String(body.business_date || '').trim().slice(0, 10);
-  const expectedConfirmation = `PREPARE:${storeCode}:${businessDate}`;
+  const expectedConfirmation = `PREPARE4:${storeCode}:${businessDate}`;
   if (storeCode !== STORE_CODE || !/^\d{4}-\d{2}-\d{2}$/.test(businessDate) || body.confirm !== expectedConfirmation) {
-    return bad(`双工单演示需要确认口令 ${expectedConfirmation}，且当前仅允许 ${STORE_CODE}。`, 409);
+    return bad(`四类库存演示需要确认口令 ${expectedConfirmation}，且当前仅允许 ${STORE_CODE}。`, 409);
   }
   try {
     let value = await r2DemoState(env);
@@ -1746,21 +1746,23 @@ async function r2PrepareTwoCaseShowcase(env, body = {}) {
     const sales = (value.feishuImport.sales || []).filter((row) => row.store_code === storeCode && row.business_date === businessDate);
     if (!sales.length) return bad(`${storeCode} 在 ${businessDate} 没有飞书真实销售，不能准备演示。`, 409);
 
-    const priorShowcaseTaskIds = new Set((value.operationTasks || []).filter((task) => task.scenario_id === 'SHOWCASE-TWO-CASE').map((task) => task.id));
+    const priorShowcaseTaskIds = new Set((value.operationTasks || []).filter((task) => ['SHOWCASE-TWO-CASE', 'SHOWCASE-FOUR-RULES'].includes(task.scenario_id)).map((task) => task.id));
     value.purchaseOrders = (value.purchaseOrders || []).filter((order) => !priorShowcaseTaskIds.has(order.source_work_order_id));
     value.receiptOrders = (value.receiptOrders || []).filter((order) => !priorShowcaseTaskIds.has(order.source_work_order_id));
-    value.materialEvents = (value.materialEvents || []).filter((event) => !priorShowcaseTaskIds.has(event.source_work_order_id));
+    value.materialEvents = (value.materialEvents || []).filter((event) => !priorShowcaseTaskIds.has(event.source_work_order_id) && event.scenario_id !== 'SHOWCASE-FOUR-RULES' && event.reference !== '四类库存演示 · 果糖批量到货');
+    value.countPlans = (value.countPlans || []).filter((plan) => plan.scenario_id !== 'SHOWCASE-FOUR-RULES');
+    value.documents = (value.documents || []).filter((document) => document.scenario_id !== 'SHOWCASE-FOUR-RULES');
 
     const previousTasks = r2VisibleOperationTasks(value);
-    const backupKey = `backups/showcase-two-case/${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    const backupKey = `backups/showcase-four-rules/${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     if (previousTasks.length) {
-      await env.DEMO_STATE.put(backupKey, JSON.stringify({ archived_at:now(), reason:'prepare_two_case_showcase', operation_tasks:previousTasks }), { httpMetadata:{ contentType:'application/json' } });
+      await env.DEMO_STATE.put(backupKey, JSON.stringify({ archived_at:now(), reason:'prepare_four_case_showcase', operation_tasks:previousTasks }), { httpMetadata:{ contentType:'application/json' } });
     }
     value.operationTasks = [];
     value.operationTask = null;
     r2ReconcileAllMaterialSignalsAndCases(value, businessDate, now());
-    r2Audit(value, '总部演示控制台', '准备双工单演示', `${storeCode} · ${businessDate} · 已备份 ${previousTasks.length} 条旧工单；首页将只展示一条闭环与一条未闭环工单。`, 'SHOWCASE-TWO-CASE');
-    await r2SaveDemoState(env, value, 'prepare-two-case-clean');
+    r2Audit(value, '总部演示控制台', '准备四类库存研判演示', `${storeCode} · ${businessDate} · 已备份 ${previousTasks.length} 条旧工单；首页将只展示 D2、D1、S1、T2 四张工单。`, 'SHOWCASE-FOUR-RULES');
+    await r2SaveDemoState(env, value, 'prepare-four-case-clean');
 
     value = await r2DemoState(env);
     const currentSignals = (value.materialAnomalies || []).filter((signal) => signal.store_code === storeCode && signal.business_date === businessDate && !['closed', 'auto_closed'].includes(signal.status));
@@ -1794,47 +1796,92 @@ async function r2PrepareTwoCaseShowcase(env, body = {}) {
       operator:'总部运营 王敏', store_adopted:true, hq_confirmed:true
     }, 'close'), '关闭已恢复工单');
 
-    const openCreated = await r2ActionResult(await r2CreateDiagnosisWorkOrder(env, safety.id), '建立安全库存工单');
-    const openTaskId = openCreated.operationTask?.id;
-    if (!openTaskId) throw new Error('安全库存工单未返回编号');
-    await r2ActionResult(await r2AddOperationTaskNote(env, openTaskId, {
+    await r2ActionResult(await r2CreateMaterialEvent(env, {
+      store_code:storeCode, business_date:businessDate, material_name:'果糖', unit:'kg', type:'receipt', qty:10,
+      reference:'四类库存演示 · 果糖批量到货'
+    }), '建立 T2 批量收货事实');
+    const countPlanCreated = await r2ActionResult(await r2CreateManualCountPlan(env, {
+      store_code:storeCode, business_date:businessDate, material_names:['牛奶'], source_type:'manual',
+      instruction:'四类库存演示：请复核牛奶实盘、单位、报损和收货记录。'
+    }), '建立 D1 定向盘点');
+    const countPlanNo = countPlanCreated.plan?.plan_no;
+    if (!countPlanNo) throw new Error('D1 盘点计划未返回编号');
+    await r2ActionResult(await r2CreateInitialCount(env, {
+      planNo:countPlanNo, filename:`四类库存演示-牛奶盘点-${businessDate}.jpg`,
+      actuals:{ '牛奶|L':80 }, recognition_note:'照片识别后由门店确认'
+    }), '提交 D1 实盘结果');
+
+    value = await r2DemoState(env);
+    const activeSignals = (value.materialAnomalies || []).filter((signal) => signal.store_code === storeCode && signal.business_date === businessDate && !['closed', 'auto_closed'].includes(signal.status));
+    const countVariance = activeSignals.find((signal) => signal.rule_code === 'COUNT_VARIANCE' && normalizedKey(signal.material_name) === normalizedKey('牛奶'));
+    const currentSafety = activeSignals.find((signal) => signal.rule_code === 'BELOW_SAFETY_STOCK');
+    const sellIn = activeSignals.find((signal) => signal.rule_code === 'SELL_IN_IMBALANCE' && normalizedKey(signal.material_name) === normalizedKey('果糖'));
+    if (!countVariance || !currentSafety || !sellIn) throw new Error(`待处理规则不足：D1=${Boolean(countVariance)}，S1=${Boolean(currentSafety)}，T2=${Boolean(sellIn)}`);
+
+    const countCreated = await r2ActionResult(await r2CreateDiagnosisWorkOrder(env, countVariance.id), '建立盘点差异工单');
+    const countTaskId = countCreated.operationTask?.id;
+    if (!countTaskId) throw new Error('盘点差异工单未返回编号');
+    await r2ActionResult(await r2AddOperationTaskNote(env, countTaskId, {
+      operator:'系统规则引擎',
+      note:`门店已确认牛奶实盘 80L，理论库存 ${countVariance.theoretical_closing_qty}L，差异仍超过阈值；等待门店复核报损、收货与盘点单位。`
+    }), '记录 D1 待处理事实');
+
+    const safetyCreated = await r2ActionResult(await r2CreateDiagnosisWorkOrder(env, currentSafety.id), '建立安全库存工单');
+    const safetyTaskId = safetyCreated.operationTask?.id;
+    if (!safetyTaskId) throw new Error('安全库存工单未返回编号');
+    await r2ActionResult(await r2AddOperationTaskNote(env, safetyTaskId, {
       operator:'门店店长 陈店长',
-      note:`已核对 ${safety.material_name}：门店仅余 ${safety.theoretical_closing_qty}${safety.unit}，今日无待收货单，附近门店可调数量尚未确认，请求区域督导协助。`
+      note:`已核对 ${currentSafety.material_name}：门店仅余 ${currentSafety.theoretical_closing_qty}${currentSafety.unit}，今日无待收货单，附近门店可调数量尚未确认，请求区域督导协助。`
     }), '记录门店未解决结论');
-    await r2ActionResult(await r2OperationTransition(env, openTaskId, {
+    await r2ActionResult(await r2OperationTransition(env, safetyTaskId, {
       outcome:'unresolved', follow_up_action:'escalate_supervisor',
-      final_cause:`${safety.material_name} 低于安全库存，门店没有在途订单，也无法独立确认跨店可调余量。`,
+      final_cause:`${currentSafety.material_name} 低于安全库存，门店没有在途订单，也无法独立确认跨店可调余量。`,
       resolution_note:'由区域督导 Rina 在所辖门店核对可调库存；确认调出门店和数量后建立调拨任务，否则升级总部供应链安排紧急补货。',
       operator:'总部运营 王敏', store_adopted:true, hq_confirmed:true
     }, 'close'), '升级督导处理');
 
+    const sellInCreated = await r2ActionResult(await r2CreateDiagnosisWorkOrder(env, sellIn.id), '建立销入比工单');
+    const sellInTaskId = sellInCreated.operationTask?.id;
+    if (!sellInTaskId) throw new Error('销入比工单未返回编号');
+    await r2ActionResult(await r2AddOperationTaskNote(env, sellInTaskId, {
+      operator:'总部运营 王敏',
+      note:`果糖当日批量收货 10kg，而飞书销售对应 BOM 消耗仅 0.03kg，销入比异常偏低；等待门店说明是否为集中备货、半成品生产或收货单位录入问题。`
+    }), '记录 T2 待处理事实');
+
     value = await r2DemoState(env);
-    for (const [taskId, label, order] of [[closedTaskId, '已闭环案例', 2], [openTaskId, '未闭环案例', 1]]) {
+    const taskLayout = [
+      [safetyTaskId, 'S1 · 待督导处理', 1],
+      [countTaskId, 'D1 · 待门店处理', 2],
+      [sellInTaskId, 'T2 · 待门店说明', 3],
+      [closedTaskId, 'D2 · 已闭环', 4]
+    ];
+    for (const [taskId, label, order] of taskLayout) {
       const task = (value.operationTasks || []).find((item) => item.id === taskId);
       if (!task) continue;
       task.data_origin = 'demo_showcase';
-      task.scenario_id = 'SHOWCASE-TWO-CASE';
+      task.scenario_id = 'SHOWCASE-FOUR-RULES';
       task.presentation_label = label;
       task.presentation_order = order;
       task.sales_batch_id = value.feishuImport.id;
       task.sales_business_date = businessDate;
     }
-    value.operationTasks = (value.operationTasks || []).filter((task) => [closedTaskId, openTaskId].includes(task.id)).sort((a, b) => Number(a.presentation_order || 99) - Number(b.presentation_order || 99));
+    for (const plan of (value.countPlans || []).filter((item) => item.plan_no === countPlanNo)) plan.scenario_id = 'SHOWCASE-FOUR-RULES';
+    for (const document of (value.documents || []).filter((item) => item.count_plan_no === countPlanNo)) document.scenario_id = 'SHOWCASE-FOUR-RULES';
+    for (const event of (value.materialEvents || []).filter((item) => item.reference === '四类库存演示 · 果糖批量到货')) event.scenario_id = 'SHOWCASE-FOUR-RULES';
+    for (const order of [...(value.purchaseOrders || []), ...(value.receiptOrders || [])].filter((item) => item.source_work_order_id === closedTaskId)) order.scenario_id = 'SHOWCASE-FOUR-RULES';
+    const showcaseTaskIds = taskLayout.map(([taskId]) => taskId);
+    value.operationTasks = (value.operationTasks || []).filter((task) => showcaseTaskIds.includes(task.id)).sort((a, b) => Number(a.presentation_order || 99) - Number(b.presentation_order || 99));
     value.operationTask = value.operationTasks.find((task) => task.status !== 'closed') || value.operationTasks[0] || null;
-    const saved = await r2SaveDemoState(env, value, 'prepare-two-case-complete');
-    const closedTask = saved.operationTasks.find((task) => task.id === closedTaskId);
-    const openTask = saved.operationTasks.find((task) => task.id === openTaskId);
+    const saved = await r2SaveDemoState(env, value, 'prepare-four-case-complete');
     return json({
       ok:true, store_code:storeCode, business_date:businessDate,
       sales:{ batch_id:value.feishuImport.id, records:sales.length, qty:r2Round(sales.reduce((sum, row) => sum + Number(row.sales_qty || 0), 0)) },
       backup_key:previousTasks.length ? backupKey : null,
-      cases:[
-        { kind:'closed', task_id:closedTaskId, title:closedTask?.title, status:closedTask?.status, receipt_no:receiptCreated.receipt.receipt_no, resolution:closedTask?.resolution },
-        { kind:'open', task_id:openTaskId, title:openTask?.title, status:openTask?.status, assigned_to:openTask?.assigned_to, next_action:openTask?.closure?.resolution_note }
-      ]
+      cases:saved.operationTasks.map((task) => ({ rule_code:task.source_rule_code, task_id:task.id, title:task.title, status:task.status, assigned_to:task.assigned_to, presentation_label:task.presentation_label, resolution:task.resolution || null })),
+      evidence:{ receipt_no:receiptCreated.receipt.receipt_no, count_plan_no:countPlanNo }
     }, 201);
   } catch (error) {
-    return bad(`双工单演示准备中止：${error instanceof Error ? error.message : String(error)}`, 409);
+    return bad(`四类库存演示准备中止：${error instanceof Error ? error.message : String(error)}`, 409);
   }
 }
 
@@ -5015,7 +5062,7 @@ export default {
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo-day/reset') return r2ResetStoreBusinessDay(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo-day/initialize') return r2InitializeStoreBusinessDay(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo-day/run') return r2RunStoreDayDemo(env, await request.json().catch(() => ({})));
-    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo-day/prepare-two-case-showcase') return r2PrepareTwoCaseShowcase(env, await request.json().catch(() => ({})));
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo-day/prepare-four-case-showcase') return r2PrepareFourCaseShowcase(env, await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/state') return json(r2ScopePayload(r2StateView(await r2DemoState(env), url.searchParams.get('view') || ''), authContext.account));
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/diagnosis-knowhow') {
       const value = await r2DemoState(env);
