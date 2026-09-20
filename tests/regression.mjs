@@ -87,12 +87,20 @@ await check('master data quality gate distinguishes core readiness from brand pr
 });
 
 await check('new pages are served', async () => {
-  const paths = ['/login/', '/hq-login/', '/count-plans/', '/documents/', '/flows/', '/purchase-orders/', '/receipt-orders/', '/procurement-detail/?type=purchase&id=preview', '/voice-qa/?store=STORE001', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001', '/work-order/'];
+  const paths = ['/login/', '/hq-login/', '/count-plans/', '/documents/', '/flows/', '/purchase-orders/', '/receipt-orders/', '/procurement-detail/?type=purchase&id=preview', '/voice-qa/?store=STORE001', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001', '/work-order/', '/sync/'];
   for (const path of paths) {
     const response = await fetch(`${base}${path}`);
     if (!response.ok) throw new Error(`${path}: ${response.status}`);
   }
   return paths;
+});
+
+await check('Feishu sync page exposes a non-blocking manual pipeline', async () => {
+  const page = await fetch(`${base}/sync/`).then((response) => response.text());
+  for (const token of ['手工同步管道', '立即从飞书同步', '/api/feishu-sync/jobs', 'pollSyncJob', '异步执行']) {
+    if (!page.includes(token)) throw new Error(`missing manual sync token: ${token}`);
+  }
+  return { route:'/sync/', mode:'async_job', polling:true };
 });
 
 await check('mobile login has a dedicated touch layout', async () => {
@@ -296,6 +304,9 @@ if (mutationTests) {
     const escalated = await json(`/api/operation-tasks/${retryTask.id}/close`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ outcome:'unresolved', follow_up_action:'escalate_hq', final_cause:'门店证据不足', resolution_note:'升级总部库存运营继续排查', operator:'QA 总部运营', store_adopted:false, hq_confirmed:true }) });
     const escalatedTask = (escalated.operationTasks || []).find((item) => item.id === retryTask.id);
     if (escalatedTask?.status !== 'pending_hq_review' || escalatedTask.assigned_to !== '总部库存运营' || escalatedTask.escalation_level !== 'escalate_hq' || escalatedTask.closure_attempts?.length !== 1) throw new Error(JSON.stringify(escalatedTask));
+    const [hqView, storeView] = await Promise.all([json('/api/state'), json('/api/store/bootstrap?store=STORE001')]);
+    if ((hqView.operationTasks || []).some((item) => item.task_type === 'qa_regression')) throw new Error('QA tasks leaked into headquarters business list');
+    if ((storeView.operationTasks || []).some((item) => item.task_type === 'qa_regression')) throw new Error('QA tasks leaked into store business list');
     return { task_id:task.id, status:closedTask.status, proof_document_id:submittedTask.proof_document_id, timeline_entries:closedTask.activity_log?.length || 0, closure:closedTask.closure, escalation:{ task_id:retryTask.id, status:escalatedTask.status, assigned_to:escalatedTask.assigned_to } };
   });
 

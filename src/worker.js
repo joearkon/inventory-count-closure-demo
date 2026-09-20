@@ -179,6 +179,8 @@ function validPreviewData(value) {
 const R2_DEMO_CURRENT_KEY = 'demo-state/current.json';
 const R2_DEMO_INITIAL_KEY = 'demo-state/initial.json';
 const R2_DEMO_HISTORY_PREFIX = 'demo-state/history/';
+const R2_FEISHU_SYNC_JOB_LATEST_KEY = 'jobs/feishu-sync/latest.json';
+const R2_FEISHU_SYNC_JOB_PREFIX = 'jobs/feishu-sync/';
 
 function r2DemoInitialState() {
   return {
@@ -440,7 +442,30 @@ async function r2SaveDemoState(env, value, action = 'update') {
   return stateValue;
 }
 
+async function r2SaveFeishuSyncJob(env, job) {
+  const body = JSON.stringify(job);
+  const options = { httpMetadata: { contentType: 'application/json; charset=utf-8' } };
+  await Promise.all([
+    env.DEMO_STATE.put(`${R2_FEISHU_SYNC_JOB_PREFIX}${job.id}.json`, body, options),
+    env.DEMO_STATE.put(R2_FEISHU_SYNC_JOB_LATEST_KEY, body, options)
+  ]);
+  return job;
+}
+
+async function r2FeishuSyncJob(env, jobId = 'latest') {
+  const key = jobId === 'latest' ? R2_FEISHU_SYNC_JOB_LATEST_KEY : `${R2_FEISHU_SYNC_JOB_PREFIX}${String(jobId).slice(0, 80)}.json`;
+  return r2ReadJson(env.DEMO_STATE, key);
+}
+
 function r2Result(stateValue, status = 200) { return json(stateValue, status); }
+
+function r2IsQaOperationTask(task) {
+  return task?.task_type === 'qa_regression' || task?.data_origin === 'qa_regression';
+}
+
+function r2VisibleOperationTasks(value) {
+  return (value.operationTasks || []).filter((task) => !r2IsQaOperationTask(task));
+}
 
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
@@ -489,6 +514,7 @@ function r2StateView(value, view = '') {
   if (view === 'materials-evidence') return { countPlans: value.countPlans || [], documents: (value.documents || []).map(({ preview_data, ...item }) => item), storage: value.storage };
   return {
     ...value,
+    operationTasks: r2VisibleOperationTasks(value),
     accounts: r2NormalizeAccounts(value.accounts).map(r2SafeAccount),
     authSessions: [],
     feishuImport: importSummary,
@@ -536,7 +562,7 @@ function r2FeishuStateView(value, view = '') {
     ledger: slimLedger(item.ledger, mode)
   }));
   if (view === 'flows') return { ...common, storeViews: views('events') };
-  if (view === 'diagnosis') return { ...common, materialAnomalies: value.materialAnomalies || [], operationTasks: value.operationTasks || [], ledgerSnapshots: value.ledgerSnapshots || [], materialEvents: value.materialEvents || [] };
+  if (view === 'diagnosis') return { ...common, materialAnomalies: value.materialAnomalies || [], operationTasks: r2VisibleOperationTasks(value), ledgerSnapshots: value.ledgerSnapshots || [], materialEvents: value.materialEvents || [] };
   if (view === 'simulator') return { ...common, storeViews: views('simulator') };
   if (view === 'transfers') return { ...common, storeViews: views('summary'), transfers: value.transfers || {} };
   if (view === 'materials') return { ...common, storeViews: views('summary') };
@@ -1711,6 +1737,29 @@ async function r2CleanupLegacySyntheticAnomalies(env) {
   return json({ removed, state: await r2SaveDemoState(env, value, 'cleanup-legacy-synthetic') });
 }
 
+async function r2CleanupQaOperationTasks(env) {
+  const value = await r2DemoState(env);
+  const qaTasks = (value.operationTasks || []).filter(r2IsQaOperationTask);
+  const qaTaskIds = new Set(qaTasks.map((task) => task.id));
+  const qaDocumentIds = new Set(qaTasks.flatMap((task) => [task.proof_document_id, ...(task.linked_document_ids || [])]).filter(Boolean));
+  const beforeDocuments = (value.documents || []).length;
+  value.operationTasks = (value.operationTasks || []).filter((task) => !qaTaskIds.has(task.id));
+  value.operationTask = value.operationTasks.find((task) => task.status !== 'closed') || value.operationTasks[0] || null;
+  value.audits = (value.audits || []).filter((item) => !qaTaskIds.has(item.task_id));
+  value.documents = (value.documents || []).filter((document) => {
+    const qaFilename = /^qa[-_]/i.test(String(document.original_filename || document.filename || ''));
+    return !qaDocumentIds.has(document.id) && !qaFilename;
+  });
+  const removedDocuments = beforeDocuments - value.documents.length;
+  r2Audit(value, '总部运营', '清理回归测试工单', `已从业务状态移除 ${qaTaskIds.size} 条 qa_regression 工单及 ${removedDocuments} 份测试凭证。`, 'QA-CLEANUP');
+  return json({
+    removed: qaTaskIds.size,
+    removed_tasks: qaTaskIds.size,
+    removed_documents: removedDocuments,
+    state: await r2SaveDemoState(env, value, 'cleanup-qa-operation-tasks')
+  });
+}
+
 async function notifyFeishu(env, notification) {
   if (!env.FEISHU_WEBHOOK_URL) return { delivered: false, reason: '飞书群机器人 Webhook 尚未配置。' };
   try {
@@ -2671,7 +2720,7 @@ async function r2StoreBootstrap(env, storeCode = STORE_CODE) {
   const supervisor = r2NormalizeAccounts(value.accounts).find((account) => account.status === 'active' && r2HasRole(account, 'area_supervisor') && r2AllowedStores(account).includes(storeCode));
   // 研判衍生的“补凭证”由总部研判中心跟踪，不作为门店移动端的日常待办展示。
   // 门店首页仅保留独立、可执行的运营任务，避免旧研判信息淹没收货、调拨和盘点。
-  const operationTasks = (value.operationTasks || [])
+  const operationTasks = r2VisibleOperationTasks(value)
     .filter((item) => (item.store_code || item.assigned_store_code || STORE_CODE) === storeCode
       && !item.source_case_id && item.task_type !== 'receipt_evidence')
     .map((item) => ({ ...item, business_date:item.business_date || String(item.created_at || '').slice(0, 10) || businessDate }))
@@ -3206,6 +3255,47 @@ async function r2ImportFeishuSales(env, dispatchNotifications = false, force = f
   r2EnsureDailyCountPlans(value, r2ImportedFeishuState(value), '总部运营自动计划', chinaBusinessDate());
   if (dispatchNotifications) await r2MaybeDispatchScheduledNotifications(env, value);
   return r2SaveDemoState(env, value, 'feishu-sales-import');
+}
+
+async function r2StartFeishuSyncJob(env, executionContext, account) {
+  const latest = await r2FeishuSyncJob(env);
+  const latestStartedAt = Date.parse(latest?.started_at || latest?.requested_at || '');
+  const active = ['queued', 'running'].includes(latest?.status) && Number.isFinite(latestStartedAt) && Date.now() - latestStartedAt < 15 * 60 * 1000;
+  if (active) return json({ job: latest, reused: true }, 202);
+
+  const requestedAt = now();
+  const job = await r2SaveFeishuSyncJob(env, {
+    id: id('FSYNC'), type: 'feishu_base_manual_sync', status: 'queued',
+    requested_at: requestedAt, requested_by: account?.display_name || '总部运营',
+    started_at: null, completed_at: null, error: null, result: null
+  });
+  const run = async () => {
+    const running = { ...job, status: 'running', started_at: now() };
+    await r2SaveFeishuSyncJob(env, running);
+    try {
+      const state = await r2ImportFeishuSales(env, false, true);
+      const imported = state.feishuImport || {};
+      await r2SaveFeishuSyncJob(env, {
+        ...running, status: 'completed', completed_at: now(),
+        result: {
+          batch_id: imported.id || null,
+          imported_at: imported.imported_at || null,
+          latest_business_date: imported.latest_business_date || null,
+          valid_records: Number(imported.records || 0),
+          latest_records: Number(imported.latest_records || 0),
+          latest_sales_qty: Number(imported.latest_sales_qty || 0),
+          bom_status: imported.bom_sync?.status || null
+        }
+      });
+    } catch (error) {
+      await r2SaveFeishuSyncJob(env, {
+        ...running, status: 'failed', completed_at: now(),
+        error: error instanceof Error ? error.message : '飞书同步失败。'
+      });
+    }
+  };
+  executionContext.waitUntil(run());
+  return json({ job, reused: false }, 202);
 }
 
 function r2ImportedStoreView(value, storeCode, latestDate) {
@@ -4538,7 +4628,7 @@ async function r2AuthorizeApi(env, request, url, account) {
   if (adminPath && !r2HasRole(account, 'hq_admin')) return bad('仅总部管理员可以配置账户和角色。', 403);
   const adminConfigPath = request.method !== 'GET' && ['/api/store-masters', '/api/product-catalog', '/api/material-catalog', '/api/safety-stock-policies'].some((prefix) => url.pathname.startsWith(prefix));
   if (adminConfigPath && !r2HasRole(account, 'hq_admin')) return bad('该配置需要总部管理员权限。', 403);
-  const hqPath = url.pathname.startsWith('/api/notifications') || url.pathname === '/api/feishu/alert-test' || url.pathname.startsWith('/api/feishu-sync/refresh') || url.pathname.startsWith('/api/diagnosis-knowhow') || url.pathname.startsWith('/api/governance-tasks') || url.pathname.startsWith('/api/demo') || url.pathname.startsWith('/api/transfer-orders') || url.pathname.startsWith('/api/anomalies/') || (url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close'));
+  const hqPath = url.pathname.startsWith('/api/notifications') || url.pathname === '/api/feishu/alert-test' || url.pathname.startsWith('/api/feishu-sync/refresh') || url.pathname.startsWith('/api/feishu-sync/jobs') || url.pathname.startsWith('/api/diagnosis-knowhow') || url.pathname.startsWith('/api/governance-tasks') || url.pathname.startsWith('/api/demo') || url.pathname.startsWith('/api/transfer-orders') || url.pathname.startsWith('/api/anomalies/') || (url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close'));
   if (request.method !== 'GET' && hqPath && !r2HasRole(account, 'hq_operations', 'hq_admin')) return bad('该操作需要总部运营权限。', 403);
   const dispatchPath = request.method !== 'GET' && (url.pathname.startsWith('/api/count-plans/') || url.pathname.startsWith('/api/diagnosis-cases/'));
   if (dispatchPath && !r2HasRole(account, 'area_supervisor', 'hq_operations', 'hq_admin')) return bad('该下发或研判动作需要督导或总部权限。', 403);
@@ -4667,7 +4757,7 @@ async function r2SetActiveAccount(env, body = {}) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     let authContext = null;
     if (!url.pathname.startsWith('/api/')) {
@@ -4760,6 +4850,14 @@ export default {
       const evidence = await r2CountEvidence(env, planNo, documentId);
       return evidence ? json(evidence) : bad('未找到对应的盘点单或盘点凭证。', 404);
     }
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/feishu-sync/jobs') {
+      return r2StartFeishuSyncJob(env, ctx, authContext.account);
+    }
+    if (env.DEMO_STATE && request.method === 'GET' && /^\/api\/feishu-sync\/jobs\/(latest|FSYNC-[A-Z0-9]+)$/.test(url.pathname)) {
+      const jobId = decodeURIComponent(url.pathname.split('/')[4]);
+      const job = await r2FeishuSyncJob(env, jobId);
+      return job ? json({ job }) : bad('未找到飞书同步任务。', 404);
+    }
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/feishu-sync/refresh') {
       try { return json(await r2ImportFeishuSales(env, false, url.searchParams.get('force') === '1')); } catch (error) { return bad(error instanceof Error ? error.message : '飞书读取失败。', 502); }
     }
@@ -4831,7 +4929,12 @@ export default {
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/tasks/') && url.pathname.endsWith('/request-recount')) return r2TaskTransition(env, url.pathname.split('/')[3], 'request-recount');
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/tasks/') && url.pathname.endsWith('/end-audit')) return r2TaskTransition(env, url.pathname.split('/')[3], 'end-audit');
     if (env.DEMO_STATE && request.method === 'GET' && /^\/api\/operation-tasks\/[^/]+$/.test(url.pathname)) return r2OperationTaskDetail(env, decodeURIComponent(url.pathname.split('/')[3]));
-    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/operation-tasks') return r2CreateOperationTask(env, await request.json().catch(() => ({})));
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/operation-tasks') {
+      const body = await request.json().catch(() => ({}));
+      const localHost = ['127.0.0.1', 'localhost'].includes(url.hostname);
+      if (body.taskType === 'qa_regression' && !localHost) return bad('线上环境禁止创建回归测试工单。请使用隔离的本地回归环境。', 403);
+      return r2CreateOperationTask(env, body);
+    }
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/notes')) return r2AddOperationTaskNote(env, url.pathname.split('/')[3], await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/reassess')) return r2ReassessOperationTask(env, url.pathname.split('/')[3]);
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/submit')) return r2OperationTransition(env, url.pathname.split('/')[3], await request.json().catch(() => ({})), 'submit');
@@ -4843,6 +4946,7 @@ export default {
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname.startsWith('/api/anomalies/') && url.pathname.endsWith('/close')) return r2CloseAnomaly(env, url.pathname.split('/')[3], await request.json().catch(() => ({})));
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo/reset') return r2ResetDemo(env);
     if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo/cleanup-legacy-synthetic') return r2CleanupLegacySyntheticAnomalies(env);
+    if (env.DEMO_STATE && request.method === 'POST' && url.pathname === '/api/demo/cleanup-qa-operation-tasks') return r2CleanupQaOperationTasks(env);
     if (request.method === 'POST' && url.pathname === '/api/count-documents') {
       const body = await request.json().catch(() => ({}));
       if (body.documentType && body.documentType !== 'inventory_count') return createSupportingDocument(env.DB, body);

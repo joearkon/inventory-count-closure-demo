@@ -40,7 +40,8 @@ R2 快照 / Demo 业务状态
 - 获取应用 token：`getFeishuTenantToken()`；
 - Base 分页读取：`listFeishuRecords()`，每页最多 500 条，并对 `Data not ready` 做 3 次退避重试；
 - R2 主同步：`r2ImportFeishuSales()`；
-- 手动刷新：总部权限调用 `POST /api/feishu-sync/refresh`；加 `?force=1` 可绕过 90 秒冷却，但会更新线上 R2 快照；
+- 手工同步：总部在 `/sync/` 创建异步任务，调用 `POST /api/feishu-sync/jobs`，再通过 `GET /api/feishu-sync/jobs/latest` 或任务 ID 查询排队、运行、完成和失败状态；页面离开后任务仍可继续；
+- 兼容刷新：`POST /api/feishu-sync/refresh` 仍保留给内部维护；加 `?force=1` 可绕过 90 秒冷却，但会同步更新线上 R2 快照；
 - 同步查询：`GET /api/feishu-sync/state`；
 - 机器人发送：`notifyFeishu()` / 通知配置页面；
 - 项目文档与云盘交付物：定时调用 `syncFeishuProjectDocument()`、`syncFeishuProjectFiles()` 保存只读知识快照。
@@ -104,7 +105,7 @@ R2 快照 / Demo 业务状态
 3. 检查 `src/worker.js` 中的 Base token、table ID 和 `r2ImportFeishuSales()`；
 4. 只读调用同步状态，确认最新有效营业日和数据质量；
 5. 若飞书已上传但营业日未更新，先检查 Base 字段名、字段类型和记录值，不要直接造数据；
-6. 只有需要更新线上快照时才调用手动刷新；需要重建门店营业日的 Demo 编排属于有状态操作，必须另行确认。
+6. 只有需要更新线上快照时才发起手工同步；优先使用 `/sync/` 的异步任务并查看最终状态，不要重复点击；需要重建门店营业日的 Demo 编排属于有状态操作，必须另行确认。
 
 ## 8. 目前仍需补齐
 
