@@ -74,34 +74,21 @@
     return `${url.pathname}${url.search}${url.hash}`;
   };
   const currentDiagnosis = (data) => data.diagnosis_v2?.comparison || null;
-  const problemHeroHtml = (data) => {
-    const comparison = currentDiagnosis(data), result = comparison?.v2, packet = comparison?.fact_packet;
-    if (!comparison || !result || !packet) return `<section class="problem-hero neutral"><div><span class="hero-kicker">人工工单</span><h2>${esc(data.task.title)}</h2><p>${esc(data.task.instruction)}</p></div></section>`;
-    const theoretical = packet.quantities?.theoretical_closing?.value;
-    const unit = comparison.unit || '';
-    const runs = data.diagnosis_runs || [];
-    const currentStage = data.task.status === 'closed' || runs.at(-1)?.anomaly_status === 'not_triggered' ? 4 : 2;
-    const stages = ['发现问题', '核查处理', 'V2 重算', '人工闭环'];
-    return `<section class="problem-hero"><div class="hero-main"><span class="hero-kicker">${esc(ruleText(result.rule_code))} · ${esc(evidenceStatus(result.anomaly_status))}</span><h2>${esc(comparison.material_name)} 当前理论库存 <strong>${theoretical == null ? '无法计算' : `${esc(theoretical)} ${esc(unit)}`}</strong></h2><p>${esc(result.primary_hypothesis)}</p><div class="hero-facts"><span>首要排查：<b>${esc(result.primary_location)}</b></span><span>实盘：<b>${packet.physical_count?.value == null ? '未取得' : `${esc(packet.physical_count.value)} ${esc(unit)}`}</b></span><span>证据缺口：<b>${(result.evidence_gaps || []).length} 项</b></span><span>已保存 V2：<b>${runs.length} 次</b></span></div></div><div class="stage-track">${stages.map((label, index) => `<div class="stage ${index + 1 < currentStage ? 'done' : index + 1 === currentStage ? 'current' : ''}"><i>${index + 1 < currentStage ? '✓' : index + 1}</i><span>${label}</span></div>`).join('')}</div></section>`;
-  };
   const taskBriefHtml = (data) => {
     const comparison = currentDiagnosis(data), result = comparison?.v2, packet = comparison?.fact_packet;
-    if (!comparison || !result || !packet) return `<p class="instruction">${esc(data.task.instruction)}</p>`;
+    if (!comparison || !result || !packet) return `<div class="work-order-brief"><article><span>工单原因</span><h3>${esc(data.task.title)}</h3><p>${esc(data.task.instruction)}</p></article><article class="goal"><span>执行目标</span><h3>完成任务要求并提交可核验的处理结果</h3><p>处理记录、相关凭证和最终结论都保留在同一张工单中。</p></article></div>`;
     const code = result.rule_code || data.task.source_rule_code || '';
     const material = `${comparison.material_name}（${comparison.unit}）`;
-    const plans = code.includes('D2') ? [
-      '核对最大负向流水的数量、单位、单号及是否重复记账。',
-      '确认调拨目标门店是否实际到货并完成签收。',
-      '若流水仍无法解释库存，完成一次该物料临时盘点。',
-      '处理完成后由系统重新运行 V2，再提交人工结论。'
-    ] : code.includes('D1') ? [
-      '复核实盘数量、盘点单位和盘点凭证。', '核对收货、报损、调拨及库存调整流水。', '确认差异来源后重新运行 V2。'
-    ] : code.includes('S1') ? [
-      '确认现场库存与在途订货。', '判断是否影响营业并选择补货或调拨。', '到货或调拨签收后重新运行 V2。'
-    ] : [
-      '核对统计周期内的收货与销售 BOM 消耗。', '排查漏记、重复流水及销量变化。', '补齐证据后重新运行 V2。'
-    ];
-    return `<div class="task-goal"><span>处理目标</span><h3>确认“${esc(result.primary_location)}”是否为真实原因，并把处理结果带回库存台账。</h3><p>${esc(material)} · ${esc(data.task.store_code)} · ${esc(comparison.business_date)}</p></div><div class="task-columns"><div><h4>需要完成</h4><ol class="task-checklist">${plans.map((item) => `<li>${esc(item)}</li>`).join('')}</ol></div><div><h4>完成标准</h4><ul class="criteria"><li>至少关联一项业务凭证或人工核查记录</li><li>关键动作完成后产生最新 V2 快照</li><li>填写最终原因、解决方式和操作人</li><li>异常仍触发时不得选择“已恢复”</li></ul></div></div>`;
+    const accepted = data.action_plan || [];
+    const actionTitles = accepted.map((item) => item.title || item.label || item.action_id).filter(Boolean);
+    const goal = actionTitles.length
+      ? `完成“${actionTitles.join('、')}”，确认异常的真实原因并留下处理结果。`
+      : (data.task.instruction || `核实${material}异常原因并形成处理结论。`);
+    const theoretical = packet.quantities?.theoretical_closing?.value;
+    const physical = packet.physical_count?.value;
+    const gaps = result.evidence_gaps || [];
+    const formula = packet.calculation?.formula || packet.quantities?.formula || '';
+    return `<div class="work-order-brief"><article><span>工单原因</span><h3>${esc(material)}在营业日 ${esc(comparison.business_date)} 触发${esc(ruleText(code))}</h3><p>${esc(result.primary_hypothesis || data.task.instruction)}</p><div class="brief-facts"><em>理论库存：${theoretical == null ? '未取得' : `${esc(theoretical)} ${esc(comparison.unit)}`}</em><em>实盘库存：${physical == null ? '未取得' : `${esc(physical)} ${esc(comparison.unit)}`}</em><em>证据缺口：${gaps.length} 项</em></div></article><article class="goal"><span>执行目标</span><h3>${esc(goal)}</h3><p>所选动作完成后重新运行 V2；由处理人填写最终原因和解决方式，再进入闭环确认。</p></article></div><details class="diagnosis-attachment"><summary><div><b>关联研判附件</b><span>${esc(ruleText(code))} · ${esc(result.primary_location || '待判断')} · ${esc(result.rule_version || '当前版本')}</span></div><small>查看证据与计算依据</small></summary><div class="attachment-body"><p><b>研判结论：</b>${esc(result.primary_hypothesis || '—')}</p>${formula ? `<p><b>计算依据：</b><code>${esc(formula)}</code></p>` : ''}<div><b>尚需补充：</b>${gaps.length ? `<ul>${gaps.map((item) => `<li>${esc(item.label || item.explanation || item.code || '待补证据')}</li>`).join('')}</ul>` : '<span class="complete-evidence">当前无关键证据缺口</span>'}</div></div></details>`;
   };
   const actionPlanHtml = (data) => {
     const comparison = currentDiagnosis(data), accepted = data.action_plan || [];
@@ -173,12 +160,11 @@
     const eventRows = events.length ? `<ul>${events.map((item) => `<li>${esc(item.document_no || item.id)} · ${esc(item.material_name)} ${esc(item.qty)}${esc(item.unit)}</li>`).join('')}</ul>` : '';
     const timeRows = timeline(data).map((item) => `<div class="timeline-item"><h3>${esc(item.title)}</h3>${item.detail ? `<p>${esc(item.detail)}</p>` : ''}<div class="timeline-meta"><span>${formatDate(item.time)}</span><span>操作人：${esc(item.actor || '—')}</span></div></div>`).join('');
     root.innerHTML = `<header class="page-head"><div><div class="eyebrow">跟进工单 · ${esc(task.id)}</div><h1>${esc(task.title)}</h1><p class="subtitle">${esc(task.store_code || '—')} · ${esc(typeText(task.task_type))}</p></div><span class="status ${status.css}">${status.label}</span></header>
-      ${problemHeroHtml(data)}
       <div class="layout"><div class="stack">
-        <section class="panel task-panel"><div class="panel-head"><span class="section-index">01</span><div><h2>本次任务</h2><p>先明确需要完成什么，以及什么条件下才能结束。</p></div></div><div class="panel-body">${taskBriefHtml(data)}</div></section>
-        <section class="panel action-panel"><div class="panel-head"><span class="section-index">02</span><div><h2>建议动作与执行</h2><p>按优先级处理；完成业务动作后系统会自动重新研判。</p></div></div><div class="panel-body">${actionPlanHtml(data)}</div></section>
-        <section class="panel correction-panel"><div class="panel-head"><span class="section-index">03</span><div><h2>库存修正与验证</h2><p>把业务动作、库存变化和规则复核串成一条可读的闭环链路。</p></div></div><div class="panel-body">${correctionSummaryHtml(data)}</div></section>
-        <section class="panel"><div class="panel-head split"><div class="section-heading"><span class="section-index">04</span><div><h2>系统研判过程</h2><p>从触发、回溯到首要判断，所有结论均可追溯。</p></div></div><button class="btn" id="reassess-task">重新研判并保存快照</button></div><div class="panel-body">${diagnosisHtml(data)}</div></section>
+        <section class="panel task-panel"><div class="panel-head"><span class="section-index">01</span><div><h2>工单内容</h2><p>明确为什么建单，以及处理完成后要达到什么结果。</p></div></div><div class="panel-body">${taskBriefHtml(data)}</div></section>
+        <section class="panel action-panel"><div class="panel-head"><span class="section-index">02</span><div><h2>执行清单</h2><p>这里只展示创建工单时实际采纳的动作。</p></div></div><div class="panel-body">${actionPlanHtml(data)}</div></section>
+        <section class="panel correction-panel"><div class="panel-head"><span class="section-index">03</span><div><h2>处理结果与验证</h2><p>执行业务动作后，核对库存变化和规则复核结果。</p></div></div><div class="panel-body">${correctionSummaryHtml(data)}</div></section>
+        <details class="panel diagnosis-record-panel"><summary><div class="section-heading"><span class="section-index">附</span><div><h2>完整研判记录</h2><p>规则轨迹、证据缺口与历次 V2 快照，默认收起。</p></div></div><span>展开查看</span></summary><div class="panel-body"><div class="reassess-row"><button class="btn" id="reassess-task">重新研判并保存快照</button></div>${diagnosisHtml(data)}</div></details>
         <details class="panel compact-meta"><summary><span>工单基础信息与判断来源</span><small>编号、责任角色、创建时间及规则来源</small></summary><div class="panel-body"><div class="meta-grid"><div class="meta"><span>工单编号</span>${esc(task.id)}</div><div class="meta"><span>门店 / 主体</span>${esc(task.store_code || '—')}</div><div class="meta"><span>责任角色</span>${esc(task.assigned_to || '—')}</div><div class="meta"><span>当前操作人</span>${esc(task.last_operator || '—')}</div><div class="meta"><span>创建时间</span>${formatDate(task.created_at)}</div><div class="meta"><span>最近更新</span>${formatDate(task.updated_at || task.submitted_at || task.created_at)}</div></div><div class="source">${sourceHtml(data)}</div></div></details>
         <section class="panel"><div class="panel-head"><h2>关联单据与业务记录</h2></div><div class="panel-body"><div class="document-list">${docs}</div>${eventRows}</div></section>
         <details class="panel audit-panel"><summary><span>审计记录与处理时间线</span><small>共 ${timeline(data).length} 条 · 点击展开</small></summary><div class="panel-body"><div class="timeline">${timeRows}</div></div></details>

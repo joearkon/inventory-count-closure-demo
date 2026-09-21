@@ -113,7 +113,7 @@ await check('four-rule showcase supports one prebuilt work order and three diagn
   for (const token of ['prepare-four-case-showcase', 'PREPARE4:', 'SHOWCASE-FOUR-RULES', 'COUNT_VARIANCE', 'SELL_IN_IMBALANCE', 'D2 · 已创建工单', 'inventoryCases = []', 'materialAnomalies = []']) {
     if (!worker.includes(token)) throw new Error(`missing showcase worker token: ${token}`);
   }
-  if (!workOrder.includes('建议动作与执行')) throw new Error('work-order page must expose post-creation execution planning');
+  if (!workOrder.includes('执行清单')) throw new Error('work-order page must expose post-creation execution planning');
   return { cases:4, work_orders:1, diagnosis_only:3, rule_codes:['D2', 'D1', 'S1', 'T2'] };
 });
 
@@ -225,7 +225,7 @@ await check('store vNext keeps reminders, operations and conversational assistan
 await check('follow-up work orders use a traceable full detail page', async () => {
   const [hqPage, hqScript, page, script] = await Promise.all([fetch(`${base}/`).then((r) => r.text()), fetch(`${base}/app.js`).then((r) => r.text()), fetch(`${base}/work-order/`).then((r) => r.text()), fetch(`${base}/work-order-page.js`).then((r) => r.text())]);
   for (const token of ['审计记录与处理时间线', '新增处理记录', '当前操作人', '工单基础信息与判断来源', '关联单据与业务记录']) if (!`${page}\n${script}`.includes(token)) throw new Error(`missing work order detail token: ${token}`);
-  for (const token of ['本次任务', '建议动作与执行', '库存修正与验证', '系统研判过程', '处理前', '处理后', '实际处理动作', '系统验证', '修正后发现新的问题', 'data-followup-work-order', '处理目标', '完成标准', 'V2 重算记录', 'data-run-page', 'D1 · 理论与实盘差异', 'S1 · 安全库存预警', 'T2 · 销入比失衡', '人工闭环确认', '升级至总部运营', 'follow_up_action']) if (!script.includes(token)) throw new Error(`missing work order workflow token: ${token}`);
+  for (const token of ['工单内容', '工单原因', '执行目标', '关联研判附件', '执行清单', '处理结果与验证', '完整研判记录', '处理前', '处理后', '实际处理动作', '系统验证', '修正后发现新的问题', 'data-followup-work-order', 'V2 重算记录', 'data-run-page', 'D1 · 理论与实盘差异', 'S1 · 安全库存预警', 'T2 · 销入比失衡', '人工闭环确认', '升级至总部运营', 'follow_up_action']) if (!script.includes(token)) throw new Error(`missing work order workflow token: ${token}`);
   if (/id="operation-drawer"/.test(hqPage)) throw new Error('work order side drawer must be removed from the HQ page');
   if (!/href="\/work-order\/\?portal=hq(?:&amp;|&)id=/.test(hqScript) || !/\/api\/operation-tasks\/\$\{encodeURIComponent\(data\.task\.id\)\}\/notes/.test(script)) throw new Error('HQ full detail navigation or progress note binding missing');
   if (!/class="note-form"/.test(script) || !/\.note-form\{display:grid;gap:13px\}/.test(page) || !/\.layout\{grid-template-columns:1fr\}/.test(page)) throw new Error('work order note form must have a responsive standalone layout');
