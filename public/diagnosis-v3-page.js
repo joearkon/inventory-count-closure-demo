@@ -56,7 +56,7 @@
   function ruleActionPanel(item) {
     const ids = item.recommended_action_ids || [];
     if (!ids.length) return '';
-    return `<section class="detail-block unified-plan"><div class="plan-title"><div><h3>规则建议行动</h3><p>这些是建单候选，不是已经下发的任务；创建工单时可选择部分纳入。</p></div><span>V2 ${esc(item.rule_version || '')}</span></div><div class="plan-list">${ids.map((actionId, index) => { const ref = `${item.fact_packet_id || item.id}:${actionId}`, action = planned(item, ref); return `<article><i>${index + 1}</i><div><b>${esc(ruleActionLabel[actionId] || actionId)}</b><small>来源：确定性规则 · 待运营选择</small></div><div class="plan-control">${actionControl(item, action)}</div></article>`; }).join('')}</div></section>`;
+    return `<section class="detail-block unified-plan"><div class="plan-title"><div><h3>规则建议行动</h3><p>${item.active_work_order_id ? '工单内只执行已采纳建议；未采纳项继续保留为研判候选。' : '这些是建单候选，不是已经下发的任务；创建工单时可选择部分纳入。'}</p></div><span>V2 ${esc(item.rule_version || '')}</span></div><div class="plan-list">${ids.map((actionId, index) => { const ref = `${item.fact_packet_id || item.id}:${actionId}`, action = planned(item, ref); return `<article><i>${index + 1}</i><div><b>${esc(ruleActionLabel[actionId] || actionId)}</b><small>来源：确定性规则 · ${action ? '已由运营采纳' : '待运营选择'}</small></div><div class="plan-control">${actionControl(item, action)}</div></article>`; }).join('')}</div></section>`;
   }
   function aiPanel(item) {
     const analysis = item.latest_ai_analysis;
