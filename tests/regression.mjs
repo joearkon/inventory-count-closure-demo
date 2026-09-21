@@ -89,12 +89,30 @@ await check('master data quality gate distinguishes core readiness from brand pr
 });
 
 await check('new pages are served', async () => {
-  const paths = ['/login/', '/hq-login/', '/count-plans/', '/documents/', '/flows/', '/diagnosis-v3/', '/purchase-orders/', '/receipt-orders/', '/procurement-detail/?type=purchase&id=preview', '/voice-qa/?store=STORE001', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001', '/work-order/', '/sync/'];
+  const paths = ['/login/', '/hq-login/', '/work-orders/', '/count-plans/', '/documents/', '/flows/', '/diagnosis-v3/', '/purchase-orders/', '/receipt-orders/', '/procurement-detail/?type=purchase&id=preview', '/voice-qa/?store=STORE001', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001', '/work-order/', '/sync/'];
   for (const path of paths) {
     const response = await fetch(`${base}${path}`);
     if (!response.ok) throw new Error(`${path}: ${response.status}`);
   }
   return paths;
+});
+
+await check('HQ prototype theme covers overview, work-order list and operation pages', async () => {
+  const [overview, overviewScript, list, listScript, shell, theme] = await Promise.all([
+    fetch(`${base}/`).then((response) => response.text()),
+    fetch(`${base}/hq-overview-page.js`).then((response) => response.text()),
+    fetch(`${base}/work-orders/`).then((response) => response.text()),
+    fetch(`${base}/work-orders-page.js`).then((response) => response.text()),
+    fetch(`${base}/app-shell.js`).then((response) => response.text()),
+    fetch(`${base}/hq-prototype.css`).then((response) => response.text())
+  ]);
+  for (const token of ['运营总览', '异常与闭环趋势', '闭环质量指标']) if (!overview.includes(token)) throw new Error(`missing overview token: ${token}`);
+  for (const token of ['/api/state', '/api/inventory-cases', 'persistent']) if (!overviewScript.includes(token)) throw new Error(`missing overview data token: ${token}`);
+  for (const token of ['跟进工单', '全部规则', '全部优先级', 'SLA', '负责人']) if (!`${list}\n${listScript}`.includes(token)) throw new Error(`missing work-order list token: ${token}`);
+  for (const token of ['source_rule_code', 'source_anomaly_id', '/work-order/?portal=hq']) if (!listScript.includes(token)) throw new Error(`missing work-order list binding: ${token}`);
+  for (const token of ['/hq-prototype.css', '/work-orders/', '运营总览', '日常运营', '库存数据', '系统协同']) if (!shell.includes(token)) throw new Error(`missing unified shell token: ${token}`);
+  if (!theme.includes('--hq-navy') || !theme.includes('.inventory-prototype-shell .section')) throw new Error('global HQ prototype theme is incomplete');
+  return { overview:true, work_order_list:true, global_theme:true };
 });
 
 await check('Feishu sync page exposes a non-blocking manual pipeline', async () => {

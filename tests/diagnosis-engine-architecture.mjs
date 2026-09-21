@@ -30,6 +30,8 @@ assert.equal(view.cases.length, 1, 'cross-day observations must merge into one c
 assert.equal(view.cases[0].observation_count, 2);
 assert.equal(view.cases[0].opened_business_date, '2026-09-15');
 assert.equal(view.cases[0].latest_business_date, '2026-09-20');
+assert.equal(view.cases[0].duration_business_days, 6, 'duration must include first and latest business date');
+assert.equal(view.cases[0].is_cross_business_day, true);
 
 const base = signal({ id:'MAT-BOBA-20' });
 value.materialAnomalies = [base];
@@ -49,4 +51,4 @@ assert.ok(recurrence, 'recurrence link is missing');
 assert.equal(recurrence.opened_business_date, '2026-09-21');
 assert.equal(recurrence.status, 'open');
 
-console.log(JSON.stringify({ suite:'diagnosis-engine-architecture', passed:12, registered_rules:SUPPORTED_RULE_CODES, persistent_case:true, recurrence:true }, null, 2));
+console.log(JSON.stringify({ suite:'diagnosis-engine-architecture', passed:14, registered_rules:SUPPORTED_RULE_CODES, persistent_case:true, recurrence:true, duration_business_days:true }, null, 2));

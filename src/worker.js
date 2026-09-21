@@ -5061,7 +5061,7 @@ function r2ScopePayload(payload, account) {
 
 function r2PageAllowed(pathname, account) {
   const isHq = r2HasRole(account, 'hq_operations', 'hq_admin');
-  if (!isHq) return ['/store', '/voice-qa', '/procurement-detail', '/work-order'].some((prefix) => pathname.startsWith(prefix));
+  if (!isHq) return ['/store', '/voice-qa', '/procurement-detail'].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)) || pathname === '/work-order' || pathname.startsWith('/work-order/');
   if (pathname.startsWith('/accounts')) return r2HasRole(account, 'hq_admin');
   if (pathname.startsWith('/notifications') || pathname.startsWith('/sync')) return isHq;
   return true;
@@ -5069,7 +5069,7 @@ function r2PageAllowed(pathname, account) {
 
 function r2IsMobilePage(pathname, searchParams = null) {
   if (pathname.startsWith('/work-order') && searchParams?.get('portal') === 'hq') return false;
-  return ['/store', '/voice-qa', '/procurement-detail', '/work-order'].some((prefix) => pathname.startsWith(prefix));
+  return ['/store', '/voice-qa', '/procurement-detail'].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)) || pathname === '/work-order' || pathname.startsWith('/work-order/');
 }
 
 function r2AccountConfigView(value) {

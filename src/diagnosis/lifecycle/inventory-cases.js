@@ -2,6 +2,14 @@ import { getRuleEngine, SUPPORTED_RULE_CODES } from '../engine/registry.js';
 
 const normalizeKey = (value) => String(value || '').trim().toLowerCase().replace(/[\s\-_/，,、()（）]/g, '');
 
+function inclusiveCalendarDays(start, end) {
+  if (!start || !end) return 1;
+  const startAt = Date.parse(`${start}T12:00:00Z`);
+  const endAt = Date.parse(`${end}T12:00:00Z`);
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt)) return 1;
+  return Math.max(1, Math.round((endAt - startAt) / 86400000) + 1);
+}
+
 export function inventoryRuleFamily(ruleCode) {
   return getRuleEngine(ruleCode)?.family || 'other';
 }
@@ -115,6 +123,8 @@ export function refreshInventoryCases(value, updatedAt = new Date().toISOString(
         rule_family:family, family_label:inventoryFamilyLabel(family), current_rule_code:currentSignal.rule_code,
         current_rule_label:inventoryRuleLabel(currentSignal.rule_code), status,
         opened_business_date:first.business_date, latest_business_date:latest.business_date,
+        duration_business_days:inclusiveCalendarDays(first.business_date, latest.business_date),
+        is_cross_business_day:first.business_date !== latest.business_date,
         first_seen_at:first.created_at || first.updated_at, last_seen_at:latest.updated_at || latest.created_at,
         signal_ids:[...signalIds], observation_ids:observations.map((item) => item.observation_id), observations:[...observations].reverse(), observation_count:observations.length,
         active_work_order_id:activeTask?.id || null, work_order_ids:tasks.map((task) => task.id), assigned_to:assignedTo,
