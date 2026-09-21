@@ -286,7 +286,7 @@
     const activeTask = tasks.find((item) => item.status !== 'closed');
     const rows = tasks.length ? tasks.slice(0, 5).map((item) => `<tr>
       <td>${esc(item.id)}</td><td>${esc(item.title)}</td><td>STORE001</td><td><span class="status-tag ${item.status === 'closed' ? 'closed' : item.status === 'pending_hq_review' ? 'assigned' : 'pending'}">${operationStatusText(item.status, item)}</span></td><td>${formatDate(item.created_at)}</td>
-      <td><div class="btn-row"><a class="btn" href="/work-order/?id=${encodeURIComponent(item.id)}">查看详情</a>${operationTaskAction(item)}</div></td></tr>`).join('') : '<tr><td colspan="6" class="operation-empty">暂无主动运营任务。创建后会同步出现在门店待办。</td></tr>';
+      <td><div class="btn-row"><a class="btn" href="/work-order/?portal=hq&amp;id=${encodeURIComponent(item.id)}">查看详情</a>${operationTaskAction(item)}</div></td></tr>`).join('') : '<tr><td colspan="6" class="operation-empty">暂无主动运营任务。创建后会同步出现在门店待办。</td></tr>';
     const linkedDocuments = task ? (task.linked_document_ids || []).map((id) => documents.find((item) => item.id === id)).filter(Boolean) : [];
     const linkedDocumentHtml = linkedDocuments.length ? `<div style="margin-top:10px"><b style="font-size:13px">关联单据</b><div class="btn-row" style="margin-top:6px">${linkedDocuments.map((document) => `<button class="btn" data-open-operation-document="${document.id}">${esc(document.original_filename || document.id)}</button>`).join('')}</div></div>` : '';
     const detail = task ? `<div class="operation-detail" id="operation-detail-panel"><div class="live-eyebrow">任务详情 · ${operationStatusText(task.status, task)}</div><h3>${esc(task.title)}</h3><p>${esc(task.instruction)}</p><p style="margin-top:7px">责任人：${esc(task.assigned_to)} · 下发时间：${formatDate(task.created_at)}${task.proof_filename ? `<br>门店凭证：${esc(task.proof_filename)} · 提交时间：${formatDate(task.submitted_at)}` : ''}${task.resolution ? `<br><span style="color:#2a9d3f">${esc(task.resolution)} · ${formatDuration(task.created_at, task.closed_at)}</span>` : ''}</p>${linkedDocumentHtml}<div class="live-task-actions" style="margin-top:10px">${operationTaskAction(task)}</div></div>` : '';
@@ -698,7 +698,7 @@
     const visible = tasks.filter((task) => selectedOperationStatus === 'all' || group(task) === selectedOperationStatus);
     const metrics = `<div class="operation-metrics"><div class="operation-metric"><span>待处理</span><b class="warn">${counts.pending}</b></div><div class="operation-metric"><span>门店处理中</span><b class="warn">${counts.store}</b></div><div class="operation-metric"><span>待总部确认</span><b class="warn">${counts.hq}</b></div><div class="operation-metric"><span>已闭环</span><b class="success">${counts.closed}</b></div></div>`;
     const filters = `<div class="dimension-tabs" aria-label="工单状态筛选">${Object.entries(labels).map(([key, label]) => `<button class="dimension-tab ${selectedOperationStatus === key ? 'active' : ''}" data-operation-filter="${key}">${label} ${counts[key]}</button>`).join('')}</div>`;
-    const table = visible.length ? `<div class="operation-list"><table><thead><tr><th>任务编号</th><th>任务名称</th><th>门店</th><th>状态</th><th>下发时间</th><th>操作</th></tr></thead><tbody>${visible.map((task) => `<tr><td>${esc(task.id)}</td><td>${esc(task.title)}</td><td>${esc(task.store_code || 'STORE001')}</td><td><span class="status-tag ${task.status === 'closed' ? 'closed' : task.status === 'pending_hq_review' ? 'assigned' : 'pending'}">${labels[group(task)]}</span></td><td>${formatDate(task.created_at)}</td><td><div class="btn-row">${operationTaskAction(task)}<a class="btn" href="/work-order/?id=${encodeURIComponent(task.id)}">查看详情</a></div></td></tr>`).join('')}</tbody></table></div>` : `<div class="operation-empty">${tasks.length ? `当前没有“${labels[selectedOperationStatus]}”状态的工单。` : '暂无跟进工单。库存或销售复盘建立工单后，会在这里统一跟踪。'}</div>`;
+    const table = visible.length ? `<div class="operation-list"><table><thead><tr><th>任务编号</th><th>任务名称</th><th>门店</th><th>状态</th><th>下发时间</th><th>操作</th></tr></thead><tbody>${visible.map((task) => `<tr><td>${esc(task.id)}</td><td>${esc(task.title)}</td><td>${esc(task.store_code || 'STORE001')}</td><td><span class="status-tag ${task.status === 'closed' ? 'closed' : task.status === 'pending_hq_review' ? 'assigned' : 'pending'}">${labels[group(task)]}</span></td><td>${formatDate(task.created_at)}</td><td><div class="btn-row">${operationTaskAction(task)}<a class="btn" href="/work-order/?portal=hq&amp;id=${encodeURIComponent(task.id)}">查看详情</a></div></td></tr>`).join('')}</tbody></table></div>` : `<div class="operation-empty">${tasks.length ? `当前没有“${labels[selectedOperationStatus]}”状态的工单。` : '暂无跟进工单。库存或销售复盘建立工单后，会在这里统一跟踪。'}</div>`;
     document.querySelector('#operation-task-panel').innerHTML = `<div class="operation-workspace">${metrics}${filters}${table}</div>`;
   }
 
@@ -832,7 +832,7 @@
       } catch (error) { alert(error.message); restore(); }
     });
     scope.querySelectorAll('[data-open-governance-create]').forEach((button) => button.onclick = () => { window.location.href = `/governance-task-create/?anomaly=${encodeURIComponent(button.dataset.openGovernanceCreate)}`; });
-    scope.querySelectorAll('[data-show-operation-detail]').forEach((button) => button.onclick = () => { window.location.href = `/work-order/?id=${encodeURIComponent(button.dataset.showOperationDetail)}`; });
+    scope.querySelectorAll('[data-show-operation-detail]').forEach((button) => button.onclick = () => { window.location.href = `/work-order/?portal=hq&id=${encodeURIComponent(button.dataset.showOperationDetail)}`; });
     scope.querySelectorAll('[data-open-governance-detail]').forEach((button) => button.onclick = () => { const task = (latestHqState?.governanceTasks || []).find((item) => item.id === button.dataset.openGovernanceDetail); if (task) { closeAnomalyDrawer(); openGovernanceDrawer(task); } });
   }
 
@@ -848,7 +848,7 @@
   function renderHq(state) {
     latestHqState = state; renderOperationTasks(state); renderDailyPlans(state); renderGovernanceTasks(state);
     document.querySelectorAll('[data-open-task-create]').forEach((button) => button.onclick = () => { window.location.href = '/task-create/'; });
-    document.querySelectorAll('[data-show-operation-detail]').forEach((button) => button.onclick = () => { window.location.href = `/work-order/?id=${encodeURIComponent(button.dataset.showOperationDetail)}`; });
+    document.querySelectorAll('[data-show-operation-detail]').forEach((button) => button.onclick = () => { window.location.href = `/work-order/?portal=hq&id=${encodeURIComponent(button.dataset.showOperationDetail)}`; });
     document.querySelectorAll('[data-operation-filter]').forEach((button) => button.onclick = () => { selectedOperationStatus = button.dataset.operationFilter; renderHq(latestHqState); });
     document.querySelectorAll('[data-close-operation]').forEach((button) => button.onclick = async () => { const restore = setButtonLoading(button, '正在验收…'); try { renderHq(await api(`/api/operation-tasks/${button.dataset.closeOperation}/close`, { method: 'POST' })); } catch (error) { alert(error.message); restore(); } });
     document.querySelectorAll('[data-open-governance-detail]').forEach((button) => button.onclick = () => { const task = (state.governanceTasks || []).find((item) => item.id === button.dataset.openGovernanceDetail); if (task) openGovernanceDrawer(task); });
@@ -921,7 +921,7 @@
       }
       if (view === 'hq' && params.get('focus') === 'operation') {
         selectedOperationTaskId = params.get('task');
-        if (selectedOperationTaskId) window.location.replace(`/work-order/?id=${encodeURIComponent(selectedOperationTaskId)}`);
+        if (selectedOperationTaskId) window.location.replace(`/work-order/?portal=hq&id=${encodeURIComponent(selectedOperationTaskId)}`);
       }
       if (view === 'hq' && params.get('focus') === 'governance') {
         selectedGovernanceTaskId = params.get('task'); renderHq(state); document.querySelector('#governance-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
