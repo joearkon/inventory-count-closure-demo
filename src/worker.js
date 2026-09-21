@@ -3183,29 +3183,33 @@ function r2ReconcileMaterialDiagnosis(value, ledger, businessDate, storeCode, so
     } else if (sellInRatio != null && (sellInRatio > 2 || sellInRatio < 0.3)) {
       candidate = { rule_code: 'SELL_IN_IMBALANCE', severity: sellInRatio > 2 ? 'high' : 'mid', strategy: 'verify_restock_cycle', owner: '门店补货 / 商品运营', status: 'open', evidence: `本期 BOM 消耗 ${consumptionQty}${row.unit}，收货 ${receiptQty}${row.unit}，销入比 ${sellInRatio}，超出 MVP 阈值。` };
     }
-    if (!candidate) continue;
-    const key = `${storeCode}|${businessDate}|${normalizedKey(row.material_name)}|${candidate.rule_code}`;
+    const proposals = [
+      { rule_code:'NEGATIVE_THEORETICAL', severity:'high', strategy:'verify_receipt_or_order', owner:'门店执行 / 总部运营', status:'open', evidence:`理论期末 ${theoreticalQty}${row.unit}；V2 将按负库存容差判断。` },
+      { rule_code:'COUNT_VARIANCE', severity:physicalDelta != null && Math.abs(physicalDelta) > Math.max(varianceThreshold * 5, 0.001) ? 'high' : 'mid', strategy:'verify_count_or_receipt', owner:'门店执行', status:'open', evidence:`实盘 ${physicalQty ?? '未知'}${row.unit}，理论 ${theoreticalQty}${row.unit}，差异 ${physicalDelta ?? '未知'}${row.unit}。` },
+      { rule_code:'BELOW_SAFETY_STOCK', severity:'mid', strategy:'verify_restock', owner:'门店补货 / 供应保障', status:'open', evidence:`理论期末 ${theoreticalQty}${row.unit}，安全库存 ${safetyQty ?? '未配置'}${row.unit}。` },
+      { rule_code:'SELL_IN_IMBALANCE', severity:sellInRatio > 2 ? 'high' : 'mid', strategy:'verify_restock_cycle', owner:'门店补货 / 商品运营', status:'open', evidence:`本期 BOM 消耗 ${consumptionQty}${row.unit}，收货 ${receiptQty}${row.unit}，销入比 ${sellInRatio ?? '不可计算'}。` }
+    ];
+    const catalog = (value.materialCatalog || []).find((item) => normalizedKey(item.material_name) === normalizedKey(row.material_name));
+    const context = { ledgerSnapshots:value.ledgerSnapshots || [], materialEvents:value.materialEvents || [], purchaseOrders:value.purchaseOrders || [], receiptOrders:value.receiptOrders || [], storeTransferRequests:value.storeTransferRequests || [], countPolicy:catalog?.count_policy || (catalog?.daily_count_enabled === false ? 'optional' : 'daily'), asOf:updatedAt };
+    let selected = null, selectedEvaluation = null, v2Error = null;
+    for (const proposal of proposals) {
+      const probe = { ...proposal, id:`PROBE-${storeCode}-${businessDate}-${normalizedKey(row.material_name)}-${proposal.rule_code}`, store_code:storeCode, business_date:businessDate, material_name:row.material_name, unit:row.unit, theoretical_closing_qty:theoreticalQty, safety_qty:safetyQty, evidence_detail:evidence, updated_at:updatedAt };
+      try {
+        const evaluation = evaluateDiagnosisSignal(probe, context);
+        if (evaluation?.result?.anomaly_status === 'triggered') { selected = proposal; selectedEvaluation = evaluation; break; }
+      } catch (error) { v2Error = String(error?.message || error).slice(0, 500); }
+    }
+    if (!selected && !candidate) continue;
+    const finalCandidate = selected || candidate;
+    const key = `${storeCode}|${businessDate}|${normalizedKey(row.material_name)}|${finalCandidate.rule_code}`;
     const existing = prior.find((item) => `${item.store_code}|${item.business_date}|${normalizedKey(item.material_name)}|${item.rule_code}` === key);
-    const signal = { ...existing, ...candidate, id: existing?.id || id('MAT'), judgment_task_no: existing?.judgment_task_no || id('JDG'), store_code: storeCode, business_date: businessDate, material_name: row.material_name, unit: row.unit, theoretical_closing_qty: theoreticalQty, safety_qty: safetyQty, source_batch_id: sourceBatchId, evidence_detail: evidence, industry_assessment: null, mvp_action: existing?.mvp_action || null, created_at: existing?.created_at || updatedAt, updated_at: updatedAt, closed_at: null, closure_reason: null, reopened_at: null };
-    try {
-      const catalog = (value.materialCatalog || []).find((item) => normalizedKey(item.material_name) === normalizedKey(row.material_name));
-      const evaluation = evaluateDiagnosisSignal(signal, {
-        ledgerSnapshots:value.ledgerSnapshots || [], materialEvents:value.materialEvents || [], purchaseOrders:value.purchaseOrders || [],
-        receiptOrders:value.receiptOrders || [], storeTransferRequests:value.storeTransferRequests || [],
-        countPolicy:catalog?.count_policy || (catalog?.daily_count_enabled === false ? 'optional' : 'daily'), asOf:updatedAt
-      });
-      if (evaluation?.result?.anomaly_status === 'not_triggered') continue;
-      const result = evaluation?.result || {};
-      candidates.set(key, {
-        ...signal, formal_engine:'v2', engine_mode:'v2_primary', ruleset_id:result.ruleset_id || evaluation?.ruleset?.ruleset_id,
-        rule_version:result.rule_version || evaluation?.ruleset?.rule_version, fact_packet_id:result.fact_packet_id,
-        decision_trace:result.decision_trace || [], evidence_gaps:result.evidence_gaps || [], recommended_action_ids:result.recommended_action_ids || [],
-        primary_location:result.primary_location || null, primary_hypothesis:result.primary_hypothesis || null,
-        formal_anomaly_status:result.anomaly_status || 'rule_error',
-        v1_comparison:{ rule_code:candidate.rule_code, evidence:candidate.evidence, strategy:candidate.strategy }
-      });
-    } catch (error) {
-      candidates.set(key, { ...signal, formal_engine:'v1', engine_mode:'v1_fallback', v2_error:String(error?.message || error).slice(0, 500) });
+    const signal = { ...existing, ...finalCandidate, id:existing?.id || id('MAT'), judgment_task_no:existing?.judgment_task_no || id('JDG'), store_code:storeCode, business_date:businessDate, material_name:row.material_name, unit:row.unit, theoretical_closing_qty:theoreticalQty, safety_qty:safetyQty, source_batch_id:sourceBatchId, evidence_detail:evidence, industry_assessment:null, mvp_action:existing?.mvp_action || null, created_at:existing?.created_at || updatedAt, updated_at:updatedAt, closed_at:null, closure_reason:null, reopened_at:null };
+    if (selectedEvaluation) {
+      const formalEvaluation = evaluateDiagnosisSignal(signal, context);
+      const result = formalEvaluation.result;
+      candidates.set(key, { ...signal, evidence:result.primary_hypothesis || signal.evidence, formal_engine:'v2', engine_mode:'v2_primary', ruleset_id:result.ruleset_id || formalEvaluation.ruleset?.ruleset_id, rule_version:result.rule_version || formalEvaluation.ruleset?.rule_version, fact_packet_id:result.fact_packet_id, decision_trace:result.decision_trace || [], evidence_gaps:result.evidence_gaps || [], recommended_action_ids:result.recommended_action_ids || [], primary_location:result.primary_location || null, primary_hypothesis:result.primary_hypothesis || null, formal_anomaly_status:result.anomaly_status, v1_comparison:candidate ? { rule_code:candidate.rule_code, evidence:candidate.evidence, strategy:candidate.strategy } : { rule_code:null, evidence:'V1 未触发', strategy:null } });
+    } else {
+      candidates.set(key, { ...signal, formal_engine:'v1', engine_mode:'v1_fallback', v2_error:v2Error || 'V2 未形成有效结果' });
     }
   }
   const retained = prior.map((item) => {
