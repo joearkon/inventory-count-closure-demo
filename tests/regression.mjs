@@ -120,17 +120,19 @@ await check('four-rule showcase supports one closed case and three pending roles
 });
 
 await check('inventory V3 merges daily signals into persistent cases', async () => {
-  const [page, script, shell, worker, payload] = await Promise.all([
+  const [page, script, shell, worker, lifecycle, payload] = await Promise.all([
     fetch(`${base}/diagnosis-v3/`).then((response) => response.text()),
     fetch(`${base}/diagnosis-v3-page.js`).then((response) => response.text()),
     fetch(`${base}/app-shell.js`).then((response) => response.text()),
     readFile(new URL('../src/worker.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/diagnosis/lifecycle/inventory-cases.js', import.meta.url), 'utf8'),
     json('/api/inventory-cases')
   ]);
   for (const token of ['持续问题 V3', '一个持续问题只处理一次', '当前问题', '待验证', '历史观察']) if (!page.includes(token)) throw new Error(`missing V3 page token: ${token}`);
   for (const token of ['/api/inventory-cases', '跨营业日观察记录', 'data-toggle-case', 'data-case-id', 'requestedStore']) if (!script.includes(token)) throw new Error(`missing V3 interaction token: ${token}`);
   if (!shell.includes('href="/diagnosis-v3/"')) throw new Error('HQ inventory diagnosis navigation must point to V3');
-  for (const token of ['r2RefreshInventoryCases', 'inventory-case-v3.0', 'recurrence_of_case_id', '|recurrence:', 'existingCaseTask']) if (!worker.includes(token)) throw new Error(`missing V3 engine token: ${token}`);
+  for (const token of ['refreshInventoryCases', 'existingCaseTask']) if (!worker.includes(token)) throw new Error(`missing V3 worker integration token: ${token}`);
+  for (const token of ['inventory-case-v3.0', 'recurrence_of_case_id', '|recurrence:', 'refreshInventoryCases']) if (!lifecycle.includes(token)) throw new Error(`missing V3 lifecycle token: ${token}`);
   if (/theoreticalQty < -negativeTolerance \|\| opening_qty/.test(worker)) throw new Error('D2 must not remain triggered only because a historical opening quantity was negative');
   if (payload.contract_version !== 'inventory-case-v3.0' || !Array.isArray(payload.cases)) throw new Error(`invalid V3 contract: ${JSON.stringify(payload).slice(0, 300)}`);
   const keys = payload.cases.map((item) => item.issue_key);
