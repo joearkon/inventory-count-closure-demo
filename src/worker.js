@@ -1836,7 +1836,6 @@ async function r2PrepareFourCaseShowcase(env, body = {}) {
       finalSignals.find((signal) => signal.rule_code === 'SELL_IN_IMBALANCE' && normalizedKey(signal.material_name) === normalizedKey('果糖'))
     ].filter(Boolean);
     if (selectedSignals.length !== 4 || new Set(selectedSignals.map((item) => item.rule_code)).size !== 4) throw new Error('最终四类研判未能形成唯一的 D2、D1、S1、T2 基线。');
-    const selectedSignalIds = new Set(selectedSignals.map((signal) => signal.id));
     value.materialAnomalies = selectedSignals;
     refreshInventoryCases(value, now());
     const task = (value.operationTasks || []).find((item) => item.id === workOrderId);
@@ -1852,8 +1851,14 @@ async function r2PrepareFourCaseShowcase(env, body = {}) {
     for (const event of (value.materialEvents || []).filter((item) => item.reference === '四类库存演示 · 果糖批量到货')) event.scenario_id = 'SHOWCASE-FOUR-RULES';
     value.operationTasks = [task];
     value.operationTask = task;
-    value.inventoryCaseActions = (value.inventoryCaseActions || []).filter((item) => selectedSignalIds.has(item.signal_id));
-    const saved = await r2SaveDemoState(env, value, 'prepare-four-case-complete');
+    value.inventoryCaseActions = [];
+    const savedBase = await r2SaveDemoState(env, value, 'prepare-four-case-complete');
+    const negativeCase = (savedBase.inventoryCases || []).find((item) => item.active_work_order_id === workOrderId);
+    if (!negativeCase) throw new Error('D2 预建工单未能关联持续问题');
+    for (const actionId of negativeCase.recommended_action_ids || []) {
+      await r2ActionResult(await r2AcceptInventoryCaseAction(env, negativeCase.id, { source:'rule', action_id:actionId }, { display_name:'总部运营 王敏' }), `采纳 D2 建议 ${actionId}`);
+    }
+    const saved = await r2DemoState(env);
     return json({
       ok:true, store_code:storeCode, business_date:businessDate,
       sales:{ batch_id:value.feishuImport.id, records:sales.length, qty:r2Round(sales.reduce((sum, row) => sum + Number(row.sales_qty || 0), 0)) },
@@ -4828,8 +4833,22 @@ function r2AiAnalysisForCase(value, caseId) {
 }
 
 function r2CaseActions(value, caseId) {
-  return (value.inventoryCaseActions || []).filter((item) => item.inventory_case_id === caseId)
+  const accepted = (value.inventoryCaseActions || []).filter((item) => item.inventory_case_id === caseId)
     .sort((left, right) => String(right.accepted_at || right.created_at).localeCompare(String(left.accepted_at || left.created_at)));
+  if (accepted.length) return accepted;
+  const inventoryCase = (value.inventoryCases || []).find((item) => item.id === caseId);
+  const task = (value.operationTasks || []).find((item) => item.id === inventoryCase?.active_work_order_id);
+  if (!inventoryCase || task?.scenario_id !== 'SHOWCASE-FOUR-RULES') return [];
+  return (inventoryCase.recommended_action_ids || []).map((actionId, index) => ({
+    id:`LEGACY-${caseId}-${actionId}`, inventory_case_id:caseId, work_order_id:task.id,
+    source:'rule', source_ref:`${inventoryCase.fact_packet_id || inventoryCase.id}:${actionId}`,
+    action_id:actionId, title:DIAGNOSIS_ACTIONS[actionId]?.label || actionId,
+    reason:inventoryCase.primary_hypothesis || inventoryCase.latest_evidence || '来自预建演示工单的规则建议。',
+    owner:inventoryCase.assigned_to || task.assigned_to || '待分配', mode:DIAGNOSIS_ACTIONS[actionId]?.mode || 'manual',
+    status:'accepted', execution_url:r2ActionExecutionUrl(actionId, inventoryCase, task.id),
+    accepted_by:'总部运营 王敏', accepted_at:task.created_at, created_at:task.created_at,
+    inferred_from_legacy_demo:true, presentation_order:index + 1
+  }));
 }
 
 function r2AiStepAction(step = {}) {

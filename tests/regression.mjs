@@ -110,7 +110,7 @@ await check('four-rule showcase supports one prebuilt work order and three diagn
     readFile(new URL('../src/worker.js', import.meta.url), 'utf8'),
     fetch(`${base}/work-order-page.js`).then((response) => response.text())
   ]);
-  for (const token of ['prepare-four-case-showcase', 'PREPARE4:', 'SHOWCASE-FOUR-RULES', 'COUNT_VARIANCE', 'SELL_IN_IMBALANCE', 'D2 · 已创建工单', 'inventoryCases = []', 'materialAnomalies = []']) {
+  for (const token of ['prepare-four-case-showcase', 'PREPARE4:', 'SHOWCASE-FOUR-RULES', 'COUNT_VARIANCE', 'SELL_IN_IMBALANCE', 'D2 · 已创建工单', 'inventoryCases = []', 'materialAnomalies = []', 'inferred_from_legacy_demo', '采纳 D2 建议']) {
     if (!worker.includes(token)) throw new Error(`missing showcase worker token: ${token}`);
   }
   if (!workOrder.includes('执行清单')) throw new Error('work-order page must expose post-creation execution planning');
