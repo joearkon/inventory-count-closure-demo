@@ -89,7 +89,7 @@ await check('master data quality gate distinguishes core readiness from brand pr
 });
 
 await check('new pages are served', async () => {
-  const paths = ['/login/', '/hq-login/', '/count-plans/', '/documents/', '/flows/', '/purchase-orders/', '/receipt-orders/', '/procurement-detail/?type=purchase&id=preview', '/voice-qa/?store=STORE001', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001', '/work-order/', '/sync/'];
+  const paths = ['/login/', '/hq-login/', '/count-plans/', '/documents/', '/flows/', '/diagnosis-v3/', '/purchase-orders/', '/receipt-orders/', '/procurement-detail/?type=purchase&id=preview', '/voice-qa/?store=STORE001', '/knowledge/', '/knowledge/库存异常判定常用-Knowhow.md', '/store/?store=STORE001', '/work-order/', '/sync/'];
   for (const path of paths) {
     const response = await fetch(`${base}${path}`);
     if (!response.ok) throw new Error(`${path}: ${response.status}`);
@@ -117,6 +117,30 @@ await check('four-rule showcase supports one closed case and three pending roles
     if (!workOrder.includes(token)) throw new Error(`missing supervisor work-order token: ${token}`);
   }
   return { cases:4, closed:1, pending:3, rule_codes:['D2', 'D1', 'S1', 'T2'] };
+});
+
+await check('inventory V3 merges daily signals into persistent cases', async () => {
+  const [page, script, shell, worker, payload] = await Promise.all([
+    fetch(`${base}/diagnosis-v3/`).then((response) => response.text()),
+    fetch(`${base}/diagnosis-v3-page.js`).then((response) => response.text()),
+    fetch(`${base}/app-shell.js`).then((response) => response.text()),
+    readFile(new URL('../src/worker.js', import.meta.url), 'utf8'),
+    json('/api/inventory-cases')
+  ]);
+  for (const token of ['持续问题 V3', '一个持续问题只处理一次', '当前问题', '待验证', '历史观察']) if (!page.includes(token)) throw new Error(`missing V3 page token: ${token}`);
+  for (const token of ['/api/inventory-cases', '跨营业日观察记录', 'data-toggle-case', 'data-case-id', 'requestedStore']) if (!script.includes(token)) throw new Error(`missing V3 interaction token: ${token}`);
+  if (!shell.includes('href="/diagnosis-v3/"')) throw new Error('HQ inventory diagnosis navigation must point to V3');
+  for (const token of ['r2RefreshInventoryCases', 'inventory-case-v3.0', 'recurrence_of_case_id', '|recurrence:', 'existingCaseTask']) if (!worker.includes(token)) throw new Error(`missing V3 engine token: ${token}`);
+  if (/theoreticalQty < -negativeTolerance \|\| opening_qty/.test(worker)) throw new Error('D2 must not remain triggered only because a historical opening quantity was negative');
+  if (payload.contract_version !== 'inventory-case-v3.0' || !Array.isArray(payload.cases)) throw new Error(`invalid V3 contract: ${JSON.stringify(payload).slice(0, 300)}`);
+  const keys = payload.cases.map((item) => item.issue_key);
+  if (new Set(keys).size !== keys.length) throw new Error('duplicate persistent issue keys returned');
+  for (const item of payload.cases) {
+    if (!item.id || !item.issue_key || !Array.isArray(item.observations) || !Array.isArray(item.signal_ids)) throw new Error(`invalid case item: ${JSON.stringify(item).slice(0, 300)}`);
+    const dates = item.observations.map((observation) => observation.business_date);
+    if (dates.some((date, index) => index > 0 && date > dates[index - 1])) throw new Error(`observations are not latest-first for ${item.id}`);
+  }
+  return { contract:payload.contract_version, cases:payload.cases.length, active:payload.summary?.active || 0, unique_issue_keys:true, recurrence_supported:true };
 });
 
 await check('mobile login has a dedicated touch layout', async () => {
@@ -153,7 +177,7 @@ await check('HQ and mobile sessions remain isolated in the same browser', async 
   const mobileCookie = await login('ACC-STORE-LI', 'mobile');
   const hqCookie = await login('ACC-HQ-WANG', 'hq');
   const cookie = `${mobileCookie}; ${hqCookie}`;
-  const hqRoutes = ['/', '/ledger/', '/flows/', '/diagnosis/', '/simulator/', '/count-plans/', '/purchase-orders/', '/receipt-orders/', '/documents/', '/transfers/', '/sync/', '/notifications/', '/accounts/'];
+  const hqRoutes = ['/', '/ledger/', '/flows/', '/diagnosis/', '/diagnosis-v3/', '/simulator/', '/count-plans/', '/purchase-orders/', '/receipt-orders/', '/documents/', '/transfers/', '/sync/', '/notifications/', '/accounts/'];
   for (const path of hqRoutes) {
     const response = await nativeFetch(`${base}${path}`, { headers:{ cookie }, redirect:'manual' });
     if (response.status !== 200) throw new Error(`HQ route ${path} redirected or failed: ${response.status} ${response.headers.get('location') || ''}`);

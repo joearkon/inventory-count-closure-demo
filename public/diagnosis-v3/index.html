@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>库存研判 · 持续问题中心</title>
+  <link rel="stylesheet" href="/diagnosis-v3.css">
+  <script src="/loading.js"></script>
+  <script src="/app-shell.js"></script>
+</head>
+<body>
+  <main class="case-page">
+    <div class="crumb"><a href="/">运营中心</a> / 库存研判</div>
+    <header class="page-head">
+      <div><h1>库存研判</h1><p>一个持续问题只处理一次；每日计算结果保留为观察记录。</p></div>
+      <span class="version">持续问题 V3</span>
+    </header>
+    <section class="summary" id="case-summary" aria-label="持续问题摘要"></section>
+    <section class="toolbar">
+      <nav class="tabs" aria-label="研判视图">
+        <button class="tab active" data-case-view="active">当前问题</button>
+        <button class="tab" data-case-view="verification">待验证</button>
+        <button class="tab" data-case-view="closed">已关闭</button>
+        <button class="tab" data-case-view="observations">历史观察</button>
+      </nav>
+      <div class="filters"><label>门店<select id="case-store-filter"><option value="all">全部门店</option></select></label><label>问题族<select id="case-family-filter"><option value="all">全部问题</option><option value="inventory_accuracy">库存准确性</option><option value="supply_risk">供应保障</option><option value="replenishment_balance">补货节奏</option></select></label></div>
+    </section>
+    <section class="case-panel"><div id="case-table" aria-live="polite"><div class="empty">正在读取持续问题…</div></div></section>
+  </main>
+  <script src="/diagnosis-v3-page.js"></script>
+</body>
+</html>
+

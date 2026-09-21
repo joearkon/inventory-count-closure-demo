@@ -6,6 +6,9 @@ const loginResponse = await nativeFetch(`${base}/api/auth/login`, { method:'POST
 assert.equal(loginResponse.status, 200, 'HQ login failed');
 const authCookie = (loginResponse.headers.get('set-cookie') || '').split(';')[0];
 globalThis.fetch = (input, options = {}) => { const headers = new Headers(options.headers || {}); headers.set('cookie', authCookie); return nativeFetch(input, { ...options, headers }); };
+const mobileLoginResponse = await nativeFetch(`${base}/api/auth/demo-login`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ account_id:'ACC-STORE-LI', portal:'mobile' }) });
+assert.equal(mobileLoginResponse.status, 200, 'mobile demo login failed');
+const mobileCookie = (mobileLoginResponse.headers.get('set-cookie') || '').split(';')[0];
 async function call(path, options = {}, expected = 200) {
   const response = await fetch(`${base}${path}`, options), body = await response.json().catch(() => ({}));
   assert.equal(response.status, expected, `${path}: ${response.status} ${body.error || ''}`);
@@ -14,7 +17,10 @@ async function call(path, options = {}, expected = 200) {
 const post = (path, body, expected = 200) => call(path, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify(body) }, expected);
 
 for (const path of ['/purchase-orders/', '/receipt-orders/', '/procurement-detail/?type=purchase&id=missing']) {
-  const response = await fetch(`${base}${path}`); assert.equal(response.status, 200, `${path} page missing`);
+  const response = path.startsWith('/procurement-detail/')
+    ? await nativeFetch(`${base}${path}`, { headers:{ cookie:mobileCookie } })
+    : await fetch(`${base}${path}`);
+  assert.equal(response.status, 200, `${path} page missing`);
   const html = await response.text(); assert.match(html, /procurement|订货|收货/i);
 }
 
