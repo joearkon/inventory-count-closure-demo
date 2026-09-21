@@ -105,18 +105,16 @@ await check('Feishu sync page exposes a non-blocking manual pipeline', async () 
   return { route:'/sync/', mode:'async_job', polling:true };
 });
 
-await check('four-rule showcase supports one closed case and three pending roles', async () => {
+await check('four-rule showcase supports one prebuilt work order and three diagnosis-only cases', async () => {
   const [worker, workOrder] = await Promise.all([
     readFile(new URL('../src/worker.js', import.meta.url), 'utf8'),
     fetch(`${base}/work-order-page.js`).then((response) => response.text())
   ]);
-  for (const token of ['prepare-four-case-showcase', 'PREPARE4:', 'SHOWCASE-FOUR-RULES', 'COUNT_VARIANCE', 'SELL_IN_IMBALANCE', 'escalate_supervisor', '区域督导 Rina']) {
+  for (const token of ['prepare-four-case-showcase', 'PREPARE4:', 'SHOWCASE-FOUR-RULES', 'COUNT_VARIANCE', 'SELL_IN_IMBALANCE', 'D2 · 已创建工单', 'inventoryCases = []', 'materialAnomalies = []']) {
     if (!worker.includes(token)) throw new Error(`missing showcase worker token: ${token}`);
   }
-  for (const token of ['升级至区域督导', '督导处理中']) {
-    if (!workOrder.includes(token)) throw new Error(`missing supervisor work-order token: ${token}`);
-  }
-  return { cases:4, closed:1, pending:3, rule_codes:['D2', 'D1', 'S1', 'T2'] };
+  if (!workOrder.includes('建议动作与执行')) throw new Error('work-order page must expose post-creation execution planning');
+  return { cases:4, work_orders:1, diagnosis_only:3, rule_codes:['D2', 'D1', 'S1', 'T2'] };
 });
 
 await check('inventory V3 merges daily signals into persistent cases', async () => {

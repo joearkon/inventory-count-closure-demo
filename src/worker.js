@@ -1743,8 +1743,9 @@ async function r2RunStoreDayDemo(env, body = {}) {
   }
 }
 
-// 四类库存演示：D2 使用真实销售触发并完成闭环；D1/S1/T2 使用明确标记的
-// Demo 业务动作补齐证据，并保持待处理。历史工单先备份到独立 R2 对象。
+// 四类库存演示干净基线：四类规则均只保留当前营业日的一条持续问题；
+// D2 预先建立一张待执行工单，D1/S1/T2 只保留研判，留给演示者体验建单。
+// 旧研判、工单和与旧工单绑定的演示单据先备份到独立 R2 对象。
 async function r2PrepareFourCaseShowcase(env, body = {}) {
   const storeCode = String(body.store_code || STORE_CODE).trim().slice(0, 64);
   const businessDate = String(body.business_date || '').trim().slice(0, 10);
@@ -1760,22 +1761,33 @@ async function r2PrepareFourCaseShowcase(env, body = {}) {
     const sales = (value.feishuImport.sales || []).filter((row) => row.store_code === storeCode && row.business_date === businessDate);
     if (!sales.length) return bad(`${storeCode} 在 ${businessDate} 没有飞书真实销售，不能准备演示。`, 409);
 
-    const priorShowcaseTaskIds = new Set((value.operationTasks || []).filter((task) => ['SHOWCASE-TWO-CASE', 'SHOWCASE-FOUR-RULES'].includes(task.scenario_id)).map((task) => task.id));
-    value.purchaseOrders = (value.purchaseOrders || []).filter((order) => !priorShowcaseTaskIds.has(order.source_work_order_id));
-    value.receiptOrders = (value.receiptOrders || []).filter((order) => !priorShowcaseTaskIds.has(order.source_work_order_id));
-    value.materialEvents = (value.materialEvents || []).filter((event) => !priorShowcaseTaskIds.has(event.source_work_order_id) && event.scenario_id !== 'SHOWCASE-FOUR-RULES' && event.reference !== '四类库存演示 · 果糖批量到货');
+    const previousTasks = r2VisibleOperationTasks(value);
+    const previousTaskIds = new Set(previousTasks.map((task) => task.id));
+    const previousCaseIds = new Set((value.inventoryCases || []).map((item) => item.id));
+    const previousSignalIds = new Set((value.materialAnomalies || []).map((item) => item.id));
+    const backupKey = `backups/showcase-four-rules/${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    if (previousTasks.length || previousCaseIds.size || previousSignalIds.size) {
+      await env.DEMO_STATE.put(backupKey, JSON.stringify({
+        archived_at:now(), reason:'prepare_four_case_showcase_clean_baseline',
+        operation_tasks:previousTasks, inventory_cases:value.inventoryCases || [], material_anomalies:value.materialAnomalies || [],
+        inventory_case_actions:value.inventoryCaseActions || [], ai_diagnosis_analyses:value.aiDiagnosisAnalyses || []
+      }), { httpMetadata:{ contentType:'application/json' } });
+    }
+    value.purchaseOrders = (value.purchaseOrders || []).filter((order) => !previousTaskIds.has(order.source_work_order_id));
+    value.receiptOrders = (value.receiptOrders || []).filter((order) => !previousTaskIds.has(order.source_work_order_id));
+    value.materialEvents = (value.materialEvents || []).filter((event) => !previousTaskIds.has(event.source_work_order_id) && event.scenario_id !== 'SHOWCASE-FOUR-RULES' && event.reference !== '四类库存演示 · 果糖批量到货');
     value.countPlans = (value.countPlans || []).filter((plan) => plan.scenario_id !== 'SHOWCASE-FOUR-RULES');
     value.documents = (value.documents || []).filter((document) => document.scenario_id !== 'SHOWCASE-FOUR-RULES');
-
-    const previousTasks = r2VisibleOperationTasks(value);
-    const backupKey = `backups/showcase-four-rules/${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-    if (previousTasks.length) {
-      await env.DEMO_STATE.put(backupKey, JSON.stringify({ archived_at:now(), reason:'prepare_four_case_showcase', operation_tasks:previousTasks }), { httpMetadata:{ contentType:'application/json' } });
-    }
+    value.audits = (value.audits || []).filter((audit) => !previousTaskIds.has(audit.task_id) && !previousCaseIds.has(audit.task_id) && !previousSignalIds.has(audit.task_id));
     value.operationTasks = [];
     value.operationTask = null;
+    value.inventoryCases = [];
+    value.materialAnomalies = [];
+    value.inventoryCaseActions = [];
+    value.aiDiagnosisAnalyses = [];
+    value.anomalyClosures = [];
     r2ReconcileAllMaterialSignalsAndCases(value, businessDate, now());
-    r2Audit(value, '总部演示控制台', '准备四类库存研判演示', `${storeCode} · ${businessDate} · 已备份 ${previousTasks.length} 条旧工单；首页将只展示 D2、D1、S1、T2 四张工单。`, 'SHOWCASE-FOUR-RULES');
+    r2Audit(value, '总部演示控制台', '重建四类库存研判干净基线', `${storeCode} · ${businessDate} · 已归档并清除 ${previousTasks.length} 条旧工单及历史研判；重新生成 D2、D1、S1、T2。`, 'SHOWCASE-FOUR-RULES');
     await r2SaveDemoState(env, value, 'prepare-four-case-clean');
 
     value = await r2DemoState(env);
@@ -1784,31 +1796,13 @@ async function r2PrepareFourCaseShowcase(env, body = {}) {
     const safety = currentSignals.find((signal) => signal.rule_code === 'BELOW_SAFETY_STOCK');
     if (!negative || !safety) throw new Error(`规则结果不足：负库存=${Boolean(negative)}，安全库存=${Boolean(safety)}`);
 
-    const closedCreated = await r2ActionResult(await r2CreateDiagnosisWorkOrder(env, negative.id), '建立负库存工单');
-    const closedTaskId = closedCreated.operationTask?.id;
-    if (!closedTaskId) throw new Error('负库存工单未返回编号');
-    await r2ActionResult(await r2AddOperationTaskNote(env, closedTaskId, {
-      operator:'门店店长 陈店长',
-      note:'核对仓库后确认 20 日有 2,000g 黑糖珍珠到货，实物已在店，但收货单尚未确认入库；现在补建订货与收货记录。'
-    }), '记录门店核查');
-    const purchaseCreated = await r2ActionResult(await r2CreatePurchaseOrder(env, {
-      store_code:storeCode, business_date:businessDate, expected_arrival_date:businessDate,
-      supplier_name:'品牌配送中心', source_type:'work_order', source_work_order_id:closedTaskId,
-      urgency:'urgent', operator:'门店店长 陈店长', note:'演示：补录已到货但漏确认的订货记录。',
-      lines:[{ material_name:negative.material_name, unit:negative.unit, qty:2000 }]
-    }), '建立补录订货单');
-    await r2ActionResult(await r2PurchaseOrderAction(env, purchaseCreated.order.id, 'submit'), '提交订货单');
-    const receiptCreated = await r2ActionResult(await r2CreateReceiptOrder(env, {
-      order_id:purchaseCreated.order.id, store_code:storeCode, business_date:businessDate,
-      source_type:'work_order', source_work_order_id:closedTaskId, operator:'门店店员 小李',
-      note:'现场核对实收 2,000g，与配送标签一致。'
-    }), '建立收货单');
-    await r2ActionResult(await r2ReceiptOrderAction(env, receiptCreated.receipt.id, 'confirm', { operator:'门店店员 小李' }), '确认收货');
-    await r2ActionResult(await r2OperationTransition(env, closedTaskId, {
-      outcome:'resolved', final_cause:'2,000g 黑糖珍珠已经到店，但门店遗漏收货确认，导致系统库存少记。',
-      resolution_note:'门店已补录订货单并确认收货，库存流水自动增加 2,000g；V2 重算后负库存恢复，总部验收关闭。',
-      operator:'总部运营 王敏', store_adopted:true, hq_confirmed:true
-    }, 'close'), '关闭已恢复工单');
+    const workOrderCreated = await r2ActionResult(await r2CreateDiagnosisWorkOrder(env, negative.id), '建立负库存工单');
+    const workOrderId = workOrderCreated.operationTask?.id;
+    if (!workOrderId) throw new Error('负库存工单未返回编号');
+    await r2ActionResult(await r2AddOperationTaskNote(env, workOrderId, {
+      operator:'总部运营 王敏',
+      note:'已从 D2 负库存研判创建跟进工单。第一步请门店核对实物、到货未入库、调拨签收与订货记录；核实后再决定补录收货、发起盘点或升级督导。'
+    }), '记录建单后的执行说明');
 
     await r2ActionResult(await r2CreateMaterialEvent(env, {
       store_code:storeCode, business_date:businessDate, material_name:'果糖', unit:'kg', type:'receipt', qty:10,
@@ -1832,67 +1826,40 @@ async function r2PrepareFourCaseShowcase(env, body = {}) {
     const sellIn = activeSignals.find((signal) => signal.rule_code === 'SELL_IN_IMBALANCE' && normalizedKey(signal.material_name) === normalizedKey('果糖'));
     if (!countVariance || !currentSafety || !sellIn) throw new Error(`待处理规则不足：D1=${Boolean(countVariance)}，S1=${Boolean(currentSafety)}，T2=${Boolean(sellIn)}`);
 
-    const countCreated = await r2ActionResult(await r2CreateDiagnosisWorkOrder(env, countVariance.id), '建立盘点差异工单');
-    const countTaskId = countCreated.operationTask?.id;
-    if (!countTaskId) throw new Error('盘点差异工单未返回编号');
-    await r2ActionResult(await r2AddOperationTaskNote(env, countTaskId, {
-      operator:'系统规则引擎',
-      note:`门店已确认牛奶实盘 80L，理论库存 ${countVariance.theoretical_closing_qty}L，差异仍超过阈值；等待门店复核报损、收货与盘点单位。`
-    }), '记录 D1 待处理事实');
-
-    const safetyCreated = await r2ActionResult(await r2CreateDiagnosisWorkOrder(env, currentSafety.id), '建立安全库存工单');
-    const safetyTaskId = safetyCreated.operationTask?.id;
-    if (!safetyTaskId) throw new Error('安全库存工单未返回编号');
-    await r2ActionResult(await r2AddOperationTaskNote(env, safetyTaskId, {
-      operator:'门店店长 陈店长',
-      note:`已核对 ${currentSafety.material_name}：门店仅余 ${currentSafety.theoretical_closing_qty}${currentSafety.unit}，今日无待收货单，附近门店可调数量尚未确认，请求区域督导协助。`
-    }), '记录门店未解决结论');
-    await r2ActionResult(await r2OperationTransition(env, safetyTaskId, {
-      outcome:'unresolved', follow_up_action:'escalate_supervisor',
-      final_cause:`${currentSafety.material_name} 低于安全库存，门店没有在途订单，也无法独立确认跨店可调余量。`,
-      resolution_note:'由区域督导 Rina 在所辖门店核对可调库存；确认调出门店和数量后建立调拨任务，否则升级总部供应链安排紧急补货。',
-      operator:'总部运营 王敏', store_adopted:true, hq_confirmed:true
-    }, 'close'), '升级督导处理');
-
-    const sellInCreated = await r2ActionResult(await r2CreateDiagnosisWorkOrder(env, sellIn.id), '建立销入比工单');
-    const sellInTaskId = sellInCreated.operationTask?.id;
-    if (!sellInTaskId) throw new Error('销入比工单未返回编号');
-    await r2ActionResult(await r2AddOperationTaskNote(env, sellInTaskId, {
-      operator:'总部运营 王敏',
-      note:`果糖当日批量收货 10kg，而飞书销售对应 BOM 消耗仅 0.03kg，销入比异常偏低；等待门店说明是否为集中备货、半成品生产或收货单位录入问题。`
-    }), '记录 T2 待处理事实');
-
     value = await r2DemoState(env);
-    const taskLayout = [
-      [safetyTaskId, 'S1 · 待督导处理', 1],
-      [countTaskId, 'D1 · 待门店处理', 2],
-      [sellInTaskId, 'T2 · 待门店说明', 3],
-      [closedTaskId, 'D2 · 已闭环', 4]
-    ];
-    for (const [taskId, label, order] of taskLayout) {
-      const task = (value.operationTasks || []).find((item) => item.id === taskId);
-      if (!task) continue;
-      task.data_origin = 'demo_showcase';
-      task.scenario_id = 'SHOWCASE-FOUR-RULES';
-      task.presentation_label = label;
-      task.presentation_order = order;
-      task.sales_batch_id = value.feishuImport.id;
-      task.sales_business_date = businessDate;
-    }
+    const finalSignals = (value.materialAnomalies || []).filter((signal) => signal.store_code === storeCode && signal.business_date === businessDate && !['closed', 'auto_closed'].includes(signal.status));
+    const selectedSignals = [
+      finalSignals.find((signal) => signal.rule_code === 'NEGATIVE_THEORETICAL' && normalizedKey(signal.material_name) === normalizedKey('黑糖珍珠')),
+      finalSignals.find((signal) => signal.rule_code === 'COUNT_VARIANCE' && normalizedKey(signal.material_name) === normalizedKey('牛奶')),
+      finalSignals.find((signal) => signal.id === currentSafety.id) || finalSignals.find((signal) => signal.rule_code === 'BELOW_SAFETY_STOCK'),
+      finalSignals.find((signal) => signal.rule_code === 'SELL_IN_IMBALANCE' && normalizedKey(signal.material_name) === normalizedKey('果糖'))
+    ].filter(Boolean);
+    if (selectedSignals.length !== 4 || new Set(selectedSignals.map((item) => item.rule_code)).size !== 4) throw new Error('最终四类研判未能形成唯一的 D2、D1、S1、T2 基线。');
+    const selectedSignalIds = new Set(selectedSignals.map((signal) => signal.id));
+    value.materialAnomalies = selectedSignals;
+    refreshInventoryCases(value, now());
+    const task = (value.operationTasks || []).find((item) => item.id === workOrderId);
+    if (!task) throw new Error('D2 预建工单在最终整理时丢失');
+    task.data_origin = 'demo_showcase';
+    task.scenario_id = 'SHOWCASE-FOUR-RULES';
+    task.presentation_label = 'D2 · 已创建工单';
+    task.presentation_order = 1;
+    task.sales_batch_id = value.feishuImport.id;
+    task.sales_business_date = businessDate;
     for (const plan of (value.countPlans || []).filter((item) => item.plan_no === countPlanNo)) plan.scenario_id = 'SHOWCASE-FOUR-RULES';
     for (const document of (value.documents || []).filter((item) => item.count_plan_no === countPlanNo)) document.scenario_id = 'SHOWCASE-FOUR-RULES';
     for (const event of (value.materialEvents || []).filter((item) => item.reference === '四类库存演示 · 果糖批量到货')) event.scenario_id = 'SHOWCASE-FOUR-RULES';
-    for (const order of [...(value.purchaseOrders || []), ...(value.receiptOrders || [])].filter((item) => item.source_work_order_id === closedTaskId)) order.scenario_id = 'SHOWCASE-FOUR-RULES';
-    const showcaseTaskIds = taskLayout.map(([taskId]) => taskId);
-    value.operationTasks = (value.operationTasks || []).filter((task) => showcaseTaskIds.includes(task.id)).sort((a, b) => Number(a.presentation_order || 99) - Number(b.presentation_order || 99));
-    value.operationTask = value.operationTasks.find((task) => task.status !== 'closed') || value.operationTasks[0] || null;
+    value.operationTasks = [task];
+    value.operationTask = task;
+    value.inventoryCaseActions = (value.inventoryCaseActions || []).filter((item) => selectedSignalIds.has(item.signal_id));
     const saved = await r2SaveDemoState(env, value, 'prepare-four-case-complete');
     return json({
       ok:true, store_code:storeCode, business_date:businessDate,
       sales:{ batch_id:value.feishuImport.id, records:sales.length, qty:r2Round(sales.reduce((sum, row) => sum + Number(row.sales_qty || 0), 0)) },
-      backup_key:previousTasks.length ? backupKey : null,
-      cases:saved.operationTasks.map((task) => ({ rule_code:task.source_rule_code, task_id:task.id, title:task.title, status:task.status, assigned_to:task.assigned_to, presentation_label:task.presentation_label, resolution:task.resolution || null })),
-      evidence:{ receipt_no:receiptCreated.receipt.receipt_no, count_plan_no:countPlanNo }
+      backup_key:(previousTasks.length || previousCaseIds.size || previousSignalIds.size) ? backupKey : null,
+      cases:(saved.inventoryCases || []).map((caseItem) => ({ case_id:caseItem.id, case_no:caseItem.case_no, rule_code:caseItem.current_rule_code, material_name:caseItem.material_name, status:caseItem.status, active_work_order_id:caseItem.active_work_order_id })),
+      work_order:{ id:task.id, rule_code:task.source_rule_code, title:task.title, status:task.status, assigned_to:task.assigned_to, presentation_label:task.presentation_label },
+      evidence:{ count_plan_no:countPlanNo }
     }, 201);
   } catch (error) {
     return bad(`四类库存演示准备中止：${error instanceof Error ? error.message : String(error)}`, 409);
