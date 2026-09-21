@@ -127,9 +127,9 @@ await check('inventory V3 merges daily signals into persistent cases', async () 
     json('/api/inventory-cases')
   ]);
   for (const token of ['持续问题 V3', '一个持续问题只处理一次', '当前问题', '待验证', '历史观察']) if (!page.includes(token)) throw new Error(`missing V3 page token: ${token}`);
-  for (const token of ['/api/inventory-cases', '跨营业日观察记录', 'data-toggle-case', 'data-case-id', 'requestedStore', '规则建议行动', '采纳并编排', 'data-accept-action', '/actions', 'portal=hq']) if (!script.includes(token)) throw new Error(`missing V3 interaction token: ${token}`);
+  for (const token of ['/api/inventory-cases', '跨营业日观察记录', 'data-toggle-case', 'data-case-id', 'requestedStore', '规则建议行动', '创建跟进工单', 'data-start-work-order', 'data-draft-suggestion', '完成创建工单', '/work-orders', 'portal=hq']) if (!script.includes(token)) throw new Error(`missing V3 interaction token: ${token}`);
   if (!shell.includes('href="/diagnosis-v3/"')) throw new Error('HQ inventory diagnosis navigation must point to V3');
-  for (const token of ['refreshInventoryCases', 'existingCaseTask', 'r2AcceptInventoryCaseAction', 'inventoryCaseActions', "searchParams?.get('portal') === 'hq'"]) if (!worker.includes(token)) throw new Error(`missing V3 worker integration token: ${token}`);
+  for (const token of ['refreshInventoryCases', 'existingCaseTask', 'r2AcceptInventoryCaseAction', 'r2CreateInventoryCaseWorkOrder', 'inventoryCaseActions', "searchParams?.get('portal') === 'hq'"]) if (!worker.includes(token)) throw new Error(`missing V3 worker integration token: ${token}`);
   for (const token of ['inventory-case-v3.0', 'recurrence_of_case_id', '|recurrence:', 'refreshInventoryCases']) if (!lifecycle.includes(token)) throw new Error(`missing V3 lifecycle token: ${token}`);
   if (/theoreticalQty < -negativeTolerance \|\| opening_qty/.test(worker)) throw new Error('D2 must not remain triggered only because a historical opening quantity was negative');
   if (payload.contract_version !== 'inventory-case-v3.0' || !Array.isArray(payload.cases)) throw new Error(`invalid V3 contract: ${JSON.stringify(payload).slice(0, 300)}`);

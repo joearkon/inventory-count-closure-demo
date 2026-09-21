@@ -917,6 +917,7 @@ async function r2OperationTaskDetail(env, taskId) {
     ],
     events: (value.materialEvents || []).filter((item) => eventIds.has(item.id)),
     audits: (value.audits || []).filter((item) => item.task_id === task.id),
+    action_plan: task.inventory_case_id ? r2CaseActions(value, task.inventory_case_id).filter((item) => item.work_order_id === task.id) : [],
     diagnosis_v2:diagnosisV2,
     diagnosis_runs:task.diagnosis_runs || [],
     storage: value.storage
@@ -4892,6 +4893,40 @@ async function r2AcceptInventoryCaseAction(env, caseId, body = {}, actor = null)
   return json({ action }, 201);
 }
 
+async function r2CreateInventoryCaseWorkOrder(env, caseId, body = {}, actor = null) {
+  let value = await r2DemoState(env); refreshInventoryCases(value, now());
+  const inventoryCase = (value.inventoryCases || []).find((item) => item.id === caseId);
+  if (!inventoryCase) return bad('未找到该库存持续问题。', 404);
+  const selections = Array.isArray(body.selections) ? body.selections.slice(0, 20) : [];
+  if (!selections.length) return bad('请至少选择一项建议，再完成创建工单。', 409);
+  for (const selection of selections) {
+    if (selection.source === 'ai') {
+      const analysis = (value.aiDiagnosisAnalyses || []).find((item) => item.id === selection.analysis_id && item.inventory_case_id === caseId);
+      const index = Number(selection.step_index);
+      if (!analysis?.recommended_steps?.[index]) return bad('选择的 AI 建议已失效，请刷新后重新选择。', 409);
+    } else {
+      const actionId = String(selection.action_id || '');
+      if (!(inventoryCase.recommended_action_ids || []).includes(actionId) || !DIAGNOSIS_ACTIONS[actionId]) return bad('选择的规则建议已失效，请刷新后重新选择。', 409);
+    }
+  }
+  const latestSignalId = inventoryCase.observations?.[0]?.signal_id
+    || [...(inventoryCase.signal_ids || [])].reverse().find((signalId) => (value.materialAnomalies || []).some((item) => item.id === signalId && !['closed', 'auto_closed'].includes(item.status)));
+  if (!latestSignalId) return bad('该问题当前没有可追溯的活动信号，不能创建工单。', 409);
+  const created = await r2ActionResult(await r2CreateDiagnosisWorkOrder(env, latestSignalId), '创建库存跟进工单');
+  const workOrder = created.operationTask;
+  if (!workOrder?.id) return bad('工单创建失败，请重试。', 500);
+  for (const selection of selections) {
+    await r2ActionResult(await r2AcceptInventoryCaseAction(env, caseId, selection, actor), '纳入工单执行清单');
+  }
+  value = await r2DemoState(env); refreshInventoryCases(value, now());
+  const finalTask = (value.operationTasks || []).find((item) => item.id === workOrder.id) || workOrder;
+  return json({
+    work_order:finalTask,
+    inventory_case:(value.inventoryCases || []).find((item) => item.id === caseId) || inventoryCase,
+    action_plan:r2CaseActions(value, caseId).filter((item) => item.work_order_id === finalTask.id)
+  }, 201);
+}
+
 function r2InventoryCaseEvaluation(value, inventoryCase) {
   const latestObservation = inventoryCase?.observations?.[0];
   const signal = (value.materialAnomalies || []).find((item) => item.id === latestObservation?.signal_id)
@@ -4967,7 +5002,7 @@ async function r2AuthorizeApi(env, request, url, account) {
   if (adminPath && !r2HasRole(account, 'hq_admin')) return bad('仅总部管理员可以配置账户和角色。', 403);
   const adminConfigPath = request.method !== 'GET' && ['/api/store-masters', '/api/product-catalog', '/api/material-catalog', '/api/safety-stock-policies'].some((prefix) => url.pathname.startsWith(prefix));
   if (adminConfigPath && !r2HasRole(account, 'hq_admin')) return bad('该配置需要总部管理员权限。', 403);
-  const hqPath = url.pathname.startsWith('/api/notifications') || url.pathname === '/api/feishu/alert-test' || url.pathname.startsWith('/api/feishu-sync/refresh') || url.pathname.startsWith('/api/feishu-sync/jobs') || url.pathname.startsWith('/api/diagnosis-knowhow') || url.pathname.startsWith('/api/governance-tasks') || url.pathname.startsWith('/api/demo') || url.pathname.startsWith('/api/transfer-orders') || url.pathname.startsWith('/api/anomalies/') || /\/api\/inventory-cases\/[^/]+\/(ai-analysis|actions)$/.test(url.pathname) || (url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close'));
+  const hqPath = url.pathname.startsWith('/api/notifications') || url.pathname === '/api/feishu/alert-test' || url.pathname.startsWith('/api/feishu-sync/refresh') || url.pathname.startsWith('/api/feishu-sync/jobs') || url.pathname.startsWith('/api/diagnosis-knowhow') || url.pathname.startsWith('/api/governance-tasks') || url.pathname.startsWith('/api/demo') || url.pathname.startsWith('/api/transfer-orders') || url.pathname.startsWith('/api/anomalies/') || /\/api\/inventory-cases\/[^/]+\/(ai-analysis|actions|work-orders)$/.test(url.pathname) || (url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close'));
   if (request.method !== 'GET' && hqPath && !r2HasRole(account, 'hq_operations', 'hq_admin')) return bad('该操作需要总部运营权限。', 403);
   const dispatchPath = request.method !== 'GET' && (url.pathname.startsWith('/api/count-plans/') || url.pathname.startsWith('/api/diagnosis-cases/'));
   if (dispatchPath && !r2HasRole(account, 'area_supervisor', 'hq_operations', 'hq_admin')) return bad('该下发或研判动作需要督导或总部权限。', 403);
@@ -5159,6 +5194,8 @@ export default {
     if (env.DEMO_STATE && request.method === 'POST' && aiCaseMatch) return r2RunInventoryAiAnalysis(env, decodeURIComponent(aiCaseMatch[1]), authContext.account);
     const caseActionMatch = url.pathname.match(/^\/api\/inventory-cases\/([^/]+)\/actions$/);
     if (env.DEMO_STATE && request.method === 'POST' && caseActionMatch) return r2AcceptInventoryCaseAction(env, decodeURIComponent(caseActionMatch[1]), await request.json().catch(() => ({})), authContext.account);
+    const caseWorkOrderMatch = url.pathname.match(/^\/api\/inventory-cases\/([^/]+)\/work-orders$/);
+    if (env.DEMO_STATE && request.method === 'POST' && caseWorkOrderMatch) return r2CreateInventoryCaseWorkOrder(env, decodeURIComponent(caseWorkOrderMatch[1]), await request.json().catch(() => ({})), authContext.account);
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/diagnosis-v2/shadow') {
       const state = await r2DemoState(env);
       const calculated = await r2FeishuSyncState(env);
