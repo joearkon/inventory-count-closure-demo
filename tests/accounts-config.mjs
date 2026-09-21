@@ -89,7 +89,7 @@ const storeState = await call('/api/state');
 assert.ok(storeState.storeMasters.every((item) => item.store_code === 'STORE001'), 'store account leaked another store');
 const storeBackend = await fetch(`${base}/`, { redirect:'manual' });
 assert.equal(storeBackend.status, 302, 'store account must not enter HQ desktop');
-assert.match(storeBackend.headers.get('location') || '', /\/store\//, 'store account must return to mobile home');
+assert.match(storeBackend.headers.get('location') || '', /\/hq-login\//, 'mobile session must not replace or impersonate an HQ session');
 await call('/api/accounts/config', {}, 403);
 await post('/api/material-events', { store_code:'STORE001', business_date:'2026-09-18', material_name:'牛奶', unit:'L', qty:1, type:'receipt' }, 403);
 

@@ -4644,6 +4644,8 @@ async function r2CreateStoreAgentEvidence(env, body = {}) {
 }
 
 const R2_SESSION_COOKIE = 'xlb_demo_session';
+const R2_HQ_SESSION_COOKIE = 'xlb_demo_hq_session';
+const R2_MOBILE_SESSION_COOKIE = 'xlb_demo_mobile_session';
 const R2_SESSION_MAX_AGE = 12 * 60 * 60;
 
 function r2Cookie(request, name) {
@@ -4672,20 +4674,44 @@ function r2SafeAccount(account) {
   return { ...safe, login_ready:Boolean(password_hash) };
 }
 
-async function r2AuthContext(env, request) {
-  const token = r2Cookie(request, R2_SESSION_COOKIE);
-  if (!token) return null;
-  const value = await r2DemoState(env);
-  const tokenHash = await r2TokenHash(token);
-  const session = (value.authSessions || []).find((item) => item.token_hash === tokenHash && new Date(item.expires_at).getTime() > Date.now());
-  if (!session) return null;
-  const account = r2NormalizeAccounts(value.accounts).find((item) => item.id === session.account_id && item.status === 'active');
-  return account ? { account, session, value } : null;
+function r2RequestPortal(request) {
+  const explicit = request.headers.get('x-demo-portal');
+  if (['hq', 'mobile'].includes(explicit)) return explicit;
+  const url = new URL(request.url);
+  if (!url.pathname.startsWith('/api/')) return r2IsMobilePage(url.pathname) ? 'mobile' : 'hq';
+  const referer = request.headers.get('referer');
+  if (referer) {
+    try { return r2IsMobilePage(new URL(referer).pathname) ? 'mobile' : 'hq'; }
+    catch (_) { /* Ignore an invalid Referer and continue with endpoint hints. */ }
+  }
+  if (url.pathname.startsWith('/api/store') || url.pathname.startsWith('/api/voice')) return 'mobile';
+  return '';
 }
 
-function r2AuthResponse(payload, status = 200, cookie = null) {
-  const headers = { 'Cache-Control':'no-store' };
-  if (cookie) headers['Set-Cookie'] = cookie;
+function r2PortalCookie(portal) {
+  return portal === 'mobile' ? R2_MOBILE_SESSION_COOKIE : R2_HQ_SESSION_COOKIE;
+}
+
+async function r2AuthContext(env, request) {
+  const portal = r2RequestPortal(request);
+  const cookieNames = portal ? [r2PortalCookie(portal), R2_SESSION_COOKIE] : [R2_HQ_SESSION_COOKIE, R2_MOBILE_SESSION_COOKIE, R2_SESSION_COOKIE];
+  const value = await r2DemoState(env);
+  const accounts = r2NormalizeAccounts(value.accounts);
+  for (const cookieName of cookieNames) {
+    const token = r2Cookie(request, cookieName);
+    if (!token) continue;
+    const tokenHash = await r2TokenHash(token);
+    const session = (value.authSessions || []).find((item) => item.token_hash === tokenHash && new Date(item.expires_at).getTime() > Date.now());
+    if (!session) continue;
+    const account = accounts.find((item) => item.id === session.account_id && item.status === 'active');
+    if (account && (!portal || r2PortalAllowsAccount(account, portal))) return { account, session, value, portal, cookieName };
+  }
+  return null;
+}
+
+function r2AuthResponse(payload, status = 200, cookies = []) {
+  const headers = new Headers({ 'Cache-Control':'no-store' });
+  for (const cookie of (Array.isArray(cookies) ? cookies : [cookies]).filter(Boolean)) headers.append('Set-Cookie', cookie);
   return Response.json(payload, { status, headers });
 }
 
@@ -4709,16 +4735,20 @@ async function r2AuthOptions(env, portal = '') {
   });
 }
 
-async function r2CreateAuthSession(env, value, account, auditAction) {
+async function r2CreateAuthSession(env, value, account, auditAction, requestedPortal = '') {
+  const portal = requestedPortal || (r2HasRole(account, 'hq_operations', 'hq_admin') ? 'hq' : 'mobile');
   const token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
   const createdAt = now();
   const expiresAt = new Date(Date.now() + R2_SESSION_MAX_AGE * 1000).toISOString();
   value.authSessions = (value.authSessions || []).filter((item) => new Date(item.expires_at).getTime() > Date.now() && item.account_id !== account.id);
-  value.authSessions.unshift({ id:id('SES'), account_id:account.id, token_hash:await r2TokenHash(token), created_at:createdAt, expires_at:expiresAt });
+  value.authSessions.unshift({ id:id('SES'), account_id:account.id, portal, token_hash:await r2TokenHash(token), created_at:createdAt, expires_at:expiresAt });
   value.activeAccountId = account.id;
   r2Audit(value, account.display_name, auditAction, `${account.email} · ${account.role_ids.join('、')}`, account.id);
   await r2SaveDemoState(env, value, 'auth-login');
-  return r2AuthResponse({ account:r2SafeAccount(account), expires_at:expiresAt, home:r2AuthHome(account) }, 200, `${R2_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${R2_SESSION_MAX_AGE}`);
+  return r2AuthResponse({ account:r2SafeAccount(account), expires_at:expiresAt, home:r2AuthHome(account), portal }, 200, [
+    `${r2PortalCookie(portal)}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${R2_SESSION_MAX_AGE}`,
+    `${R2_SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`
+  ]);
 }
 
 async function r2AuthDemoLogin(env, body = {}) {
@@ -4728,7 +4758,7 @@ async function r2AuthDemoLogin(env, body = {}) {
   const account = r2NormalizeAccounts(value.accounts).find((item) => item.id === accountId && item.status === 'active' && item.source === 'demo_seed');
   if (!account) return bad('演示人物不存在或已停用。', 404);
   if (!r2PortalAllowsAccount(account, portal)) return bad(portal === 'hq' ? '该人物不是总部人员，请从移动端入口选择。' : '总部人员请从总部后台入口选择。', 403);
-  return r2CreateAuthSession(env, value, account, '演示身份直接进入');
+  return r2CreateAuthSession(env, value, account, '演示身份直接进入', portal);
 }
 
 async function r2AuthLogin(env, body = {}) {
@@ -4740,7 +4770,7 @@ async function r2AuthLogin(env, body = {}) {
   const matches = account?.password_hash && password && await r2PasswordHash(account.password_salt, password) === account.password_hash;
   if (!matches) return bad('账号或密码不正确。', 401);
   if (!r2PortalAllowsAccount(account, portal)) return bad(portal === 'hq' ? '该账号不是总部人员，请从移动端入口登录。' : '总部人员请从总部后台入口登录。', 403);
-  return r2CreateAuthSession(env, value, account, '演示账号密码登录');
+  return r2CreateAuthSession(env, value, account, '演示账号密码登录', portal);
 }
 
 async function r2AuthSession(env, request) {
@@ -4750,13 +4780,18 @@ async function r2AuthSession(env, request) {
 }
 
 async function r2AuthLogout(env, request) {
-  const token = r2Cookie(request, R2_SESSION_COOKIE);
+  const portal = r2RequestPortal(request) || 'hq';
+  const cookieName = r2PortalCookie(portal);
+  const token = r2Cookie(request, cookieName) || r2Cookie(request, R2_SESSION_COOKIE);
   if (token) {
     const value = await r2DemoState(env), tokenHash = await r2TokenHash(token);
     value.authSessions = (value.authSessions || []).filter((item) => item.token_hash !== tokenHash);
     await r2SaveDemoState(env, value, 'auth-logout');
   }
-  return r2AuthResponse({ ok:true }, 200, `${R2_SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+  return r2AuthResponse({ ok:true }, 200, [
+    `${cookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+    `${R2_SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`
+  ]);
 }
 
 function r2HasRole(account, ...roles) { return roles.some((role) => account.role_ids.includes(role)); }

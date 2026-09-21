@@ -142,6 +142,31 @@ await check('demo identity selection creates a scoped server session', async () 
   return { mode:options.mode, identity:data.account.display_name, home:data.home, hq_mobile_denied:true };
 });
 
+await check('HQ and mobile sessions remain isolated in the same browser', async () => {
+  const login = async (accountId, portal) => {
+    const response = await nativeFetch(`${base}/api/auth/demo-login`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ account_id:accountId, portal }) });
+    if (!response.ok) throw new Error(`${portal} login failed: ${response.status}`);
+    const cookie = (response.headers.get('set-cookie') || '').split(';')[0];
+    if (!cookie.startsWith(`xlb_demo_${portal === 'hq' ? 'hq' : 'mobile'}_session=`)) throw new Error(`${portal} did not receive an isolated cookie: ${cookie}`);
+    return cookie;
+  };
+  const mobileCookie = await login('ACC-STORE-LI', 'mobile');
+  const hqCookie = await login('ACC-HQ-WANG', 'hq');
+  const cookie = `${mobileCookie}; ${hqCookie}`;
+  const hqRoutes = ['/', '/ledger/', '/flows/', '/diagnosis/', '/simulator/', '/count-plans/', '/purchase-orders/', '/receipt-orders/', '/documents/', '/transfers/', '/sync/', '/notifications/', '/accounts/'];
+  for (const path of hqRoutes) {
+    const response = await nativeFetch(`${base}${path}`, { headers:{ cookie }, redirect:'manual' });
+    if (response.status !== 200) throw new Error(`HQ route ${path} redirected or failed: ${response.status} ${response.headers.get('location') || ''}`);
+  }
+  const storePage = await nativeFetch(`${base}/store/?store=STORE001`, { headers:{ cookie }, redirect:'manual' });
+  if (storePage.status !== 200) throw new Error(`mobile route redirected or failed: ${storePage.status} ${storePage.headers.get('location') || ''}`);
+  const hqSession = await nativeFetch(`${base}/api/auth/session`, { headers:{ cookie, referer:`${base}/diagnosis/` } }).then((response) => response.json());
+  const mobileSession = await nativeFetch(`${base}/api/auth/session`, { headers:{ cookie, referer:`${base}/store/?store=STORE001` } }).then((response) => response.json());
+  if (hqSession.account?.id !== 'ACC-HQ-WANG' || mobileSession.account?.id !== 'ACC-STORE-LI') throw new Error(`portal identity crossed: ${hqSession.account?.id}/${mobileSession.account?.id}`);
+  authCookie = cookie;
+  return { hq_routes:hqRoutes.length, hq_identity:hqSession.account.display_name, mobile_identity:mobileSession.account.display_name, simultaneous:true };
+});
+
 await check('store mobile header identifies the assistant', async () => {
   const [page, transferScript] = await Promise.all([fetch(`${base}/store/?store=STORE001`).then((r) => r.text()), fetch(`${base}/store-transfer-request.js`).then((r) => r.text())]);
   if (!/id="store-header-title"> · 门店助手</.test(page)) throw new Error('store header must identify the page as 门店助手');
