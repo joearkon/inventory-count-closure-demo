@@ -920,6 +920,7 @@ async function r2OperationTaskDetail(env, taskId) {
     action_plan: task.inventory_case_id ? r2CaseActions(value, task.inventory_case_id).filter((item) => item.work_order_id === task.id) : [],
     diagnosis_v2:diagnosisV2,
     diagnosis_runs:task.diagnosis_runs || [],
+    latest_ai_analysis:task.inventory_case_id ? r2AiAnalysisForCase(value, task.inventory_case_id)[0] || null : null,
     storage: value.storage
   });
 }
