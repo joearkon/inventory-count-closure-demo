@@ -1,5 +1,5 @@
 import { buildDiagnosisShadowReport } from './diagnosis/shadow.js';
-import { evaluateDiagnosisSignal } from './diagnosis/index.js';
+import { evaluateDiagnosisSignal, DIAGNOSIS_ACTIONS } from './diagnosis/index.js';
 import { INVENTORY_AI_PROMPT_VERSION, INVENTORY_AI_RULES, buildInventoryAiMessages, normalizeInventoryAiResult } from './diagnosis/ai/prompt.js';
 import { evaluateClosureGate } from './diagnosis/closure.js';
 import { refreshInventoryCases, inventoryCasesView } from './diagnosis/lifecycle/inventory-cases.js';
@@ -384,6 +384,7 @@ function normalizeR2DemoState(value) {
     materialAnomalies,
     inventoryCases: Array.isArray(source.inventoryCases) ? source.inventoryCases : [],
     aiDiagnosisAnalyses: Array.isArray(source.aiDiagnosisAnalyses) ? source.aiDiagnosisAnalyses.slice(0, 100) : [],
+    inventoryCaseActions: Array.isArray(source.inventoryCaseActions) ? source.inventoryCaseActions.slice(0, 300) : [],
     diagnosisCases,
     diagnosisKnowledge: Array.isArray(source.diagnosisKnowledge) ? source.diagnosisKnowledge : [],
     materialEvents: Array.isArray(source.materialEvents) ? source.materialEvents : [],
@@ -4716,10 +4717,10 @@ function r2RequestPortal(request) {
   const explicit = request.headers.get('x-demo-portal');
   if (['hq', 'mobile'].includes(explicit)) return explicit;
   const url = new URL(request.url);
-  if (!url.pathname.startsWith('/api/')) return r2IsMobilePage(url.pathname) ? 'mobile' : 'hq';
+  if (!url.pathname.startsWith('/api/')) return r2IsMobilePage(url.pathname, url.searchParams) ? 'mobile' : 'hq';
   const referer = request.headers.get('referer');
   if (referer) {
-    try { return r2IsMobilePage(new URL(referer).pathname) ? 'mobile' : 'hq'; }
+    try { const refererUrl = new URL(referer); return r2IsMobilePage(refererUrl.pathname, refererUrl.searchParams) ? 'mobile' : 'hq'; }
     catch (_) { /* Ignore an invalid Referer and continue with endpoint hints. */ }
   }
   if (url.pathname.startsWith('/api/store') || url.pathname.startsWith('/api/voice')) return 'mobile';
@@ -4858,6 +4859,72 @@ function r2AiAnalysisForCase(value, caseId) {
     .sort((left, right) => String(right.created_at).localeCompare(String(left.created_at)));
 }
 
+function r2CaseActions(value, caseId) {
+  return (value.inventoryCaseActions || []).filter((item) => item.inventory_case_id === caseId)
+    .sort((left, right) => String(right.accepted_at || right.created_at).localeCompare(String(left.accepted_at || left.created_at)));
+}
+
+function r2AiStepAction(step = {}) {
+  const text = `${step.action || ''} ${step.system_entry || ''}`;
+  if (/盘点|实盘/.test(text)) return 'CREATE_SPOT_COUNT';
+  if (/补录.*收货|创建.*收货/.test(text)) return 'CREATE_RECEIPT_DRAFT';
+  if (/收货|到货|签收单/.test(text)) return 'VIEW_RECEIPTS';
+  if (/调拨|目标门店签收/.test(text)) return 'VIEW_TRANSFER';
+  if (/紧急补货|创建.*订货/.test(text)) return 'CREATE_RESTOCK_DRAFT';
+  if (/订货|在途|补货/.test(text)) return 'VIEW_PURCHASE';
+  if (/流水|单位|BOM|重复|台账/.test(text)) return 'VIEW_FLOWS';
+  return 'ASK_STORE';
+}
+
+function r2ActionExecutionUrl(actionId, inventoryCase, workOrderId) {
+  if (actionId === 'ASK_STORE') return workOrderId ? `/work-order/?portal=hq&id=${encodeURIComponent(workOrderId)}#note-form` : null;
+  const action = DIAGNOSIS_ACTIONS[actionId];
+  if (!action?.route) return workOrderId ? `/work-order/?portal=hq&id=${encodeURIComponent(workOrderId)}#note-form` : null;
+  const url = new URL(action.route, 'https://demo.local');
+  url.searchParams.set('store', inventoryCase.store_code); url.searchParams.set('material', inventoryCase.material_name);
+  url.searchParams.set('date', inventoryCase.latest_business_date || ''); url.searchParams.set('source_case_id', inventoryCase.id);
+  if (workOrderId) url.searchParams.set('source_work_order_id', workOrderId);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+async function r2AcceptInventoryCaseAction(env, caseId, body = {}, actor = null) {
+  const value = await r2DemoState(env); refreshInventoryCases(value, now());
+  const inventoryCase = (value.inventoryCases || []).find((item) => item.id === caseId);
+  if (!inventoryCase) return bad('未找到该库存持续问题。', 404);
+  const source = body.source === 'rule' ? 'rule' : 'ai';
+  let title = '', reason = '', owner = String(body.owner || '').trim().slice(0, 100), sourceRef = '', actionId = '';
+  if (source === 'ai') {
+    const analysis = (value.aiDiagnosisAnalyses || []).find((item) => item.id === body.analysis_id && item.inventory_case_id === caseId);
+    const index = Number(body.step_index);
+    const step = analysis?.recommended_steps?.[index];
+    if (!analysis || !step) return bad('未找到该 AI 建议步骤。', 404);
+    title = step.action; reason = step.reason || analysis.summary; owner = owner || step.owner || inventoryCase.assigned_to;
+    actionId = r2AiStepAction(step); sourceRef = `${analysis.id}:${index}`;
+  } else {
+    actionId = String(body.action_id || '');
+    if (!(inventoryCase.recommended_action_ids || []).includes(actionId) || !DIAGNOSIS_ACTIONS[actionId]) return bad('该规则动作不在当前建议清单中。', 409);
+    title = DIAGNOSIS_ACTIONS[actionId].label; reason = inventoryCase.primary_hypothesis || inventoryCase.latest_evidence;
+    owner = owner || inventoryCase.assigned_to; sourceRef = `${inventoryCase.fact_packet_id || inventoryCase.id}:${actionId}`;
+  }
+  const existing = (value.inventoryCaseActions || []).find((item) => item.inventory_case_id === caseId && item.source_ref === sourceRef);
+  if (existing) return json({ action:existing, duplicate:true });
+  const workOrderId = inventoryCase.active_work_order_id || null;
+  const createdAt = now();
+  const action = {
+    id:id('ACT'), inventory_case_id:caseId, work_order_id:workOrderId, source, source_ref:sourceRef,
+    action_id:actionId, title:String(title).slice(0, 300), reason:String(reason || '').slice(0, 600), owner,
+    mode:actionId === 'ASK_STORE' ? 'manual' : DIAGNOSIS_ACTIONS[actionId]?.mode || 'manual',
+    status:workOrderId ? 'accepted' : 'needs_work_order', execution_url:r2ActionExecutionUrl(actionId, inventoryCase, workOrderId),
+    accepted_by:actor?.display_name || '总部运营', accepted_at:createdAt, created_at:createdAt
+  };
+  value.inventoryCaseActions = [action, ...(value.inventoryCaseActions || [])].slice(0, 300);
+  const task = (value.operationTasks || []).find((item) => item.id === workOrderId);
+  if (task) task.activity_log = [...(task.activity_log || []), { id:id('LOG'), type:'action_accepted', note:`已采纳${source === 'ai' ? ' AI' : '规则'}建议：${action.title}；责任人：${action.owner}`, operator:action.accepted_by, created_at:createdAt, source:`${source}_action_plan` }];
+  r2Audit(value, action.accepted_by, '采纳并编排库存建议', `${inventoryCase.case_no} · ${action.title} · ${action.owner}`, action.id);
+  await r2SaveDemoState(env, value, 'inventory-action-accepted');
+  return json({ action }, 201);
+}
+
 function r2InventoryCaseEvaluation(value, inventoryCase) {
   const latestObservation = inventoryCase?.observations?.[0];
   const signal = (value.materialAnomalies || []).find((item) => item.id === latestObservation?.signal_id)
@@ -4933,7 +5000,7 @@ async function r2AuthorizeApi(env, request, url, account) {
   if (adminPath && !r2HasRole(account, 'hq_admin')) return bad('仅总部管理员可以配置账户和角色。', 403);
   const adminConfigPath = request.method !== 'GET' && ['/api/store-masters', '/api/product-catalog', '/api/material-catalog', '/api/safety-stock-policies'].some((prefix) => url.pathname.startsWith(prefix));
   if (adminConfigPath && !r2HasRole(account, 'hq_admin')) return bad('该配置需要总部管理员权限。', 403);
-  const hqPath = url.pathname.startsWith('/api/notifications') || url.pathname === '/api/feishu/alert-test' || url.pathname.startsWith('/api/feishu-sync/refresh') || url.pathname.startsWith('/api/feishu-sync/jobs') || url.pathname.startsWith('/api/diagnosis-knowhow') || url.pathname.startsWith('/api/governance-tasks') || url.pathname.startsWith('/api/demo') || url.pathname.startsWith('/api/transfer-orders') || url.pathname.startsWith('/api/anomalies/') || /\/api\/inventory-cases\/[^/]+\/ai-analysis$/.test(url.pathname) || (url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close'));
+  const hqPath = url.pathname.startsWith('/api/notifications') || url.pathname === '/api/feishu/alert-test' || url.pathname.startsWith('/api/feishu-sync/refresh') || url.pathname.startsWith('/api/feishu-sync/jobs') || url.pathname.startsWith('/api/diagnosis-knowhow') || url.pathname.startsWith('/api/governance-tasks') || url.pathname.startsWith('/api/demo') || url.pathname.startsWith('/api/transfer-orders') || url.pathname.startsWith('/api/anomalies/') || /\/api\/inventory-cases\/[^/]+\/(ai-analysis|actions)$/.test(url.pathname) || (url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close'));
   if (request.method !== 'GET' && hqPath && !r2HasRole(account, 'hq_operations', 'hq_admin')) return bad('该操作需要总部运营权限。', 403);
   const dispatchPath = request.method !== 'GET' && (url.pathname.startsWith('/api/count-plans/') || url.pathname.startsWith('/api/diagnosis-cases/'));
   if (dispatchPath && !r2HasRole(account, 'area_supervisor', 'hq_operations', 'hq_admin')) return bad('该下发或研判动作需要督导或总部权限。', 403);
@@ -4979,7 +5046,8 @@ function r2PageAllowed(pathname, account) {
   return true;
 }
 
-function r2IsMobilePage(pathname) {
+function r2IsMobilePage(pathname, searchParams = null) {
+  if (pathname.startsWith('/work-order') && searchParams?.get('portal') === 'hq') return false;
   return ['/store', '/voice-qa', '/procurement-detail', '/work-order'].some((prefix) => pathname.startsWith(prefix));
 }
 
@@ -5072,7 +5140,7 @@ export default {
       if (env.DEMO_STATE && isPageRequest && !isLoginAsset) {
         authContext = await r2AuthContext(env, request);
         if (!authContext) {
-          const loginPath = r2IsMobilePage(url.pathname) ? '/login/' : '/hq-login/';
+          const loginPath = r2IsMobilePage(url.pathname, url.searchParams) ? '/login/' : '/hq-login/';
           return Response.redirect(`${url.origin}${loginPath}?next=${encodeURIComponent(url.pathname + url.search)}`, 302);
         }
         if (!r2PageAllowed(url.pathname, authContext.account)) return Response.redirect(`${url.origin}${r2AuthHome(authContext.account)}`, 302);
@@ -5117,11 +5185,13 @@ export default {
       const value = await r2DemoState(env);
       const view = inventoryCasesView(value);
       view.ai = { provider:'volcengine_ark', prompt_version:INVENTORY_AI_PROMPT_VERSION, advisory_only:true, rules:INVENTORY_AI_RULES };
-      view.cases = view.cases.map((item) => ({ ...item, ai_analyses:r2AiAnalysisForCase(value, item.id).slice(0, 5), latest_ai_analysis:r2AiAnalysisForCase(value, item.id)[0] || null }));
+      view.cases = view.cases.map((item) => ({ ...item, ai_analyses:r2AiAnalysisForCase(value, item.id).slice(0, 5), latest_ai_analysis:r2AiAnalysisForCase(value, item.id)[0] || null, action_plan:r2CaseActions(value, item.id) }));
       return json(r2ScopePayload(view, authContext.account));
     }
     const aiCaseMatch = url.pathname.match(/^\/api\/inventory-cases\/([^/]+)\/ai-analysis$/);
     if (env.DEMO_STATE && request.method === 'POST' && aiCaseMatch) return r2RunInventoryAiAnalysis(env, decodeURIComponent(aiCaseMatch[1]), authContext.account);
+    const caseActionMatch = url.pathname.match(/^\/api\/inventory-cases\/([^/]+)\/actions$/);
+    if (env.DEMO_STATE && request.method === 'POST' && caseActionMatch) return r2AcceptInventoryCaseAction(env, decodeURIComponent(caseActionMatch[1]), await request.json().catch(() => ({})), authContext.account);
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/diagnosis-v2/shadow') {
       const state = await r2DemoState(env);
       const calculated = await r2FeishuSyncState(env);

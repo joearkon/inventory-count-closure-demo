@@ -124,6 +124,7 @@ export function refreshInventoryCases(value, updatedAt = new Date().toISOString(
         formal_engine:currentSignal.formal_engine || 'v1', engine_mode:currentSignal.engine_mode || 'legacy',
         ruleset_id:currentSignal.ruleset_id || null, rule_version:currentSignal.rule_version || null,
         fact_packet_id:currentSignal.fact_packet_id || null, primary_hypothesis:currentSignal.primary_hypothesis || null,
+        recommended_action_ids:currentSignal.recommended_action_ids || [],
         closed_at:closedVerified ? closedTask.closed_at : null, updated_at:activeTask?.updated_at || closedTask?.updated_at || latest.updated_at || updatedAt,
         contract_version:'inventory-case-v3.0', recurrence_of_case_id:segmentIndex > 0 ? (existing?.recurrence_of_case_id || priorCaseId) : null, recurrence_index:segmentIndex
       };

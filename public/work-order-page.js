@@ -1,7 +1,11 @@
 (() => {
   'use strict';
   const root = document.getElementById('work-order-root');
-  const id = new URLSearchParams(location.search).get('id') || '';
+  const search = new URLSearchParams(location.search);
+  const id = search.get('id') || '';
+  const isHqPortal = search.get('portal') === 'hq';
+  const workOrderHref = (workOrderId) => `/work-order/?${isHqPortal ? 'portal=hq&' : ''}id=${encodeURIComponent(workOrderId)}`;
+  const taskListHref = isHqPortal ? '/diagnosis-v3/' : '/store/#tasks';
   const esc = (value) => String(value == null ? '' : value).replace(/[&<>'"]/g, (char) => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;' }[char]));
   const api = async (path, options = {}) => {
     const response = await fetch(path, { headers:{ 'Content-Type':'application/json' }, ...options });
@@ -179,7 +183,7 @@
         <details class="panel audit-panel"><summary><span>审计记录与处理时间线</span><small>共 ${timeline(data).length} 条 · 点击展开</small></summary><div class="panel-body"><div class="timeline">${timeRows}</div></div></details>
         ${task.resolution ? `<section class="panel"><div class="panel-head"><h2>${task.status === 'closed' ? '闭环结论' : '最近一次处理结论'}</h2></div><div class="panel-body"><div class="resolution ${task.status === 'closed' ? '' : 'pending'}">${esc(task.resolution)}</div></div></section>` : ''}
       </div><aside class="stack side-column">
-        <section class="panel progress-panel"><div class="panel-head"><h2>当前处理状态</h2></div><div class="panel-body"><div class="progress-main"><span class="status ${status.css}">${status.label}</span><h3>${esc(task.assigned_to || '待分配')}</h3><p>最近更新 ${formatDate(task.updated_at || task.submitted_at || task.created_at)}</p></div><a class="side-link" href="${actionUrl('/flows/', task, material, businessDate)}">查看该物料库存流水 →</a><a class="side-link" href="/#operation-task-panel">返回工单列表 →</a></div></section>
+        <section class="panel progress-panel"><div class="panel-head"><h2>当前处理状态</h2></div><div class="panel-body"><div class="progress-main"><span class="status ${status.css}">${status.label}</span><h3>${esc(task.assigned_to || '待分配')}</h3><p>最近更新 ${formatDate(task.updated_at || task.submitted_at || task.created_at)}</p></div><a class="side-link" href="${actionUrl('/flows/', task, material, businessDate)}">查看该物料库存流水 →</a><a class="side-link" href="${taskListHref}">${isHqPortal ? '返回库存研判' : '返回我的任务'} →</a></div></section>
         <section class="panel"><div class="panel-head"><h2>新增处理记录</h2><p>人工核查结果会进入时间线，也可作为闭环证据。</p></div><div class="panel-body"><form class="note-form" id="note-form"><label class="field"><span>操作人（可不填）</span><input name="operator" maxlength="80" placeholder="例如：总部运营 / 门店店长"></label><label class="field"><span>处理记录</span><textarea name="note" maxlength="500" required placeholder="例如：已联系目标门店，确认货物尚未到店"></textarea></label><div class="form-actions"><span class="hint">保存后写入工单时间线</span><button class="btn primary" type="submit">添加记录</button></div><div class="result" id="note-result"></div></form></div></section>
         ${task.status !== 'closed' ? `<section class="panel closure-panel"><div class="panel-head"><h2>人工闭环确认</h2><p>提交时自动运行最新 V2，并执行关闭门禁。</p></div><div class="panel-body"><form class="note-form" id="closure-form"><label class="field"><span>最终结果</span><select name="outcome" required><option value="resolved">已恢复</option><option value="accepted_exception">接受例外</option><option value="false_positive">规则误判</option><option value="master_data_issue">主数据问题（转治理）</option><option value="unresolved">尚未解决</option></select></label><label class="field" id="follow-up-field" hidden><span>尚未解决时的后续流向</span><select name="follow_up_action"><option value="reopen_store">重新交由门店处理</option><option value="escalate_supervisor">升级至区域督导</option><option value="escalate_hq">升级至总部运营</option><option value="escalate_governance">升级至主数据治理</option></select></label><label class="field"><span>最终原因</span><textarea name="final_cause" required placeholder="确认后的真实原因"></textarea></label><label class="field"><span>解决方式 / 下一步</span><textarea name="resolution_note" required placeholder="已做什么，或接下来由谁做什么"></textarea></label><label class="field"><span>操作人</span><input name="operator" required placeholder="总部运营 / 门店店长"></label><label class="check"><input type="checkbox" name="store_adopted">门店已采纳处理方案</label><label class="check"><input type="checkbox" name="hq_confirmed" required>总部确认本次结论</label><button class="btn primary" type="submit">重算并提交结论</button><div class="result" id="closure-result"></div></form></div></section>` : ''}
       </aside></div>`;
@@ -198,7 +202,7 @@
         const result = await api(`/api/anomalies/${encodeURIComponent(button.dataset.followupWorkOrder)}/work-order`, { method:'POST' });
         const next = result.operationTask;
         if (!next?.id) throw new Error('后续工单已建立，但未返回工单编号。');
-        location.href = `/work-order/?id=${encodeURIComponent(next.id)}`;
+        location.href = workOrderHref(next.id);
       } catch (error) { alert(error.message); restore(); }
     }));
     document.querySelectorAll('[data-run-page]').forEach((button) => button.addEventListener('click', () => {
@@ -235,5 +239,5 @@
       catch (error) { alert(error.message); restore(); }
     });
   };
-  load().catch((error) => { root.innerHTML = `<div class="fatal"><b>无法打开工单</b><br>${esc(error.message)}<br><br><a class="link" href="/#operation-task-panel">返回工单列表</a></div>`; });
+  load().catch((error) => { root.innerHTML = `<div class="fatal"><b>无法打开工单</b><br>${esc(error.message)}<br><br><a class="link" href="${taskListHref}">${isHqPortal ? '返回库存研判' : '返回我的任务'}</a></div>`; });
 })();
