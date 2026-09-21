@@ -4,8 +4,8 @@ import { DIAGNOSIS_ACTIONS } from './actions.js';
 export const D2_RULESET = Object.freeze({
   ruleset_id: 'inventory-diagnosis-20260917-v1',
   rule_code: 'D2_NEGATIVE_STOCK',
-  rule_version: '1.0.0-shadow',
-  status: 'shadow'
+  rule_version: '2.0.0',
+  status: 'active'
 });
 
 export const D2_ACTIONS = DIAGNOSIS_ACTIONS;

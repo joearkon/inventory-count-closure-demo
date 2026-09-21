@@ -1,6 +1,6 @@
 import { validateDiagnosisCase } from './contracts.js';
 
-export const S1_RULESET = Object.freeze({ ruleset_id:'inventory-diagnosis-20260917-v1', rule_code:'S1_SAFETY_STOCK', rule_version:'1.0.0-shadow', status:'shadow' });
+export const S1_RULESET = Object.freeze({ ruleset_id:'inventory-diagnosis-20260917-v1', rule_code:'S1_SAFETY_STOCK', rule_version:'2.0.0', status:'active' });
 const trace = (nodeId, type, result, message, evidenceRefs = []) => ({ node_id:nodeId, type, result, message, evidence_refs:evidenceRefs });
 const quantity = (packet, key) => packet.quantities[key]?.status === 'confirmed' ? Number(packet.quantities[key].value) : null;
 const metric = (packet, key) => packet.metrics?.[key]?.status === 'confirmed' ? Number(packet.metrics[key].value) : null;

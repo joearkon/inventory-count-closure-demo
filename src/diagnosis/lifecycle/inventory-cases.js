@@ -45,6 +45,13 @@ export function inventoryObservation(signal) {
     bom_consumption_qty:detail.bom_consumption_qty ?? null,
     sell_in_ratio:detail.sell_in_ratio ?? null,
     evidence:signal.evidence || '',
+    formal_engine:signal.formal_engine || 'v1',
+    engine_mode:signal.engine_mode || 'legacy',
+    ruleset_id:signal.ruleset_id || null,
+    rule_version:signal.rule_version || null,
+    fact_packet_id:signal.fact_packet_id || null,
+    primary_hypothesis:signal.primary_hypothesis || null,
+    evidence_gaps:signal.evidence_gaps || [],
     source_batch_id:signal.source_batch_id || null
   };
 }
@@ -114,6 +121,9 @@ export function refreshInventoryCases(value, updatedAt = new Date().toISOString(
         owner:currentSignal.owner || null, severity:signals.some((item) => item.severity === 'high') ? 'high' : 'mid',
         latest_values:{ theoretical_qty:latestDetail.theoretical_qty ?? currentSignal.theoretical_closing_qty ?? null, physical_qty:latestDetail.physical_qty ?? null, safety_qty:currentSignal.safety_qty ?? null, sell_in_ratio:latestDetail.sell_in_ratio ?? null },
         latest_evidence:currentSignal.evidence || '', resolution:closedTask?.resolution || null,
+        formal_engine:currentSignal.formal_engine || 'v1', engine_mode:currentSignal.engine_mode || 'legacy',
+        ruleset_id:currentSignal.ruleset_id || null, rule_version:currentSignal.rule_version || null,
+        fact_packet_id:currentSignal.fact_packet_id || null, primary_hypothesis:currentSignal.primary_hypothesis || null,
         closed_at:closedVerified ? closedTask.closed_at : null, updated_at:activeTask?.updated_at || closedTask?.updated_at || latest.updated_at || updatedAt,
         contract_version:'inventory-case-v3.0', recurrence_of_case_id:segmentIndex > 0 ? (existing?.recurrence_of_case_id || priorCaseId) : null, recurrence_index:segmentIndex
       };

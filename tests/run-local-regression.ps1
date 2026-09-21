@@ -43,6 +43,9 @@ try {
   & node (Join-Path $projectRoot 'tests\diagnosis-engine-architecture.mjs')
   if ($LASTEXITCODE -ne 0) { throw "Diagnosis engine architecture tests failed with exit code $LASTEXITCODE" }
 
+  & node (Join-Path $projectRoot 'tests\diagnosis-ai-analysis.mjs')
+  if ($LASTEXITCODE -ne 0) { throw "Diagnosis AI analysis tests failed with exit code $LASTEXITCODE" }
+
   & npx.cmd wrangler d1 migrations apply inventory-count-closure-demo-db --local --persist-to $persistPath
   if ($LASTEXITCODE -ne 0) { throw "D1 migrations failed with exit code $LASTEXITCODE" }
 

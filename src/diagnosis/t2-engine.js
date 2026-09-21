@@ -1,14 +1,14 @@
 import { validateDiagnosisCase } from './contracts.js';
 
-export const T2_RULESET = Object.freeze({ ruleset_id:'inventory-diagnosis-20260917-v1', rule_code:'T2_SELL_IN_IMBALANCE', rule_version:'1.0.0-shadow', status:'shadow' });
+export const T2_RULESET = Object.freeze({ ruleset_id:'inventory-diagnosis-20260917-v1', rule_code:'T2_SELL_IN_IMBALANCE', rule_version:'2.0.0', status:'active' });
 const trace = (nodeId, type, result, message, evidenceRefs = []) => ({ node_id:nodeId, type, result, message, evidence_refs:evidenceRefs });
 const metric = (packet, key) => packet.metrics?.[key]?.status === 'confirmed' ? Number(packet.metrics[key].value) : null;
 
 export function evaluateT2(packet) {
   const ratio = metric(packet, 'sell_in_ratio'), decisionTrace = [];
   if (ratio == null) return { anomaly_status:'rule_error', cause_evidence_status:'insufficient', physical_status:packet.physical_count.status === 'confirmed' ? 'confirmed' : 'pending_count', decision_trace:[trace('T2-INPUT-001','require_evidence','missing','销入比不可计算，无法执行 T2。')], recommended_action_ids:[] };
-  const low = ratio < 0.3, high = ratio > 3, triggered = low || high;
-  decisionTrace.push(trace('T2-TRIGGER-001','condition',triggered,`当前销入比 ${ratio}，${low ? '低于下限 0.3' : high ? '高于上限 3.0' : '位于 0.3–3.0 范围内'}。`, packet.metrics.sell_in_ratio.evidence_refs));
+  const low = ratio < 0.3, high = ratio > 2, triggered = low || high;
+  decisionTrace.push(trace('T2-TRIGGER-001','condition',triggered,`当前销入比 ${ratio}，${low ? '低于下限 0.3' : high ? '高于上限 2.0' : '位于 0.3–2.0 范围内'}。`, packet.metrics.sell_in_ratio.evidence_refs));
   if (!triggered) return { anomaly_status:'not_triggered', cause_evidence_status:'excluded', physical_status:packet.physical_count.status === 'confirmed' ? 'confirmed' : 'pending_count', decision_trace:decisionTrace, recommended_action_ids:[] };
   const receipt = packet.quantities.receipt.value, consumption = packet.quantities.bom_consumption.value;
   const location = low ? '收货批量与销售消耗衔接' : '销售消耗、BOM 与入库记录';

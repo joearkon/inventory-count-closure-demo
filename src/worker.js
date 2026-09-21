@@ -1,4 +1,6 @@
 import { buildDiagnosisShadowReport } from './diagnosis/shadow.js';
+import { evaluateDiagnosisSignal } from './diagnosis/index.js';
+import { INVENTORY_AI_PROMPT_VERSION, INVENTORY_AI_RULES, buildInventoryAiMessages, normalizeInventoryAiResult } from './diagnosis/ai/prompt.js';
 import { evaluateClosureGate } from './diagnosis/closure.js';
 import { refreshInventoryCases, inventoryCasesView } from './diagnosis/lifecycle/inventory-cases.js';
 import { operationalBusinessDate, DEFAULT_BUSINESS_TIME_ZONE, DEFAULT_BUSINESS_DAY_CUTOFF_HOUR } from './business-date.js';
@@ -381,6 +383,7 @@ function normalizeR2DemoState(value) {
     anomalyClosures: Array.isArray(source.anomalyClosures) ? source.anomalyClosures : [],
     materialAnomalies,
     inventoryCases: Array.isArray(source.inventoryCases) ? source.inventoryCases : [],
+    aiDiagnosisAnalyses: Array.isArray(source.aiDiagnosisAnalyses) ? source.aiDiagnosisAnalyses.slice(0, 100) : [],
     diagnosisCases,
     diagnosisKnowledge: Array.isArray(source.diagnosisKnowledge) ? source.diagnosisKnowledge : [],
     materialEvents: Array.isArray(source.materialEvents) ? source.materialEvents : [],
@@ -3183,7 +3186,27 @@ function r2ReconcileMaterialDiagnosis(value, ledger, businessDate, storeCode, so
     if (!candidate) continue;
     const key = `${storeCode}|${businessDate}|${normalizedKey(row.material_name)}|${candidate.rule_code}`;
     const existing = prior.find((item) => `${item.store_code}|${item.business_date}|${normalizedKey(item.material_name)}|${item.rule_code}` === key);
-    candidates.set(key, { ...existing, ...candidate, id: existing?.id || id('MAT'), judgment_task_no: existing?.judgment_task_no || id('JDG'), store_code: storeCode, business_date: businessDate, material_name: row.material_name, unit: row.unit, theoretical_closing_qty: theoreticalQty, safety_qty: safetyQty, source_batch_id: sourceBatchId, evidence_detail: evidence, industry_assessment: null, mvp_action: existing?.mvp_action || null, created_at: existing?.created_at || updatedAt, updated_at: updatedAt, closed_at: null, closure_reason: null, reopened_at: null });
+    const signal = { ...existing, ...candidate, id: existing?.id || id('MAT'), judgment_task_no: existing?.judgment_task_no || id('JDG'), store_code: storeCode, business_date: businessDate, material_name: row.material_name, unit: row.unit, theoretical_closing_qty: theoreticalQty, safety_qty: safetyQty, source_batch_id: sourceBatchId, evidence_detail: evidence, industry_assessment: null, mvp_action: existing?.mvp_action || null, created_at: existing?.created_at || updatedAt, updated_at: updatedAt, closed_at: null, closure_reason: null, reopened_at: null };
+    try {
+      const catalog = (value.materialCatalog || []).find((item) => normalizedKey(item.material_name) === normalizedKey(row.material_name));
+      const evaluation = evaluateDiagnosisSignal(signal, {
+        ledgerSnapshots:value.ledgerSnapshots || [], materialEvents:value.materialEvents || [], purchaseOrders:value.purchaseOrders || [],
+        receiptOrders:value.receiptOrders || [], storeTransferRequests:value.storeTransferRequests || [],
+        countPolicy:catalog?.count_policy || (catalog?.daily_count_enabled === false ? 'optional' : 'daily'), asOf:updatedAt
+      });
+      if (evaluation?.result?.anomaly_status === 'not_triggered') continue;
+      const result = evaluation?.result || {};
+      candidates.set(key, {
+        ...signal, formal_engine:'v2', engine_mode:'v2_primary', ruleset_id:result.ruleset_id || evaluation?.ruleset?.ruleset_id,
+        rule_version:result.rule_version || evaluation?.ruleset?.rule_version, fact_packet_id:result.fact_packet_id,
+        decision_trace:result.decision_trace || [], evidence_gaps:result.evidence_gaps || [], recommended_action_ids:result.recommended_action_ids || [],
+        primary_location:result.primary_location || null, primary_hypothesis:result.primary_hypothesis || null,
+        formal_anomaly_status:result.anomaly_status || 'rule_error',
+        v1_comparison:{ rule_code:candidate.rule_code, evidence:candidate.evidence, strategy:candidate.strategy }
+      });
+    } catch (error) {
+      candidates.set(key, { ...signal, formal_engine:'v1', engine_mode:'v1_fallback', v2_error:String(error?.message || error).slice(0, 500) });
+    }
   }
   const retained = prior.map((item) => {
     if (item.store_code !== storeCode || item.business_date !== businessDate || item.status === 'closed') return item;
@@ -4826,12 +4849,87 @@ function r2ResourceStoreCodes(value, url) {
   return storeCode ? [String(storeCode)] : [];
 }
 
+function r2AiAnalysisForCase(value, caseId) {
+  return (value.aiDiagnosisAnalyses || []).filter((item) => item.inventory_case_id === caseId)
+    .sort((left, right) => String(right.created_at).localeCompare(String(left.created_at)));
+}
+
+function r2InventoryCaseEvaluation(value, inventoryCase) {
+  const latestObservation = inventoryCase?.observations?.[0];
+  const signal = (value.materialAnomalies || []).find((item) => item.id === latestObservation?.signal_id)
+    || (value.materialAnomalies || []).find((item) => inventoryCase?.signal_ids?.includes(item.id));
+  if (!signal) return null;
+  const catalog = (value.materialCatalog || []).find((item) => normalizedKey(item.material_name) === normalizedKey(signal.material_name));
+  return evaluateDiagnosisSignal(signal, {
+    ledgerSnapshots:value.ledgerSnapshots || [], materialEvents:value.materialEvents || [], purchaseOrders:value.purchaseOrders || [],
+    receiptOrders:value.receiptOrders || [], storeTransferRequests:value.storeTransferRequests || [],
+    countPolicy:catalog?.count_policy || (catalog?.daily_count_enabled === false ? 'optional' : 'daily'), asOf:signal.updated_at || now()
+  });
+}
+
+function r2AiRelatedRecords(value, inventoryCase) {
+  const sameMaterial = (item) => normalizedKey(item.material_name) === normalizedKey(inventoryCase.material_name);
+  const sameStore = (item) => [item.store_code, item.from_store_code, item.to_store_code].filter(Boolean).includes(inventoryCase.store_code);
+  const compact = (items, limit = 12) => items.filter((item) => sameStore(item) && (!item.material_name || sameMaterial(item))).slice(-limit);
+  return {
+    work_orders:(value.operationTasks || []).filter((item) => inventoryCase.work_order_ids?.includes(item.id)).slice(-8),
+    purchase_orders:compact(value.purchaseOrders || []), receipt_orders:compact(value.receiptOrders || []),
+    transfer_requests:compact(value.storeTransferRequests || []), material_events:compact(value.materialEvents || [], 20)
+  };
+}
+
+async function r2RunInventoryAiAnalysis(env, caseId, actor = null) {
+  if (!env.DOUBAO_API_KEY) return bad('尚未配置火山方舟 DOUBAO_API_KEY，无法运行 AI 深度研判。', 503);
+  const value = await r2DemoState(env);
+  refreshInventoryCases(value, now());
+  const inventoryCase = (value.inventoryCases || []).find((item) => item.id === caseId);
+  if (!inventoryCase) return bad('未找到该库存持续问题。', 404);
+  const evaluation = r2InventoryCaseEvaluation(value, inventoryCase);
+  if (!evaluation) return bad('该问题缺少可追溯的规则信号，暂时无法进行 AI 研判。', 409);
+  const related = r2AiRelatedRecords(value, inventoryCase);
+  const messages = buildInventoryAiMessages({ inventoryCase, evaluation, related });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 45000);
+  let response;
+  try {
+    response = await fetch(R2_ARK_CHAT_COMPLETIONS, {
+      method:'POST', signal:controller.signal,
+      headers:{ Authorization:`Bearer ${env.DOUBAO_API_KEY}`, 'Content-Type':'application/json' },
+      body:JSON.stringify({ model:env.DOUBAO_MODEL || R2_ARK_STORE_AGENT_MODEL, temperature:0.2, thinking:{ type:'disabled' }, response_format:{ type:'json_object' }, messages })
+    });
+  } catch (error) {
+    return bad(`火山方舟调用失败：${String(error?.message || error).slice(0, 180)}`, 502);
+  } finally { clearTimeout(timer); }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) return bad(`火山方舟返回错误：${payload?.error?.message || response.status}`, 502);
+  const content = payload?.choices?.[0]?.message?.content;
+  let parsed;
+  try { parsed = JSON.parse(String(content || '').replace(/^```json\s*|\s*```$/g, '')); }
+  catch (_) { return bad('AI 返回内容无法解析为结构化研判，请重试。', 502); }
+  const normalized = normalizeInventoryAiResult(parsed);
+  const createdAt = now();
+  const record = {
+    id:id('AID'), inventory_case_id:inventoryCase.id, observation_id:inventoryCase.observations?.[0]?.observation_id || null,
+    provider:'volcengine_ark', model:env.DOUBAO_MODEL || R2_ARK_STORE_AGENT_MODEL,
+    prompt_version:INVENTORY_AI_PROMPT_VERSION, prompt_rules:[...INVENTORY_AI_RULES],
+    ruleset_id:evaluation.result?.ruleset_id || evaluation.ruleset?.ruleset_id || null,
+    rule_version:evaluation.result?.rule_version || evaluation.ruleset?.rule_version || null,
+    fact_packet_id:evaluation.fact_packet?.fact_packet_id || evaluation.result?.fact_packet_id || null,
+    rule_result_status:evaluation.result?.anomaly_status || null, ...normalized,
+    advisory_only:true, created_by:actor?.display_name || '总部运营', created_at:createdAt
+  };
+  value.aiDiagnosisAnalyses = [record, ...(value.aiDiagnosisAnalyses || []).map((item) => item.inventory_case_id === inventoryCase.id ? { ...item, stale:true } : item)].slice(0, 100);
+  r2Audit(value, record.created_by, '运行 AI 深度研判', `${inventoryCase.case_no} · ${record.model} · ${record.agreement}`, record.id);
+  await r2SaveDemoState(env, value, 'inventory-ai-analysis');
+  return json({ analysis:record }, 201);
+}
+
 async function r2AuthorizeApi(env, request, url, account) {
   const adminPath = url.pathname.startsWith('/api/accounts') || (url.pathname === '/api/state' && url.searchParams.get('view') === 'accounts');
   if (adminPath && !r2HasRole(account, 'hq_admin')) return bad('仅总部管理员可以配置账户和角色。', 403);
   const adminConfigPath = request.method !== 'GET' && ['/api/store-masters', '/api/product-catalog', '/api/material-catalog', '/api/safety-stock-policies'].some((prefix) => url.pathname.startsWith(prefix));
   if (adminConfigPath && !r2HasRole(account, 'hq_admin')) return bad('该配置需要总部管理员权限。', 403);
-  const hqPath = url.pathname.startsWith('/api/notifications') || url.pathname === '/api/feishu/alert-test' || url.pathname.startsWith('/api/feishu-sync/refresh') || url.pathname.startsWith('/api/feishu-sync/jobs') || url.pathname.startsWith('/api/diagnosis-knowhow') || url.pathname.startsWith('/api/governance-tasks') || url.pathname.startsWith('/api/demo') || url.pathname.startsWith('/api/transfer-orders') || url.pathname.startsWith('/api/anomalies/') || (url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close'));
+  const hqPath = url.pathname.startsWith('/api/notifications') || url.pathname === '/api/feishu/alert-test' || url.pathname.startsWith('/api/feishu-sync/refresh') || url.pathname.startsWith('/api/feishu-sync/jobs') || url.pathname.startsWith('/api/diagnosis-knowhow') || url.pathname.startsWith('/api/governance-tasks') || url.pathname.startsWith('/api/demo') || url.pathname.startsWith('/api/transfer-orders') || url.pathname.startsWith('/api/anomalies/') || /\/api\/inventory-cases\/[^/]+\/ai-analysis$/.test(url.pathname) || (url.pathname.startsWith('/api/operation-tasks/') && url.pathname.endsWith('/close'));
   if (request.method !== 'GET' && hqPath && !r2HasRole(account, 'hq_operations', 'hq_admin')) return bad('该操作需要总部运营权限。', 403);
   const dispatchPath = request.method !== 'GET' && (url.pathname.startsWith('/api/count-plans/') || url.pathname.startsWith('/api/diagnosis-cases/'));
   if (dispatchPath && !r2HasRole(account, 'area_supervisor', 'hq_operations', 'hq_admin')) return bad('该下发或研判动作需要督导或总部权限。', 403);
@@ -5013,8 +5111,13 @@ export default {
     }
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/inventory-cases') {
       const value = await r2DemoState(env);
-      return json(r2ScopePayload(inventoryCasesView(value), authContext.account));
+      const view = inventoryCasesView(value);
+      view.ai = { provider:'volcengine_ark', prompt_version:INVENTORY_AI_PROMPT_VERSION, advisory_only:true, rules:INVENTORY_AI_RULES };
+      view.cases = view.cases.map((item) => ({ ...item, ai_analyses:r2AiAnalysisForCase(value, item.id).slice(0, 5), latest_ai_analysis:r2AiAnalysisForCase(value, item.id)[0] || null }));
+      return json(r2ScopePayload(view, authContext.account));
     }
+    const aiCaseMatch = url.pathname.match(/^\/api\/inventory-cases\/([^/]+)\/ai-analysis$/);
+    if (env.DEMO_STATE && request.method === 'POST' && aiCaseMatch) return r2RunInventoryAiAnalysis(env, decodeURIComponent(aiCaseMatch[1]), authContext.account);
     if (env.DEMO_STATE && request.method === 'GET' && url.pathname === '/api/diagnosis-v2/shadow') {
       const state = await r2DemoState(env);
       const calculated = await r2FeishuSyncState(env);

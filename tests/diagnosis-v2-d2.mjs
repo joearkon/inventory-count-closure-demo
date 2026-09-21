@@ -41,7 +41,7 @@ const signal = { id:'MAT-QA', store_code:'STORE001', business_date:'2026-09-15',
 const recoveredShadow = buildDiagnosisShadowReport({ materialAnomalies:[{ ...signal, rule_code:'NEGATIVE_THEORETICAL', status:'open', evidence_detail:{ ...signal.evidence_detail, transfer_out_qty:1000, theoretical_qty:10910 } }], ledgerSnapshots:[], materialEvents:[] }).comparisons[0].v2;
 assert.equal(recoveredShadow.anomaly_status, 'not_triggered');
 assert.equal(recoveredShadow.rule_code, 'D2_NEGATIVE_STOCK');
-assert.equal(recoveredShadow.rule_version, '1.0.0-shadow');
+assert.equal(recoveredShadow.rule_version, '2.0.0');
 const integrated = buildFactPacket(signal, { materialEvents:[{ id:'EVT-QA', status:'active', type:'transfer_out', store_code:'STORE001', business_date:'2026-09-15', material_name:'黑糖珍珠', unit:'g', transfer_order_id:'TRF-QA' }], purchaseOrders:[{ id:'PO-QA', store_code:'STORE001', business_date:'2026-09-15', status:'pending_receipt', lines:[{ material_name:'黑糖珍珠', unit:'g' }] }], receiptOrders:[], storeTransferRequests:[{ id:'TRQ-QA', parent_order_id:'TRF-QA', status:'received', material_name:'黑糖珍珠', unit:'g' }] });
 assert.equal(integrated.data_availability.purchase_orders.status, 'confirmed');
 assert.equal(integrated.data_availability.destination_acceptance.status, 'confirmed');
